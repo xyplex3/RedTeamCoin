@@ -1,0 +1,591 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
+
+	pb "github.com/xyplex2/redteamcoin/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+const (
+	serverAddress = "localhost:50051"
+	heartbeatInterval = 30 * time.Second
+)
+
+type Miner struct {
+	id        string
+	ipAddress string
+	hostname  string
+	client    pb.MiningPoolClient
+	conn      *grpc.ClientConn
+	ctx       context.Context
+	cancel    context.CancelFunc
+
+	blocksMined     int64
+	hashRate        int64
+	running         bool
+	totalHashes     int64
+	startTime       time.Time
+	cpuUsagePercent float64
+
+	// GPU mining
+	gpuMiner    *GPUMiner
+	hasGPU      bool
+	gpuEnabled  bool
+	hybridMode  bool // Run CPU and GPU mining together
+}
+
+func NewMiner() (*Miner, error) {
+	// Get hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+
+	// Get IP address
+	ipAddress := getOutboundIP()
+
+	// Generate miner ID
+	minerID := fmt.Sprintf("miner-%s-%d", hostname, time.Now().Unix())
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Initialize GPU miner
+	gpuMiner := NewGPUMiner()
+
+	// Check for hybrid mode environment variable
+	hybridMode := os.Getenv("HYBRID_MINING") == "true"
+	gpuEnabled := os.Getenv("GPU_MINING") != "false" // Enabled by default if GPUs found
+
+	miner := &Miner{
+		id:         minerID,
+		ipAddress:  ipAddress,
+		hostname:   hostname,
+		ctx:        ctx,
+		cancel:     cancel,
+		running:    false,
+		gpuMiner:   gpuMiner,
+		hasGPU:     gpuMiner.HasGPUs(),
+		gpuEnabled: gpuEnabled,
+		hybridMode: hybridMode,
+	}
+
+	return miner, nil
+}
+
+func getOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "unknown"
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
+}
+
+func (m *Miner) Connect() error {
+	fmt.Printf("Connecting to mining pool at %s...\n", serverAddress)
+
+	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("failed to connect: %v", err)
+	}
+
+	m.conn = conn
+	m.client = pb.NewMiningPoolClient(conn)
+
+	// Register with the pool
+	fmt.Printf("Registering miner...\n")
+	fmt.Printf("  Miner ID:   %s\n", m.id)
+	fmt.Printf("  IP Address: %s\n", m.ipAddress)
+	fmt.Printf("  Hostname:   %s\n", m.hostname)
+
+	// Display GPU information
+	if m.hasGPU && m.gpuEnabled {
+		devices := m.gpuMiner.GetDevices()
+		fmt.Printf("  GPUs Found: %d\n", len(devices))
+		for _, dev := range devices {
+			fmt.Printf("    - %s (%s) - %d MB, %d compute units\n",
+				dev.Name, dev.Type, dev.Memory/1024/1024, dev.ComputeUnits)
+		}
+		if m.hybridMode {
+			fmt.Printf("  Mode:       Hybrid (CPU + GPU)\n")
+		} else {
+			fmt.Printf("  Mode:       GPU only\n")
+		}
+	} else if m.hasGPU && !m.gpuEnabled {
+		fmt.Printf("  GPUs:       Detected but disabled (set GPU_MINING=true to enable)\n")
+	} else {
+		fmt.Printf("  GPUs:       None detected - using CPU only\n")
+	}
+
+	resp, err := m.client.RegisterMiner(m.ctx, &pb.MinerInfo{
+		MinerId:   m.id,
+		IpAddress: m.ipAddress,
+		Hostname:  m.hostname,
+		Timestamp: time.Now().Unix(),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to register: %v", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("registration failed: %s", resp.Message)
+	}
+
+	fmt.Printf("✓ Successfully registered with pool: %s\n\n", resp.Message)
+	return nil
+}
+
+func (m *Miner) Start() {
+	m.running = true
+	m.startTime = time.Now()
+	m.totalHashes = 0
+
+	// Start GPU miner if available
+	if m.hasGPU && m.gpuEnabled {
+		if err := m.gpuMiner.Start(); err != nil {
+			log.Printf("Warning: Failed to start GPU miner: %v", err)
+		}
+	}
+
+	// Start heartbeat
+	go m.sendHeartbeat()
+
+	// Start CPU monitoring
+	go m.monitorCPU()
+
+	// Start mining
+	m.mine()
+}
+
+func (m *Miner) Stop() {
+	if !m.running {
+		return
+	}
+
+	m.running = false
+	fmt.Println("\nStopping miner...")
+
+	// Stop GPU miner if running
+	if m.hasGPU && m.gpuEnabled {
+		m.gpuMiner.Stop()
+	}
+
+	// Notify server
+	resp, err := m.client.StopMining(m.ctx, &pb.MinerInfo{
+		MinerId:   m.id,
+		IpAddress: m.ipAddress,
+		Hostname:  m.hostname,
+		Timestamp: time.Now().Unix(),
+	})
+
+	if err != nil {
+		log.Printf("Error stopping miner: %v", err)
+	} else {
+		fmt.Printf("Miner stopped. Total blocks mined: %d\n", resp.TotalBlocksMined)
+	}
+
+	m.cancel()
+	if m.conn != nil {
+		m.conn.Close()
+	}
+}
+
+func (m *Miner) mine() {
+	fmt.Println("Starting mining...")
+	fmt.Println("Press Ctrl+C to stop mining\n")
+
+	startTime := time.Now()
+	totalHashes := int64(0)
+
+	for m.running {
+		// Get work from pool
+		workResp, err := m.client.GetWork(m.ctx, &pb.WorkRequest{
+			MinerId: m.id,
+		})
+
+		if err != nil {
+			log.Printf("Error getting work: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		fmt.Printf("Received work for block %d (difficulty: %d)\n", workResp.BlockIndex, workResp.Difficulty)
+
+		// Mine the block - use hybrid mining if GPU available and enabled
+		var nonce int64
+		var hash string
+		var hashes int64
+
+		if m.hasGPU && m.gpuEnabled && m.hybridMode {
+			// Hybrid: CPU + GPU mining simultaneously
+			nonce, hash, hashes = m.mineBlockHybrid(
+				workResp.BlockIndex,
+				workResp.Timestamp,
+				workResp.Data,
+				workResp.PreviousHash,
+				int(workResp.Difficulty),
+			)
+		} else if m.hasGPU && m.gpuEnabled {
+			// GPU only
+			nonce, hash, hashes = m.mineBlockGPU(
+				workResp.BlockIndex,
+				workResp.Timestamp,
+				workResp.Data,
+				workResp.PreviousHash,
+				int(workResp.Difficulty),
+			)
+		} else {
+			// CPU only
+			nonce, hash, hashes = m.mineBlock(
+				workResp.BlockIndex,
+				workResp.Timestamp,
+				workResp.Data,
+				workResp.PreviousHash,
+				int(workResp.Difficulty),
+			)
+		}
+
+		totalHashes += hashes
+		m.totalHashes += hashes
+
+		if !m.running {
+			break
+		}
+
+		// Calculate hash rate
+		elapsed := time.Since(startTime).Seconds()
+		if elapsed > 0 {
+			m.hashRate = int64(float64(totalHashes) / elapsed)
+		}
+
+		// Submit the solution
+		submitResp, err := m.client.SubmitWork(m.ctx, &pb.WorkSubmission{
+			MinerId:    m.id,
+			BlockIndex: workResp.BlockIndex,
+			Nonce:      nonce,
+			Hash:       hash,
+		})
+
+		if err != nil {
+			log.Printf("Error submitting work: %v", err)
+			continue
+		}
+
+		if submitResp.Accepted {
+			m.blocksMined++
+			fmt.Printf("✓ BLOCK MINED! Block %d accepted! Reward: %d RTC (Total blocks: %d, Hash rate: %d H/s)\n\n",
+				workResp.BlockIndex, submitResp.Reward, m.blocksMined, m.hashRate)
+		} else {
+			fmt.Printf("✗ Block %d rejected: %s\n\n", workResp.BlockIndex, submitResp.Message)
+		}
+	}
+}
+
+func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	prefix := ""
+	for i := 0; i < difficulty; i++ {
+		prefix += "0"
+	}
+
+	nonce := int64(0)
+	hashes := int64(0)
+
+	for m.running {
+		hash := m.calculateHash(index, timestamp, data, previousHash, nonce)
+		hashes++
+
+		if len(hash) >= difficulty && hash[:difficulty] == prefix {
+			return nonce, hash, hashes
+		}
+
+		nonce++
+
+		// Update display every 100,000 hashes
+		if hashes%100000 == 0 {
+			fmt.Printf("Mining block %d... Nonce: %d, Hash rate: %d H/s\r",
+				index, nonce, m.hashRate)
+		}
+	}
+
+	return nonce, "", hashes
+}
+
+func (m *Miner) calculateHash(index, timestamp int64, data, previousHash string, nonce int64) string {
+	record := strconv.FormatInt(index, 10) +
+		strconv.FormatInt(timestamp, 10) +
+		data +
+		previousHash +
+		strconv.FormatInt(nonce, 10)
+
+	h := sha256.New()
+	h.Write([]byte(record))
+	hashed := h.Sum(nil)
+	return hex.EncodeToString(hashed)
+}
+
+func (m *Miner) monitorCPU() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !m.running {
+				return
+			}
+
+			// Estimate CPU usage based on hash rate
+			// This is a simple estimation - actual CPU usage would require OS-specific calls
+			// For demonstration: assume each hash uses a small amount of CPU time
+			// Typical CPU can do millions of hashes per second
+			// We'll estimate based on activity level
+			if m.hashRate > 0 {
+				// Rough estimation: higher hash rate = higher CPU usage
+				// Cap at 100%
+				estimated := float64(m.hashRate) / 1000000.0 * 100.0
+				if estimated > 100.0 {
+					estimated = 100.0
+				}
+				m.cpuUsagePercent = estimated
+			} else {
+				m.cpuUsagePercent = 0.0
+			}
+
+		case <-m.ctx.Done():
+			return
+		}
+	}
+}
+
+func (m *Miner) sendHeartbeat() {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !m.running {
+				return
+			}
+
+			miningTime := time.Since(m.startTime)
+
+			// Prepare GPU device information
+			var gpuDevices []*pb.GPUDevice
+			var gpuHashRate int64
+			if m.hasGPU && m.gpuEnabled {
+				devices := m.gpuMiner.GetDevices()
+				for _, dev := range devices {
+					gpuDevices = append(gpuDevices, &pb.GPUDevice{
+						Id:           int32(dev.ID),
+						Name:         dev.Name,
+						Type:         dev.Type,
+						Memory:       dev.Memory,
+						ComputeUnits: int32(dev.ComputeUnits),
+						Available:    dev.Available,
+					})
+				}
+				gpuHashRate = m.gpuMiner.GetHashCount()
+			}
+
+			_, err := m.client.Heartbeat(m.ctx, &pb.MinerStatus{
+				MinerId:            m.id,
+				HashRate:           m.hashRate,
+				BlocksMined:        m.blocksMined,
+				CpuUsagePercent:    m.cpuUsagePercent,
+				TotalHashes:        m.totalHashes,
+				MiningTimeSeconds:  int64(miningTime.Seconds()),
+				GpuDevices:         gpuDevices,
+				GpuHashRate:        gpuHashRate,
+				GpuEnabled:         m.gpuEnabled,
+				HybridMode:         m.hybridMode,
+			})
+
+			if err != nil {
+				log.Printf("Error sending heartbeat: %v", err)
+			}
+
+		case <-m.ctx.Done():
+			return
+		}
+	}
+}
+
+// mineBlockGPU mines a block using GPU only
+func (m *Miner) mineBlockGPU(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	// Use GPU miner for the entire nonce range
+	const nonceRange = 1000000000 // 1 billion nonces per GPU batch
+
+	startNonce := int64(0)
+	totalHashes := int64(0)
+
+	for m.running {
+		nonce, hash, hashes, found := m.gpuMiner.MineBlock(
+			index, timestamp, data, previousHash, difficulty,
+			startNonce, nonceRange,
+		)
+
+		totalHashes += hashes
+
+		if found {
+			return nonce, hash, totalHashes
+		}
+
+		startNonce += nonceRange
+
+		// Update display
+		elapsed := time.Since(m.startTime).Seconds()
+		if elapsed > 0 {
+			m.hashRate = int64(float64(totalHashes) / elapsed)
+		}
+		fmt.Printf("Mining block %d (GPU)... Nonce: %d, Hash rate: %d H/s\r",
+			index, startNonce, m.hashRate)
+	}
+
+	return 0, "", totalHashes
+}
+
+// mineBlockHybrid mines a block using both CPU and GPU simultaneously
+func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	type result struct {
+		nonce  int64
+		hash   string
+		hashes int64
+		found  bool
+		source string // "CPU" or "GPU"
+	}
+
+	resultChan := make(chan result, 2)
+	done := make(chan struct{})
+	defer close(done)
+
+	totalHashes := int64(0)
+
+	// GPU mining goroutine
+	go func() {
+		const gpuNonceRange = 1000000000 // GPU processes large ranges
+		gpuStartNonce := int64(0)
+		gpuHashes := int64(0)
+
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				nonce, hash, hashes, found := m.gpuMiner.MineBlock(
+					index, timestamp, data, previousHash, difficulty,
+					gpuStartNonce, gpuNonceRange,
+				)
+				gpuHashes += hashes
+
+				if found {
+					resultChan <- result{nonce, hash, gpuHashes, true, "GPU"}
+					return
+				}
+
+				gpuStartNonce += gpuNonceRange
+			}
+		}
+	}()
+
+	// CPU mining goroutine
+	go func() {
+		const cpuNonceRange = 100000000 // CPU processes smaller ranges
+		cpuStartNonce := int64(5000000000) // Offset to avoid GPU overlap
+		cpuHashes := int64(0)
+
+		prefix := ""
+		for i := 0; i < difficulty; i++ {
+			prefix += "0"
+		}
+
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				// Mine a batch on CPU
+				for n := cpuStartNonce; n < cpuStartNonce+cpuNonceRange; n++ {
+					select {
+					case <-done:
+						return
+					default:
+					}
+
+					hash := m.calculateHash(index, timestamp, data, previousHash, n)
+					cpuHashes++
+
+					if len(hash) >= difficulty && hash[:difficulty] == prefix {
+						resultChan <- result{n, hash, cpuHashes, true, "CPU"}
+						return
+					}
+
+					// Update display every 50,000 hashes
+					if cpuHashes%50000 == 0 {
+						elapsed := time.Since(m.startTime).Seconds()
+						if elapsed > 0 {
+							m.hashRate = int64(float64(cpuHashes+m.gpuMiner.GetHashCount()) / elapsed)
+						}
+						fmt.Printf("Mining block %d (Hybrid: CPU+GPU)... Hash rate: %d H/s\r",
+							index, m.hashRate)
+					}
+				}
+
+				cpuStartNonce += cpuNonceRange
+			}
+		}
+	}()
+
+	// Wait for first successful result from either CPU or GPU
+	res := <-resultChan
+	totalHashes = res.hashes
+
+	if res.found {
+		fmt.Printf("\n✓ Block found by %s!\n", res.source)
+		return res.nonce, res.hash, totalHashes
+	}
+
+	return 0, "", totalHashes
+}
+
+func main() {
+	fmt.Println("=== RedTeamCoin Miner ===")
+	fmt.Println()
+
+	miner, err := NewMiner()
+	if err != nil {
+		log.Fatalf("Failed to create miner: %v", err)
+	}
+
+	err = miner.Connect()
+	if err != nil {
+		log.Fatalf("Failed to connect to pool: %v", err)
+	}
+
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		miner.Stop()
+		os.Exit(0)
+	}()
+
+	miner.Start()
+}

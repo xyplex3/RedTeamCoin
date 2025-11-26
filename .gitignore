@@ -33,3 +33,10 @@ certs/
 # OS files
 .DS_Store
 Thumbs.db
+<<<<<<< HEAD
+=======
+
+# Project-specific files
+CLAUDE.md
+.claude/
+>>>>>>> 30c2ad7 (Initial commit: Complete RedTeamCoin blockchain mining pool with GPU support)

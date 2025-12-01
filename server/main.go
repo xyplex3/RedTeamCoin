@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	pb "github.com/xyplex2/redteamcoin/proto"
@@ -17,7 +18,7 @@ const (
 	grpcPort      = 50051
 	apiPort       = 8443 // HTTPS port (8080 for HTTP fallback)
 	httpPort      = 8080 // HTTP redirect port (when TLS is enabled)
-	difficulty    = 4
+	difficulty    = 6
 	defaultCertFile = "certs/server.crt"
 	defaultKeyFile  = "certs/server.key"
 )
@@ -98,7 +99,13 @@ func main() {
 	pool := NewMiningPool(blockchain)
 
 	// Initialize and start logger
-	logFile := "pool_log.json"
+	// Get executable path and create log file in the same directory
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("Failed to get executable path: %v", err)
+	}
+	exeDir := filepath.Dir(exePath)
+	logFile := filepath.Join(exeDir, "pool_log.json")
 	updateInterval := 30 * time.Second // Update log every 30 seconds
 	logger := NewPoolLogger(pool, blockchain, logFile, updateInterval)
 	pool.SetLogger(logger)

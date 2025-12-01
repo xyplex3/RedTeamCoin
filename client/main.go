@@ -9,7 +9,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -38,13 +40,15 @@ type Miner struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 
-	blocksMined     int64
-	hashRate        int64
-	running         bool
-	shouldMine      bool   // Server control: whether to actively mine
-	totalHashes     int64
-	startTime       time.Time
-	cpuUsagePercent float64
+	blocksMined        int64
+	hashRate           int64
+	running            bool
+	shouldMine         bool   // Server control: whether to actively mine
+	cpuThrottlePercent int    // Server control: CPU usage limit (0-100), 0 = no limit
+	totalHashes        int64
+	startTime          time.Time
+	cpuUsagePercent    float64
+	deletedByServer    bool   // Track if miner was deleted by server
 
 	// GPU mining
 	gpuMiner   *GPUMiner
@@ -76,18 +80,20 @@ func NewMiner(serverAddr string) (*Miner, error) {
 	gpuEnabled := os.Getenv("GPU_MINING") != "false" // Enabled by default if GPUs found
 
 	miner := &Miner{
-		id:            minerID,
-		ipAddress:     ipAddress,
-		hostname:      hostname,
-		serverAddress: serverAddr,
-		ctx:           ctx,
-		cancel:        cancel,
-		running:       false,
-		shouldMine:    true,  // Start with mining enabled by default
-		gpuMiner:      gpuMiner,
-		hasGPU:        gpuMiner.HasGPUs(),
-		gpuEnabled:    gpuEnabled,
-		hybridMode:    hybridMode,
+		id:                 minerID,
+		ipAddress:          ipAddress,
+		hostname:           hostname,
+		serverAddress:      serverAddr,
+		ctx:                ctx,
+		cancel:             cancel,
+		running:            false,
+		shouldMine:         true,  // Start with mining enabled by default
+		cpuThrottlePercent: 0,     // No throttling by default
+		deletedByServer:    false,
+		gpuMiner:           gpuMiner,
+		hasGPU:             gpuMiner.HasGPUs(),
+		gpuEnabled:         gpuEnabled,
+		hybridMode:         hybridMode,
 	}
 
 	return miner, nil
@@ -194,24 +200,65 @@ func (m *Miner) Stop() {
 		m.gpuMiner.Stop()
 	}
 
-	// Notify server
-	resp, err := m.client.StopMining(m.ctx, &pb.MinerInfo{
-		MinerId:   m.id,
-		IpAddress: m.ipAddress,
-		Hostname:  m.hostname,
-		Timestamp: time.Now().Unix(),
-	})
+	// Notify server (only if not deleted by server)
+	if !m.deletedByServer {
+		resp, err := m.client.StopMining(m.ctx, &pb.MinerInfo{
+			MinerId:   m.id,
+			IpAddress: m.ipAddress,
+			Hostname:  m.hostname,
+			Timestamp: time.Now().Unix(),
+		})
 
-	if err != nil {
-		log.Printf("Error stopping miner: %v", err)
-	} else {
-		fmt.Printf("Miner stopped. Total blocks mined: %d\n", resp.TotalBlocksMined)
+		if err != nil {
+			log.Printf("Error stopping miner: %v", err)
+		} else {
+			fmt.Printf("Miner stopped. Total blocks mined: %d\n", resp.TotalBlocksMined)
+		}
 	}
 
 	m.cancel()
 	if m.conn != nil {
 		m.conn.Close()
 	}
+}
+
+// selfDelete removes the client executable from disk
+func (m *Miner) selfDelete() {
+	// Get the path to the current executable
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("Failed to get executable path: %v", err)
+		return
+	}
+
+	fmt.Printf("Deleting executable: %s\n", exePath)
+
+	// Close all file handles and prepare for deletion
+	if m.conn != nil {
+		m.conn.Close()
+	}
+
+	// Schedule deletion after a short delay to allow cleanup
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		// On Unix-like systems, we can delete the file while it's running
+		// On Windows, we need to use a script
+		if err := os.Remove(exePath); err != nil {
+			// If direct deletion fails (Windows), create a script to delete after exit
+			if runtime.GOOS == "windows" {
+				scriptPath := exePath + "_delete.bat"
+				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", exePath)
+				if err := os.WriteFile(scriptPath, []byte(script), 0755); err == nil {
+					exec.Command("cmd", "/C", "start", "/min", scriptPath).Start()
+				}
+			} else {
+				log.Printf("Failed to delete executable: %v", err)
+			}
+		} else {
+			fmt.Println("Executable deleted successfully")
+		}
+	}()
 }
 
 func (m *Miner) mine() {
@@ -319,13 +366,23 @@ func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, dif
 
 	nonce := int64(0)
 	hashes := int64(0)
+	hashCounter := int64(0) // Track hashes since last throttle sleep
 
 	for m.running {
 		hash := m.calculateHash(index, timestamp, data, previousHash, nonce)
 		hashes++
+		hashCounter++
 
 		if len(hash) >= difficulty && hash[:difficulty] == prefix {
 			return nonce, hash, hashes
+		}
+
+		// Apply CPU throttling if set
+		if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
+			// Calculate sleep time based on throttle percentage
+			// Higher throttle = more sleep = less CPU usage
+			sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
+			time.Sleep(sleepMs)
 		}
 
 		nonce++
@@ -434,6 +491,20 @@ func (m *Miner) sendHeartbeat() {
 			if err != nil {
 				log.Printf("Error sending heartbeat: %v", err)
 			} else {
+				// Check if miner was deleted from the server
+				if !resp.Active {
+					fmt.Println("\n" + resp.Message)
+					fmt.Println("Shutting down miner...")
+					m.deletedByServer = true
+					m.running = false
+
+					// Delete the executable
+					m.selfDelete()
+
+					m.cancel()
+					return
+				}
+
 				// Update shouldMine based on server response
 				if m.shouldMine != resp.ShouldMine {
 					m.shouldMine = resp.ShouldMine
@@ -441,6 +512,16 @@ func (m *Miner) sendHeartbeat() {
 						fmt.Println("Server resumed mining")
 					} else {
 						fmt.Println("Server paused mining")
+					}
+				}
+
+				// Update CPU throttle based on server response
+				if m.cpuThrottlePercent != int(resp.CpuThrottlePercent) {
+					m.cpuThrottlePercent = int(resp.CpuThrottlePercent)
+					if m.cpuThrottlePercent == 0 {
+						fmt.Println("Server removed CPU throttle (unlimited)")
+					} else {
+						fmt.Printf("Server set CPU throttle to %d%%\n", m.cpuThrottlePercent)
 					}
 				}
 			}
@@ -623,8 +704,12 @@ func main() {
 	go func() {
 		<-sigChan
 		miner.Stop()
-		os.Exit(0)
 	}()
 
+	// Start mining (this blocks until mining stops)
 	miner.Start()
+
+	// Wait a moment for cleanup
+	time.Sleep(1 * time.Second)
+	fmt.Println("Miner terminated.")
 }

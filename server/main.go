@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	pb "github.com/xyplex2/redteamcoin/proto"
 	"google.golang.org/grpc"
@@ -95,6 +96,13 @@ func main() {
 	// Initialize mining pool
 	fmt.Println("Initializing mining pool...")
 	pool := NewMiningPool(blockchain)
+
+	// Initialize and start logger
+	logFile := "pool_log.json"
+	updateInterval := 30 * time.Second // Update log every 30 seconds
+	logger := NewPoolLogger(pool, blockchain, logFile, updateInterval)
+	pool.SetLogger(logger)
+	logger.Start()
 
 	// Start gRPC server
 	go startGRPCServer(pool)

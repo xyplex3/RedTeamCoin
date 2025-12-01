@@ -7,13 +7,16 @@ A blockchain-based cryptocurrency mining pool implementation in Go, featuring a 
 - **Blockchain Implementation**: Custom proof-of-work blockchain with configurable difficulty
 - **Mining Pool Server**: Manages multiple miners and work distribution via gRPC
 - **Client Miner**: Automated mining client with IP address and hostname logging
+- **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete miners remotely
+- **CPU Throttling**: Limit miner CPU usage from 0-100% to manage resources
 - **GPU Mining Support**: CUDA and OpenCL support for GPU-accelerated mining
 - **Hybrid Mining**: Simultaneous CPU and GPU mining for maximum performance
-- **Web Dashboard**: Real-time monitoring of miners, statistics, and blockchain
+- **Web Dashboard**: Real-time monitoring of miners, statistics, and blockchain with control buttons
 - **REST API Authentication**: Secure token-based authentication for API endpoints
 - **Dual IP Tracking**: Records both client-reported and server-detected IP addresses
 - **CPU & GPU Statistics**: Comprehensive resource usage tracking and reporting
 - **Protocol Buffers**: Efficient client-server communication using protobuf/gRPC
+- **Auto-Termination**: Miners automatically shut down and self-delete when removed from the server
 
 ## Architecture
 
@@ -203,7 +206,8 @@ The server provides the following REST API endpoints:
 - `GET /api/cpu` - CPU and GPU usage statistics for all miners (JSON) - **Requires authentication**
 - `POST /api/miner/pause` - Pause mining for a specific miner - **Requires authentication**
 - `POST /api/miner/resume` - Resume mining for a specific miner - **Requires authentication**
-- `POST /api/miner/delete` - Delete a miner from the pool - **Requires authentication**
+- `POST /api/miner/delete` - Delete a miner from the pool (client auto-terminates and self-deletes) - **Requires authentication**
+- `POST /api/miner/throttle` - Set CPU throttle percentage for a specific miner - **Requires authentication**
 
 ### API Authentication Examples
 
@@ -240,11 +244,17 @@ curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
   -d '{"miner_id":"miner-hostname-1234567890"}' \
   http://localhost:8080/api/miner/resume
 
-# Delete a miner
+# Delete a miner (client will auto-terminate and delete its executable)
 curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
   -H "Content-Type: application/json" \
   -d '{"miner_id":"miner-hostname-1234567890"}' \
   http://localhost:8080/api/miner/delete
+
+# Set CPU throttle (0-100%, 0 = no limit)
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890","throttle_percent":50}' \
+  http://localhost:8080/api/miner/throttle
 ```
 
 **Using curl (HTTPS with self-signed certificate):**

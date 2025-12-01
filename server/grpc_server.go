@@ -137,6 +137,14 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 		req.HybridMode,
 	)
 	if err != nil {
+		// Check if miner was deleted (not found)
+		if err.Error() == "miner not registered" {
+			return &pb.HeartbeatResponse{
+				Active:     false,
+				Message:    "Miner has been deleted from the pool",
+				ShouldMine: false,
+			}, nil
+		}
 		return &pb.HeartbeatResponse{
 			Active:     false,
 			Message:    err.Error(),
@@ -150,10 +158,17 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 		shouldMine = true // Default to mining if status check fails
 	}
 
+	// Get the CPU throttle percentage for this miner
+	cpuThrottle, err := s.pool.GetCPUThrottle(req.MinerId)
+	if err != nil {
+		cpuThrottle = 0 // Default to no throttling if check fails
+	}
+
 	return &pb.HeartbeatResponse{
-		Active:     true,
-		Message:    "Heartbeat received",
-		ShouldMine: shouldMine,
+		Active:              true,
+		Message:             "Heartbeat received",
+		ShouldMine:          shouldMine,
+		CpuThrottlePercent:  int32(cpuThrottle),
 	}, nil
 }
 

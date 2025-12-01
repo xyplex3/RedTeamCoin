@@ -41,6 +41,7 @@ type Miner struct {
 	blocksMined     int64
 	hashRate        int64
 	running         bool
+	shouldMine      bool   // Server control: whether to actively mine
 	totalHashes     int64
 	startTime       time.Time
 	cpuUsagePercent float64
@@ -82,6 +83,7 @@ func NewMiner(serverAddr string) (*Miner, error) {
 		ctx:           ctx,
 		cancel:        cancel,
 		running:       false,
+		shouldMine:    true,  // Start with mining enabled by default
 		gpuMiner:      gpuMiner,
 		hasGPU:        gpuMiner.HasGPUs(),
 		gpuEnabled:    gpuEnabled,
@@ -220,6 +222,12 @@ func (m *Miner) mine() {
 	totalHashes := int64(0)
 
 	for m.running {
+		// Check if server wants us to mine
+		if !m.shouldMine {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
 		// Get work from pool
 		workResp, err := m.client.GetWork(m.ctx, &pb.WorkRequest{
 			MinerId: m.id,
@@ -410,7 +418,7 @@ func (m *Miner) sendHeartbeat() {
 				gpuHashRate = m.gpuMiner.GetHashCount()
 			}
 
-			_, err := m.client.Heartbeat(m.ctx, &pb.MinerStatus{
+			resp, err := m.client.Heartbeat(m.ctx, &pb.MinerStatus{
 				MinerId:            m.id,
 				HashRate:           m.hashRate,
 				BlocksMined:        m.blocksMined,
@@ -425,6 +433,16 @@ func (m *Miner) sendHeartbeat() {
 
 			if err != nil {
 				log.Printf("Error sending heartbeat: %v", err)
+			} else {
+				// Update shouldMine based on server response
+				if m.shouldMine != resp.ShouldMine {
+					m.shouldMine = resp.ShouldMine
+					if m.shouldMine {
+						fmt.Println("Server resumed mining")
+					} else {
+						fmt.Println("Server paused mining")
+					}
+				}
 			}
 
 		case <-m.ctx.Done():

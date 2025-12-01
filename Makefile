@@ -1,5 +1,8 @@
 .PHONY: all proto build run-server run-client clean
 
+# Ensure Go bin is in PATH
+export PATH := $(PATH):$(HOME)/go/bin
+
 all: proto build
 
 # Install required tools

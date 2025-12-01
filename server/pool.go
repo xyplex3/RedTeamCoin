@@ -25,6 +25,7 @@ type MinerRecord struct {
 	RegisteredAt       time.Time
 	LastHeartbeat      time.Time
 	Active             bool
+	ShouldMine         bool          // Server control: whether miner should mine
 	BlocksMined        int64
 	HashRate           int64
 	TotalMiningTime    time.Duration      // Total time spent mining
@@ -90,6 +91,7 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 		RegisteredAt:    time.Now(),
 		LastHeartbeat:   time.Now(),
 		Active:          true,
+		ShouldMine:      true, // Mining enabled by default
 		BlocksMined:     0,
 		HashRate:        0,
 		TotalMiningTime: 0,
@@ -404,6 +406,69 @@ type TotalCPUStats struct {
 	GPUEnabledMiners  int         `json:"gpu_enabled_miners"`
 	HybridMiners      int         `json:"hybrid_miners"`
 	MinerStats        []CPUStats  `json:"miner_stats"`
+}
+
+// PauseMiner pauses mining for a specific miner
+func (mp *MiningPool) PauseMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	miner.ShouldMine = false
+	fmt.Printf("Miner paused: %s\n", minerID)
+	return nil
+}
+
+// ResumeMiner resumes mining for a specific miner
+func (mp *MiningPool) ResumeMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	miner.ShouldMine = true
+	fmt.Printf("Miner resumed: %s\n", minerID)
+	return nil
+}
+
+// DeleteMiner removes a miner from the pool
+func (mp *MiningPool) DeleteMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	// Remove pending work
+	delete(mp.pendingWork, minerID)
+
+	// Remove miner
+	delete(mp.miners, minerID)
+
+	fmt.Printf("Miner deleted: %s (Total blocks mined: %d)\n", minerID, miner.BlocksMined)
+	return nil
+}
+
+// GetMinerStatus returns the mining status for a specific miner
+func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
+	mp.mu.RLock()
+	defer mp.mu.RUnlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return false, fmt.Errorf("miner not found")
+	}
+
+	return miner.ShouldMine, nil
 }
 
 // GetCPUStats returns detailed CPU usage statistics

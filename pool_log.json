@@ -1,0 +1,731 @@
+{
+  "server_start_time": "2025-11-30T22:09:25.59100201-08:00",
+  "server_uptime_seconds": 90.003337041,
+  "last_update": "2025-11-30T22:10:55.594339507-08:00",
+  "events": [
+    {
+      "timestamp": "2025-11-30T22:09:46.583321398-08:00",
+      "event_type": "miner_registered",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "hostname": "HP9000",
+        "ip_address": "172.17.17.67",
+        "ip_address_actual": "127.0.0.1"
+      },
+      "message": "New miner registered"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:46.636049664-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 1,
+        "hash": "000005fc9494f578df406ee1e7b7088dc8c187d7f0eddd30fa70aebce9c6d526",
+        "nonce": 18113,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:46.77430657-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 2,
+        "hash": "00002e60f288f30f71d6c14a83b85f7e188d71396a7f7ba5fee544fa33d5b80b",
+        "nonce": 59534,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:47.075220499-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 3,
+        "hash": "000087d9eef969280dae9cec79b48bf9b66809c1f34621615ce68b7f1fc7e8ea",
+        "nonce": 142143,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:47.750592882-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 4,
+        "hash": "0000bd99b8d11d6221eaabd5b7f6deaa5a43c3f9ecf2377e10a7047e33f00bf7",
+        "nonce": 293888,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:47.762468925-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 5,
+        "hash": "00008aebb67c3a09a1f282e98c525487cbfcdf4e5614fcff5faf7404c2de027d",
+        "nonce": 4742,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:47.892585417-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 6,
+        "hash": "00000111cb6a4f9ba7aeb92ad08c02afb32a61eb78b63a8054026a5ab767eeea",
+        "nonce": 55104,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.351276729-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 7,
+        "hash": "0000b19ee2e3ac851dc8204b08a394a10d51e74ac9933d4155a44359b942dad1",
+        "nonce": 170651,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.473973527-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 8,
+        "hash": "000052c11a1fdccfd4026353366c0b94e4ae0aa3c13266e67a0bf34eadee31cd",
+        "nonce": 56659,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.557141259-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 9,
+        "hash": "00009014635dade1c31932a4fa9b7ce7013f46d543432725c9e53af8509d1b8d",
+        "nonce": 37692,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.637773008-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 10,
+        "hash": "0000dcd86dd329b1b7a6bfe1be3aff931322c2abad8558c5435aa21dd0c86284",
+        "nonce": 37027,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.84793894-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 11,
+        "hash": "00009c12f70ccba9a0a6e437040843d67cee3c814b93933b4f3cfa74b68a5716",
+        "nonce": 92505,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:48.907940254-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 12,
+        "hash": "00009a7315f8f23507b3f521071aa6b6733403c95f34a0d38fb1e4670918a8e7",
+        "nonce": 22943,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.177310923-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 13,
+        "hash": "00007dc6efecf3de20983accb10f5cc1c7c6078033f0f981acd5cd57e78ef1dd",
+        "nonce": 121756,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.415516145-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 14,
+        "hash": "0000d3f699a93dc8f26c3a22ccdf22c2ee20e1935f7ff1fc3112ccdaad918dc7",
+        "nonce": 90813,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.613760527-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 15,
+        "hash": "000002b1d1fc2a85362cbb1609515dc898a788f4ed9744dbe3877e81990517e9",
+        "nonce": 73328,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.669530945-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 16,
+        "hash": "0000874269a1b63ce2f47c34972539ff2c675305522340a755fec871df23c771",
+        "nonce": 23381,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.789767509-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 17,
+        "hash": "00009f2b26bfdfa4c42c5cf40f2e6e9643a054cba025b9f2c1cecd03d3225337",
+        "nonce": 54878,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.829861456-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 18,
+        "hash": "0000355e30f58e8fe607005c36d7aef3626deb61cfd0e0135c3b22d38a09d766",
+        "nonce": 16787,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.847354942-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 19,
+        "hash": "0000bd802dbac32a9a77d1fbe8dcdaedc89c7322af01aabf73517046a5755b18",
+        "nonce": 7897,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:49.932467763-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 20,
+        "hash": "0000b5e598e241344dab20f7449fcc0e0a68bada0fcfdfac6a85a05c20007ba5",
+        "nonce": 36491,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.113000493-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 21,
+        "hash": "0000fd6fd1751831ea3108c0ab2d9010919309a393b34fcedaaec5e0c251abce",
+        "nonce": 75735,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.172364854-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 22,
+        "hash": "0000e76920d25dd2f62e9de2212b96fc736a1b7a95b82c47a9f4aa017ca49233",
+        "nonce": 27839,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.17658122-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 23,
+        "hash": "0000cc520988f5cf48e009edbc31986ff0cda66f0f1a936d563811d4ee82e912",
+        "nonce": 1390,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.548449209-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 24,
+        "hash": "0000cebdd9bd9e3ccd558617ad522a470d0045200f4b2420a476148299ffd19f",
+        "nonce": 172493,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.586013243-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 25,
+        "hash": "0000051b8ea6df8d106f543c6571462e0a72c2eb36d43305f48afa4fd1c45121",
+        "nonce": 15554,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.702208133-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 26,
+        "hash": "0000785d4dcf38692fb63462c86802f068fc4e03246f84f65321a12d91e36d28",
+        "nonce": 51900,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.860796348-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 27,
+        "hash": "000051396b6942b8ee6f52b78caa35d73e7aa287d6ea949b02b827f7a3206c7b",
+        "nonce": 68997,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:50.913846078-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 28,
+        "hash": "00001cc5b93901b31f504a90a24daaf202f2271449279b679ecb2ab212108f88",
+        "nonce": 19461,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:51.238107212-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 29,
+        "hash": "000053e80b2f19e30841b34e73fb2c965dd005ff59d00d2809703c86c734844c",
+        "nonce": 132037,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:51.700635403-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 30,
+        "hash": "00009d1d25fe50cee9908b05bde4900170e7ff184f83cf936a78dea34381f5c7",
+        "nonce": 184426,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:51.717232993-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 31,
+        "hash": "0000b09694c834674d9dbac16470639a72a098f41aada899c18d96763d695431",
+        "nonce": 7536,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:52.480415324-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 32,
+        "hash": "000078207409035d5e1911558c7e922fa6de21155d1007db94e3a48875d72b9b",
+        "nonce": 310763,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:52.595156972-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 33,
+        "hash": "00007f0593d68c2fb1a9701a20b0771a460e5d5c9be8fb16dc9591622954a521",
+        "nonce": 48075,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:52.830699635-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 34,
+        "hash": "0000ab30888383b4875162282f07bbf697cd99bdb8f5d2b28c9af1e34e36a27f",
+        "nonce": 82411,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:52.960635931-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 35,
+        "hash": "000068bfc89ff1754bac39881926cb651f8bc3d9c1c4ba999f6e2992ca4e4624",
+        "nonce": 53311,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.111649763-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 36,
+        "hash": "00003e87db530529e146fae57aaa1142817f90e209cb54844726ff9dc9f92145",
+        "nonce": 58626,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.232762934-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 37,
+        "hash": "000000cc3e529141e026101ccc0594a1281f6b47a20fe286636fcf417670e646",
+        "nonce": 53214,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.33783175-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 38,
+        "hash": "00008bf2b4164e0ef9dd5da86550a0dabc8562ea8834c6a1f5d678ed8e590c4c",
+        "nonce": 44322,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.723486575-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 39,
+        "hash": "00002eda1ac3b0c57e1a8b14c597d84c4c6c590f71336429760de83bc453a658",
+        "nonce": 166309,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.825004177-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 40,
+        "hash": "0000ef0d37519aefd4272ad5e7ccd8a5d4bfd82dfac206b8f58e0620d597fd1e",
+        "nonce": 46232,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:53.984976244-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 41,
+        "hash": "000054b9153748286579d3eb0af1e22b00f5372a4b8e81f539711ae2e3a91526",
+        "nonce": 64363,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:54.193511917-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 42,
+        "hash": "0000b1c206d982ffb8e88b800af7e53ded425c9e85ce41d657b6d9b8cf484c66",
+        "nonce": 89091,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:54.279150353-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 43,
+        "hash": "00008eeb5785d8546ab18a05c773ff97c744c8a1d0c74d2f6792214f137fb16c",
+        "nonce": 33475,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:54.427259255-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 44,
+        "hash": "0000159c07d7b7a19888ba82f0eb60feb8897b9e1aacb49dd39278ec692694e4",
+        "nonce": 67236,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.020304414-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 45,
+        "hash": "0000b0ebeba7e3a60ff08c6079c4f1caba6df8a8f59a9d02ec9dca52a272190d",
+        "nonce": 265976,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.089811338-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 46,
+        "hash": "00003d2ef58586dfa13a45aafc19c8ae4fe19e77e34174e139acfb8c5a8b3bc2",
+        "nonce": 26885,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.178600842-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 47,
+        "hash": "0000c2cd86b6525a1cb929e5a7e68a5c361636fc4acb03739e6cc06ea7619337",
+        "nonce": 33178,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.484501551-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 48,
+        "hash": "0000a971dffaf808e68837fd0c7bd191868518af71e46ee2a7dc0070df115c63",
+        "nonce": 119704,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.50112741-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 49,
+        "hash": "000014a9d420f33543c3ca2bbd5c6c0efc0ac19f54002a364e7cb55d2c9f1f0c",
+        "nonce": 6085,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.549812611-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 50,
+        "hash": "00001d4ef7b75f775793a7b0ce910c44ac1d4b087d932fa8416405b1abee502c",
+        "nonce": 20105,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.561977601-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 51,
+        "hash": "00006211e1a15f3f0c427dda7f5d85946bab3a04a680afbe0ef488f69dea243b",
+        "nonce": 3884,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.614570519-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 52,
+        "hash": "0000e888f2a488e25bc02fdc6e25c108c41bd5088004801cc3455bea381be141",
+        "nonce": 21944,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.865617855-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 53,
+        "hash": "0000ba583990370b58d9c9de11c50426b9bbeec6ed9c1b1db58da327a4405546",
+        "nonce": 87208,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:55.942096475-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 54,
+        "hash": "00007e052e703750a84aec9f33b454489a9ab1b331cdd00606f69353ec556d09",
+        "nonce": 35384,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:56.035001034-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 55,
+        "hash": "0000194c073586436e59785498eab14eb80005df63f8d9e1fbb5c5e9edc13cf9",
+        "nonce": 48641,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:56.327808505-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 56,
+        "hash": "000080344a3a7fd6bbc2aef632acf1417eb94c30a8948f34fd79868e1be96689",
+        "nonce": 129047,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    },
+    {
+      "timestamp": "2025-11-30T22:09:56.4233578-08:00",
+      "event_type": "block_mined",
+      "miner_id": "miner-HP9000-1764569386",
+      "details": {
+        "block_index": 57,
+        "hash": "0000a9074bd31eb711da93497cb37695c8530b1d9a3928af487482bad309a5e4",
+        "nonce": 36994,
+        "reward": 50
+      },
+      "message": "Block successfully mined"
+    }
+  ],
+  "current_snapshot": {
+    "timestamp": "2025-11-30T22:10:55.594355951-08:00",
+    "total_miners": 1,
+    "active_miners": 0,
+    "total_hash_rate": 0,
+    "total_blocks_mined": 57,
+    "blockchain_height": 58,
+    "difficulty": 4,
+    "miners": [
+      {
+        "id": "miner-HP9000-1764569386",
+        "ip_address": "172.17.17.67",
+        "ip_address_actual": "127.0.0.1",
+        "hostname": "HP9000",
+        "registered_at": "2025-11-30T22:09:46.583287519-08:00",
+        "last_heartbeat": "2025-11-30T22:09:56.424192757-08:00",
+        "active": false,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 57,
+        "hash_rate": 0,
+        "cpu_usage_percent": 0,
+        "total_hashes": 0,
+        "total_mining_time_seconds": 0,
+        "gpu_enabled": false,
+        "hybrid_mode": false
+      }
+    ]
+  }
+}

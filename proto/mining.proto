@@ -95,6 +95,7 @@ message HeartbeatResponse {
   bool active = 1;
   string message = 2;
   bool should_mine = 3; // Server tells client whether to mine or pause
+  int32 cpu_throttle_percent = 4; // CPU usage limit (0-100), 0 = no limit
 }
 
 // Stop response

@@ -65,6 +65,7 @@ func (api *APIServer) Start(port int, httpPort int) error {
 	mux.HandleFunc("/api/miner/pause", api.authMiddleware(api.handlePauseMiner))
 	mux.HandleFunc("/api/miner/resume", api.authMiddleware(api.handleResumeMiner))
 	mux.HandleFunc("/api/miner/delete", api.authMiddleware(api.handleDeleteMiner))
+	mux.HandleFunc("/api/miner/throttle", api.authMiddleware(api.handleThrottleMiner))
 
 	// Public endpoint - no authentication required
 	mux.HandleFunc("/", api.handleIndex)
@@ -245,17 +246,56 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             }
         }
 
+        async function setThrottle(minerID) {
+            const throttleValue = prompt('Enter CPU throttle percentage (0-100):\n0 = No limit\n100 = Maximum throttle', '0');
+            if (throttleValue === null) return; // Cancelled
+
+            const throttle = parseInt(throttleValue);
+            if (isNaN(throttle) || throttle < 0 || throttle > 100) {
+                alert('Invalid throttle value. Must be between 0 and 100.');
+                return;
+            }
+
+            try {
+                const headers = {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json'
+                };
+
+                const response = await fetch('/api/miner/throttle', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        miner_id: minerID,
+                        throttle_percent: throttle
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    loadData(); // Refresh the data
+                } else {
+                    alert('Error: ' + (result.error || result.message));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
         function updateMiners(miners) {
-            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Mining</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
+            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Mining</th><th>CPU Throttle</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
             miners.forEach(miner => {
                 const status = miner.Active ? '<span class="active">Active</span>' : '<span class="inactive">Inactive</span>';
                 const miningStatus = miner.ShouldMine ? '<span class="active">Mining</span>' : '<span class="inactive">Paused</span>';
+                const throttleDisplay = miner.CPUThrottlePercent === 0 ? 'None' : miner.CPUThrottlePercent + '%';
                 const lastSeen = new Date(miner.LastHeartbeat).toLocaleString();
                 const pauseResumeBtn = miner.ShouldMine
                     ? '<button onclick="controlMiner(\'pause\', \'' + miner.ID + '\')">Pause</button>'
                     : '<button onclick="controlMiner(\'resume\', \'' + miner.ID + '\')">Resume</button>';
+                const throttleBtn = '<button onclick="setThrottle(\'' + miner.ID + '\')">Throttle</button>';
                 const deleteBtn = '<button onclick="if(confirm(\'Delete miner ' + miner.ID + '?\')) controlMiner(\'delete\', \'' + miner.ID + '\')">Delete</button>';
-                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + deleteBtn + '</td></tr>';
+                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + throttleDisplay + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + throttleBtn + ' ' + deleteBtn + '</td></tr>';
             });
             html += '</table>';
             document.getElementById('miners').innerHTML = html;
@@ -313,31 +353,33 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 	miners := api.pool.GetMiners()
 
 	type MinerResponse struct {
-		ID              string    `json:"ID"`
-		IPAddress       string    `json:"IPAddress"`
-		IPAddressActual string    `json:"IPAddressActual"`
-		Hostname        string    `json:"Hostname"`
-		RegisteredAt    time.Time `json:"RegisteredAt"`
-		LastHeartbeat   time.Time `json:"LastHeartbeat"`
-		Active          bool      `json:"Active"`
-		ShouldMine      bool      `json:"ShouldMine"`
-		BlocksMined     int64     `json:"BlocksMined"`
-		HashRate        int64     `json:"HashRate"`
+		ID                 string    `json:"ID"`
+		IPAddress          string    `json:"IPAddress"`
+		IPAddressActual    string    `json:"IPAddressActual"`
+		Hostname           string    `json:"Hostname"`
+		RegisteredAt       time.Time `json:"RegisteredAt"`
+		LastHeartbeat      time.Time `json:"LastHeartbeat"`
+		Active             bool      `json:"Active"`
+		ShouldMine         bool      `json:"ShouldMine"`
+		CPUThrottlePercent int       `json:"CPUThrottlePercent"`
+		BlocksMined        int64     `json:"BlocksMined"`
+		HashRate           int64     `json:"HashRate"`
 	}
 
 	response := make([]MinerResponse, len(miners))
 	for i, miner := range miners {
 		response[i] = MinerResponse{
-			ID:              miner.ID,
-			IPAddress:       miner.IPAddress,
-			IPAddressActual: miner.IPAddressActual,
-			Hostname:        miner.Hostname,
-			RegisteredAt:    miner.RegisteredAt,
-			LastHeartbeat:   miner.LastHeartbeat,
-			Active:          miner.Active,
-			ShouldMine:      miner.ShouldMine,
-			BlocksMined:     miner.BlocksMined,
-			HashRate:        miner.HashRate,
+			ID:                 miner.ID,
+			IPAddress:          miner.IPAddress,
+			IPAddressActual:    miner.IPAddressActual,
+			Hostname:           miner.Hostname,
+			RegisteredAt:       miner.RegisteredAt,
+			LastHeartbeat:      miner.LastHeartbeat,
+			Active:             miner.Active,
+			ShouldMine:         miner.ShouldMine,
+			CPUThrottlePercent: miner.CPUThrottlePercent,
+			BlocksMined:        miner.BlocksMined,
+			HashRate:           miner.HashRate,
 		}
 	}
 
@@ -474,5 +516,38 @@ func (api *APIServer) handleDeleteMiner(w http.ResponseWriter, r *http.Request) 
 		"status":   "success",
 		"message":  "Miner deleted",
 		"miner_id": req.MinerID,
+	})
+}
+
+// handleThrottleMiner sets the CPU throttle percentage for a miner
+func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID          string `json:"miner_id"`
+		ThrottlePercent  int    `json:"throttle_percent"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.SetCPUThrottle(req.MinerID, req.ThrottlePercent); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":           "success",
+		"message":          fmt.Sprintf("CPU throttle set to %d%%", req.ThrottlePercent),
+		"miner_id":         req.MinerID,
+		"throttle_percent": req.ThrottlePercent,
 	})
 }

@@ -26,6 +26,7 @@ type MinerRecord struct {
 	LastHeartbeat      time.Time
 	Active             bool
 	ShouldMine         bool          // Server control: whether miner should mine
+	CPUThrottlePercent int           // CPU usage limit (0-100), 0 = no limit
 	BlocksMined        int64
 	HashRate           int64
 	TotalMiningTime    time.Duration      // Total time spent mining
@@ -52,6 +53,7 @@ type MiningPool struct {
 	mu            sync.RWMutex
 	workQueue     chan *Block
 	blockReward   int64
+	logger        *PoolLogger
 }
 
 // NewMiningPool creates a new mining pool
@@ -62,12 +64,18 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 		pendingWork: make(map[string]*PendingWork),
 		workQueue:   make(chan *Block, 100),
 		blockReward: 50,
+		logger:      nil, // Will be set after creation
 	}
 
 	// Start work generator
 	go pool.generateWork()
 
 	return pool
+}
+
+// SetLogger sets the logger for the pool
+func (mp *MiningPool) SetLogger(logger *PoolLogger) {
+	mp.logger = logger
 }
 
 // RegisterMiner registers a new miner in the pool
@@ -84,22 +92,33 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 	}
 
 	mp.miners[id] = &MinerRecord{
-		ID:              id,
-		IPAddress:       ipAddress,
-		IPAddressActual: actualIP,
-		Hostname:        hostname,
-		RegisteredAt:    time.Now(),
-		LastHeartbeat:   time.Now(),
-		Active:          true,
-		ShouldMine:      true, // Mining enabled by default
-		BlocksMined:     0,
-		HashRate:        0,
-		TotalMiningTime: 0,
-		CPUUsagePercent: 0,
-		TotalHashes:     0,
+		ID:                 id,
+		IPAddress:          ipAddress,
+		IPAddressActual:    actualIP,
+		Hostname:           hostname,
+		RegisteredAt:       time.Now(),
+		LastHeartbeat:      time.Now(),
+		Active:             true,
+		ShouldMine:         true, // Mining enabled by default
+		CPUThrottlePercent: 0,    // No throttling by default (0 = unlimited)
+		BlocksMined:        0,
+		HashRate:           0,
+		TotalMiningTime:    0,
+		CPUUsagePercent:    0,
+		TotalHashes:        0,
 	}
 
 	fmt.Printf("Miner registered: %s (Reported IP: %s, Actual IP: %s, Hostname: %s)\n", id, ipAddress, actualIP, hostname)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_registered", "New miner registered", id, map[string]interface{}{
+			"ip_address":        ipAddress,
+			"ip_address_actual": actualIP,
+			"hostname":          hostname,
+		})
+	}
+
 	return nil
 }
 
@@ -207,6 +226,17 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 	}
 
 	fmt.Printf("Block %d mined by %s (Hash: %s)\n", blockIndex, minerID, hash)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("block_mined", "Block successfully mined", minerID, map[string]interface{}{
+			"block_index": blockIndex,
+			"hash":        hash,
+			"reward":      mp.blockReward,
+			"nonce":       nonce,
+		})
+	}
+
 	return true, mp.blockReward, nil
 }
 
@@ -420,6 +450,12 @@ func (mp *MiningPool) PauseMiner(minerID string) error {
 
 	miner.ShouldMine = false
 	fmt.Printf("Miner paused: %s\n", minerID)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_paused", "Miner mining paused by server", minerID, nil)
+	}
+
 	return nil
 }
 
@@ -435,6 +471,12 @@ func (mp *MiningPool) ResumeMiner(minerID string) error {
 
 	miner.ShouldMine = true
 	fmt.Printf("Miner resumed: %s\n", minerID)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_resumed", "Miner mining resumed by server", minerID, nil)
+	}
+
 	return nil
 }
 
@@ -450,6 +492,16 @@ func (mp *MiningPool) DeleteMiner(minerID string) error {
 
 	// Remove pending work
 	delete(mp.pendingWork, minerID)
+
+	// Log the event before deletion
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_deleted", "Miner deleted from pool", minerID, map[string]interface{}{
+			"total_blocks_mined": miner.BlocksMined,
+			"total_hashes":       miner.TotalHashes,
+			"ip_address":         miner.IPAddress,
+			"hostname":           miner.Hostname,
+		})
+	}
 
 	// Remove miner
 	delete(mp.miners, minerID)
@@ -469,6 +521,47 @@ func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
 	}
 
 	return miner.ShouldMine, nil
+}
+
+// SetCPUThrottle sets the CPU throttle percentage for a specific miner
+func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	// Validate throttle percentage
+	if throttlePercent < 0 || throttlePercent > 100 {
+		return fmt.Errorf("throttle percentage must be between 0 and 100")
+	}
+
+	miner.CPUThrottlePercent = throttlePercent
+	fmt.Printf("Miner %s CPU throttle set to %d%%\n", minerID, throttlePercent)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_throttled", "CPU throttle set for miner", minerID, map[string]interface{}{
+			"throttle_percent": throttlePercent,
+		})
+	}
+
+	return nil
+}
+
+// GetCPUThrottle returns the CPU throttle percentage for a specific miner
+func (mp *MiningPool) GetCPUThrottle(minerID string) (int, error) {
+	mp.mu.RLock()
+	defer mp.mu.RUnlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return 0, fmt.Errorf("miner not found")
+	}
+
+	return miner.CPUThrottlePercent, nil
 }
 
 // GetCPUStats returns detailed CPU usage statistics

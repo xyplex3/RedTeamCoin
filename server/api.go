@@ -30,6 +30,54 @@ func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, us
 	}
 }
 
+// sendGenericErrorPage sends a generic error page with no application details
+func (api *APIServer) sendGenericErrorPage(w http.ResponseWriter) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Service Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .error-container {
+            text-align: center;
+            padding: 40px;
+            max-width: 500px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #666666;
+        }
+        p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #888888;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>Service Unavailable</h1>
+        <p>We apologize for the inconvenience. The service is not functioning correctly at this time.</p>
+        <p>Please try again later.</p>
+    </div>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	w.Write([]byte(html))
+}
+
 // authMiddleware checks for valid authentication token
 func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -38,11 +86,8 @@ func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		// Check if token matches
 		if token != "Bearer "+api.authToken {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Unauthorized - Invalid or missing authentication token",
-			})
+			// Send generic error page with no application details
+			api.sendGenericErrorPage(w)
 			return
 		}
 
@@ -117,6 +162,22 @@ func (api *APIServer) startHTTPRedirect(httpPort, httpsPort int) {
 
 // handleIndex provides a simple HTML dashboard
 func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// Check authentication - accept token from either header or query parameter
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		// Check for token in query parameter
+		queryToken := r.URL.Query().Get("token")
+		if queryToken != "" {
+			token = "Bearer " + queryToken
+		}
+	}
+
+	// If token doesn't match, show generic error page
+	if token != "Bearer "+api.authToken {
+		api.sendGenericErrorPage(w)
+		return
+	}
+
 	html := `
 <!DOCTYPE html>
 <html>

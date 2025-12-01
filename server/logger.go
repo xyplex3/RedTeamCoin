@@ -180,19 +180,13 @@ func (pl *PoolLogger) WriteLog() error {
 func (pl *PoolLogger) Start() {
 	go func() {
 		// Write initial log
-		if err := pl.WriteLog(); err != nil {
-			fmt.Printf("Error writing initial log: %v\n", err)
-		} else {
-			fmt.Printf("Pool logger started, writing to: %s\n", pl.logFile)
-		}
+		pl.WriteLog()
 
 		ticker := time.NewTicker(pl.updateInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			if err := pl.WriteLog(); err != nil {
-				fmt.Printf("Error writing log: %v\n", err)
-			}
+			pl.WriteLog()
 		}
 	}()
 }

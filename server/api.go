@@ -62,6 +62,9 @@ func (api *APIServer) Start(port int, httpPort int) error {
 	mux.HandleFunc("/api/blocks/", api.authMiddleware(api.handleBlock))
 	mux.HandleFunc("/api/validate", api.authMiddleware(api.handleValidate))
 	mux.HandleFunc("/api/cpu", api.authMiddleware(api.handleCPUStats))
+	mux.HandleFunc("/api/miner/pause", api.authMiddleware(api.handlePauseMiner))
+	mux.HandleFunc("/api/miner/resume", api.authMiddleware(api.handleResumeMiner))
+	mux.HandleFunc("/api/miner/delete", api.authMiddleware(api.handleDeleteMiner))
 
 	// Public endpoint - no authentication required
 	mux.HandleFunc("/", api.handleIndex)
@@ -217,12 +220,42 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 '<div class="stat-item"><span class="stat-label">Block Reward:</span> <span class="stat-value">' + stats.block_reward + ' RTC</span></div>';
         }
 
+        async function controlMiner(action, minerID) {
+            try {
+                const headers = {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json'
+                };
+
+                const response = await fetch('/api/miner/' + action, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ miner_id: minerID })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    loadData(); // Refresh the data
+                } else {
+                    alert('Error: ' + (result.error || result.message));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
         function updateMiners(miners) {
-            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th></tr>';
+            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Mining</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
             miners.forEach(miner => {
                 const status = miner.Active ? '<span class="active">Active</span>' : '<span class="inactive">Inactive</span>';
+                const miningStatus = miner.ShouldMine ? '<span class="active">Mining</span>' : '<span class="inactive">Paused</span>';
                 const lastSeen = new Date(miner.LastHeartbeat).toLocaleString();
-                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td></tr>';
+                const pauseResumeBtn = miner.ShouldMine
+                    ? '<button onclick="controlMiner(\'pause\', \'' + miner.ID + '\')">Pause</button>'
+                    : '<button onclick="controlMiner(\'resume\', \'' + miner.ID + '\')">Resume</button>';
+                const deleteBtn = '<button onclick="if(confirm(\'Delete miner ' + miner.ID + '?\')) controlMiner(\'delete\', \'' + miner.ID + '\')">Delete</button>';
+                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + deleteBtn + '</td></tr>';
             });
             html += '</table>';
             document.getElementById('miners').innerHTML = html;
@@ -287,6 +320,7 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 		RegisteredAt    time.Time `json:"RegisteredAt"`
 		LastHeartbeat   time.Time `json:"LastHeartbeat"`
 		Active          bool      `json:"Active"`
+		ShouldMine      bool      `json:"ShouldMine"`
 		BlocksMined     int64     `json:"BlocksMined"`
 		HashRate        int64     `json:"HashRate"`
 	}
@@ -301,6 +335,7 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 			RegisteredAt:    miner.RegisteredAt,
 			LastHeartbeat:   miner.LastHeartbeat,
 			Active:          miner.Active,
+			ShouldMine:      miner.ShouldMine,
 			BlocksMined:     miner.BlocksMined,
 			HashRate:        miner.HashRate,
 		}
@@ -347,4 +382,97 @@ func (api *APIServer) handleCPUStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetCPUStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// handlePauseMiner pauses mining for a specific miner
+func (api *APIServer) handlePauseMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.PauseMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner paused",
+		"miner_id": req.MinerID,
+	})
+}
+
+// handleResumeMiner resumes mining for a specific miner
+func (api *APIServer) handleResumeMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.ResumeMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner resumed",
+		"miner_id": req.MinerID,
+	})
+}
+
+// handleDeleteMiner deletes a miner from the pool
+func (api *APIServer) handleDeleteMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.DeleteMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner deleted",
+		"miner_id": req.MinerID,
+	})
 }

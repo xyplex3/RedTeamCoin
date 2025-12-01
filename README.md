@@ -194,12 +194,16 @@ export RTC_KEY_FILE="/path/to/your/key.pem"
 The server provides the following REST API endpoints:
 
 - `GET /` - Web dashboard (HTML) - **No authentication required**
+- `GET /blocks` - View all blocks page (HTML) - **No authentication required**
 - `GET /api/stats` - Pool statistics (JSON) - **Requires authentication**
 - `GET /api/miners` - List of all miners (JSON) - **Requires authentication**
 - `GET /api/blockchain` - Complete blockchain (JSON) - **Requires authentication**
 - `GET /api/blocks/{index}` - Specific block details (JSON) - **Requires authentication**
 - `GET /api/validate` - Validate blockchain integrity (JSON) - **Requires authentication**
 - `GET /api/cpu` - CPU and GPU usage statistics for all miners (JSON) - **Requires authentication**
+- `POST /api/miner/pause` - Pause mining for a specific miner - **Requires authentication**
+- `POST /api/miner/resume` - Resume mining for a specific miner - **Requires authentication**
+- `POST /api/miner/delete` - Delete a miner from the pool - **Requires authentication**
 
 ### API Authentication Examples
 
@@ -223,6 +227,24 @@ curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/cpu
 # View GPU-enabled miners
 curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/cpu | \
   jq '.miner_stats[] | select(.gpu_enabled == true)'
+
+# Pause a miner
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890"}' \
+  http://localhost:8080/api/miner/pause
+
+# Resume a miner
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890"}' \
+  http://localhost:8080/api/miner/resume
+
+# Delete a miner
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890"}' \
+  http://localhost:8080/api/miner/delete
 ```
 
 **Using curl (HTTPS with self-signed certificate):**

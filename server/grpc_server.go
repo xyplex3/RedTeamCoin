@@ -138,14 +138,22 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 	)
 	if err != nil {
 		return &pb.HeartbeatResponse{
-			Active:  false,
-			Message: err.Error(),
+			Active:     false,
+			Message:    err.Error(),
+			ShouldMine: false,
 		}, nil
 	}
 
+	// Get the mining status for this miner
+	shouldMine, err := s.pool.GetMinerStatus(req.MinerId)
+	if err != nil {
+		shouldMine = true // Default to mining if status check fails
+	}
+
 	return &pb.HeartbeatResponse{
-		Active:  true,
-		Message: "Heartbeat received",
+		Active:     true,
+		Message:    "Heartbeat received",
+		ShouldMine: shouldMine,
 	}, nil
 }
 

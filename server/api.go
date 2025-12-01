@@ -243,6 +243,9 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
+            width: 90px;
+            margin-right: 2px;
+            margin-top: 2px;
         }
         button:hover { background-color: #45b8ac; }
     </style>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -19,18 +20,23 @@ import (
 )
 
 const (
-	serverAddress = "localhost:50051"
-	heartbeatInterval = 30 * time.Second
+	defaultServerAddress = "localhost:50051"
+	heartbeatInterval    = 30 * time.Second
+)
+
+var (
+	serverAddress string
 )
 
 type Miner struct {
-	id        string
-	ipAddress string
-	hostname  string
-	client    pb.MiningPoolClient
-	conn      *grpc.ClientConn
-	ctx       context.Context
-	cancel    context.CancelFunc
+	id            string
+	ipAddress     string
+	hostname      string
+	serverAddress string
+	client        pb.MiningPoolClient
+	conn          *grpc.ClientConn
+	ctx           context.Context
+	cancel        context.CancelFunc
 
 	blocksMined     int64
 	hashRate        int64
@@ -40,13 +46,13 @@ type Miner struct {
 	cpuUsagePercent float64
 
 	// GPU mining
-	gpuMiner    *GPUMiner
-	hasGPU      bool
-	gpuEnabled  bool
-	hybridMode  bool // Run CPU and GPU mining together
+	gpuMiner   *GPUMiner
+	hasGPU     bool
+	gpuEnabled bool
+	hybridMode bool // Run CPU and GPU mining together
 }
 
-func NewMiner() (*Miner, error) {
+func NewMiner(serverAddr string) (*Miner, error) {
 	// Get hostname
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -69,16 +75,17 @@ func NewMiner() (*Miner, error) {
 	gpuEnabled := os.Getenv("GPU_MINING") != "false" // Enabled by default if GPUs found
 
 	miner := &Miner{
-		id:         minerID,
-		ipAddress:  ipAddress,
-		hostname:   hostname,
-		ctx:        ctx,
-		cancel:     cancel,
-		running:    false,
-		gpuMiner:   gpuMiner,
-		hasGPU:     gpuMiner.HasGPUs(),
-		gpuEnabled: gpuEnabled,
-		hybridMode: hybridMode,
+		id:            minerID,
+		ipAddress:     ipAddress,
+		hostname:      hostname,
+		serverAddress: serverAddr,
+		ctx:           ctx,
+		cancel:        cancel,
+		running:       false,
+		gpuMiner:      gpuMiner,
+		hasGPU:        gpuMiner.HasGPUs(),
+		gpuEnabled:    gpuEnabled,
+		hybridMode:    hybridMode,
 	}
 
 	return miner, nil
@@ -96,9 +103,9 @@ func getOutboundIP() string {
 }
 
 func (m *Miner) Connect() error {
-	fmt.Printf("Connecting to mining pool at %s...\n", serverAddress)
+	fmt.Printf("Connecting to mining pool at %s...\n", m.serverAddress)
 
-	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect: %v", err)
 	}
@@ -564,10 +571,24 @@ func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash strin
 }
 
 func main() {
+	// Parse command-line flags
+	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
+	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
+	flag.Parse()
+
+	// Check environment variable as fallback
+	if serverAddress == "" {
+		if envServer := os.Getenv("POOL_SERVER"); envServer != "" {
+			serverAddress = envServer
+		} else {
+			serverAddress = defaultServerAddress
+		}
+	}
+
 	fmt.Println("=== RedTeamCoin Miner ===")
 	fmt.Println()
 
-	miner, err := NewMiner()
+	miner, err := NewMiner(serverAddress)
 	if err != nil {
 		log.Fatalf("Failed to create miner: %v", err)
 	}

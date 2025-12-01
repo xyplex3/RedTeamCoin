@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -28,38 +30,104 @@ func NewOpenCLMiner() *OpenCLMiner {
 func (om *OpenCLMiner) DetectDevices() []GPUDevice {
 	devices := make([]GPUDevice, 0)
 
-	// Note: This is simulated detection for demonstration
-	// In production, you would use:
-	// - OpenCL API via CGo bindings
-	// - clinfo command line tool
-	// - Go OpenCL libraries like github.com/go-gl/cl
-
 	log.Println("Detecting OpenCL devices...")
 
-	// Check OpenCL availability
-	openCLAvailable := om.checkOpenCLAvailability()
-	if !openCLAvailable {
-		log.Println("OpenCL not available - install OpenCL runtime for GPU mining")
+	// Try to detect AMD ROCm GPUs using rocm-smi
+	devices = append(devices, om.detectAMDGPUs()...)
+
+	// Try to detect using clinfo command
+	if len(devices) == 0 {
+		devices = append(devices, om.detectViaClinfo()...)
+	}
+
+	om.devices = devices
+	return devices
+}
+
+// detectAMDGPUs detects AMD ROCm GPUs
+func (om *OpenCLMiner) detectAMDGPUs() []GPUDevice {
+	devices := make([]GPUDevice, 0)
+
+	cmd := exec.Command("rocm-smi", "--showid", "--showmeminfo=all")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("AMD ROCm not available")
 		return devices
 	}
 
-	// Simulated detection - in production, replace with actual OpenCL API calls
-	// This would use: clGetPlatformIDs(), clGetDeviceIDs(), clGetDeviceInfo()
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	deviceCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "GPU") {
+			deviceCount++
+		}
+	}
 
-	log.Println("OpenCL support detected but requires proper OpenCL installation for actual GPU mining")
+	// Create device entries for each AMD GPU found
+	for i := 0; i < deviceCount; i++ {
+		device := GPUDevice{
+			ID:           i,
+			Name:         fmt.Sprintf("AMD Radeon GPU %d", i),
+			Type:         "OpenCL",
+			Memory:       8 * 1024 * 1024 * 1024, // Default 8GB
+			ComputeUnits: 64,
+			Available:    true,
+		}
+		devices = append(devices, device)
+		log.Printf("Found AMD GPU: %s (ID: %d)\n", device.Name, i)
+	}
+
+	return devices
+}
+
+// detectViaClinfo detects OpenCL devices using clinfo command
+func (om *OpenCLMiner) detectViaClinfo() []GPUDevice {
+	devices := make([]GPUDevice, 0)
+
+	cmd := exec.Command("clinfo")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("clinfo not available - OpenCL might not be installed")
+		return devices
+	}
+
+	// Parse clinfo output for GPU devices
+	outputStr := string(output)
+	if strings.Contains(outputStr, "Device") {
+		deviceCount := strings.Count(outputStr, "Device Type")
+		for i := 0; i < deviceCount; i++ {
+			if strings.Contains(outputStr, "GPU") {
+				device := GPUDevice{
+					ID:           i,
+					Name:         fmt.Sprintf("OpenCL GPU %d", i),
+					Type:         "OpenCL",
+					Memory:       4 * 1024 * 1024 * 1024, // Default 4GB
+					ComputeUnits: 64,
+					Available:    true,
+				}
+				devices = append(devices, device)
+				log.Printf("Found OpenCL GPU: %s (ID: %d)\n", device.Name, i)
+			}
+		}
+	}
 
 	return devices
 }
 
 // checkOpenCLAvailability checks if OpenCL is available
 func (om *OpenCLMiner) checkOpenCLAvailability() bool {
-	// In production, this would check:
-	// 1. OpenCL runtime library availability
-	// 2. Platform availability (AMD, Intel, NVIDIA)
-	// 3. Compatible device presence
-	//
-	// For now, we return false to indicate OpenCL needs proper setup
-	// Users can install OpenCL runtime and rebuild with CGo bindings
+	// Check for rocm-smi
+	cmd := exec.Command("which", "rocm-smi")
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	// Check for clinfo
+	cmd = exec.Command("which", "clinfo")
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
 	return false
 }
 

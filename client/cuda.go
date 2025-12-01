@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -28,45 +30,59 @@ func NewCUDAMiner() *CUDAMiner {
 func (cm *CUDAMiner) DetectDevices() []GPUDevice {
 	devices := make([]GPUDevice, 0)
 
-	// Note: This is a simulated detection for demonstration
-	// In production, you would use:
-	// - CGo bindings to CUDA driver API
-	// - nvidia-smi command line tool
-	// - NVML (NVIDIA Management Library)
-
-	// Try to detect NVIDIA GPUs (simulated)
-	// In real implementation, this would call CUDA API:
-	// cudaGetDeviceCount() and cudaGetDeviceProperties()
-
 	log.Println("Detecting NVIDIA CUDA devices...")
 
-	// Simulated detection - in production, replace with actual CUDA API calls
-	// This creates mock devices for demonstration
-	// Real implementation would use: cuda.GetDeviceCount() and cuda.GetDeviceProperties()
-
-	cudaAvailable := cm.checkCUDAAvailability()
-	if !cudaAvailable {
-		log.Println("CUDA not available - no NVIDIA GPUs detected or CUDA not installed")
+	// Try to detect NVIDIA GPUs using nvidia-smi
+	cmd := exec.Command("nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("CUDA not available - no NVIDIA GPUs detected or nvidia-smi not installed")
 		return devices
 	}
 
-	// Simulated: In production, this would be actual GPU detection
-	// For now, we'll return empty list unless CUDA is properly installed
-	log.Println("CUDA support detected but requires proper CUDA installation for actual GPU mining")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
 
+		parts := strings.Split(line, ",")
+		if len(parts) < 3 {
+			continue
+		}
+
+		name := strings.TrimSpace(parts[1])
+		memoryStr := strings.TrimSpace(parts[2])
+
+		var memory uint64
+		_, err := fmt.Sscanf(memoryStr, "%d", &memory)
+		if err != nil {
+			memory = 2048 // Default to 2GB if parsing fails
+		}
+		memory = memory * 1024 * 1024 // Convert MB to bytes
+
+		device := GPUDevice{
+			ID:           i,
+			Name:         fmt.Sprintf("NVIDIA %s", name),
+			Type:         "CUDA",
+			Memory:       memory,
+			ComputeUnits: 128, // Approximate value
+			Available:    true,
+		}
+
+		devices = append(devices, device)
+		log.Printf("Found CUDA GPU: %s (ID: %d, Memory: %d MB)\n", name, i, memory/1024/1024)
+	}
+
+	cm.devices = devices
 	return devices
 }
 
 // checkCUDAAvailability checks if CUDA is available
 func (cm *CUDAMiner) checkCUDAAvailability() bool {
-	// In production, this would check:
-	// 1. CUDA runtime library availability
-	// 2. NVIDIA driver installation
-	// 3. Compatible GPU presence
-	//
-	// For now, we return false to indicate CUDA needs proper setup
-	// Users can install CUDA toolkit and rebuild with CGo bindings
-	return false
+	cmd := exec.Command("which", "nvidia-smi")
+	err := cmd.Run()
+	return err == nil
 }
 
 // HasDevices returns true if CUDA devices are available

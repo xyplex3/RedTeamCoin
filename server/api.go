@@ -121,6 +121,7 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>RedTeamCoin - Mining Pool Dashboard</title>
     <style>
         body {

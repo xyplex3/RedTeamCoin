@@ -347,12 +347,41 @@ To modify these, edit the constants in:
 ### Build Commands
 
 ```bash
-make proto          # Generate protobuf code only
-make build          # Build server and client
-make clean          # Remove build artifacts
-make deps           # Download Go dependencies
-make init           # Full project initialization
+make proto                # Generate protobuf code only
+make build                # Build server and client (CPU only)
+make build-windows        # Cross-compile client for Windows
+make build-all-platforms  # Cross-compile client for all platforms
+make clean                # Remove build artifacts
+make deps                 # Download Go dependencies
+make init                 # Full project initialization
 ```
+
+### Cross-Compilation for Windows
+
+To build the client for Windows from Linux/macOS:
+
+```bash
+make build-windows
+```
+
+This creates `bin/client.exe` which can be transferred to Windows systems.
+
+### Cross-Compilation for Multiple Platforms
+
+To build clients for all supported platforms:
+
+```bash
+make build-all-platforms
+```
+
+This creates the following binaries in the `bin/` directory:
+- `client-linux-amd64` - Linux 64-bit (Intel/AMD)
+- `client-linux-arm64` - Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
+- `client-windows-amd64.exe` - Windows 64-bit
+- `client-darwin-amd64` - macOS 64-bit (Intel)
+- `client-darwin-arm64` - macOS ARM64 (Apple Silicon M1/M2/M3)
+
+**Note**: Cross-compiled binaries are CPU-only and do not include GPU mining support (CGO is disabled for cross-compilation).
 
 ### Project Structure
 

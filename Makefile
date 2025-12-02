@@ -114,7 +114,7 @@ clean:
 	rm -rf bin/
 	rm -f proto/*.pb.go
 	rm -f client/mine.o
-	@echo "✓ Clean complete"
+	@echo "✓ Clean complete (removed all binaries and generated files)"
 
 # Download dependencies
 deps:

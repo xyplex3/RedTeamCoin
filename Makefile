@@ -26,7 +26,7 @@ build: proto
 	go build -o bin/server ./server
 	@echo "✓ Server built: bin/server"
 	@echo "Building client (CPU only)..."
-	go build -o bin/client ./client
+	CGO_ENABLED=0 go build -o bin/client ./client
 	@echo "✓ Client built: bin/client"
 
 # Install GPU dependencies

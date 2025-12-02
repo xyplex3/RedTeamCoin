@@ -41,6 +41,38 @@ RedTeamCoin/
 - protoc (Protocol Buffer Compiler)
 - protoc-gen-go and protoc-gen-go-grpc
 
+### Installing Prerequisites
+
+**Ubuntu/Debian:**
+```bash
+# Install Go (if not already installed)
+sudo apt update
+sudo apt install -y golang-go
+
+# Install protoc (Protocol Buffer Compiler)
+sudo apt install -y protobuf-compiler
+
+# Verify installations
+go version
+protoc --version
+```
+
+**macOS:**
+```bash
+# Install using Homebrew
+brew install go
+brew install protobuf
+
+# Verify installations
+go version
+protoc --version
+```
+
+**Windows:**
+- Install Go from: https://golang.org/dl/
+- Install protoc from: https://github.com/protocolbuffers/protobuf/releases
+- Add both to your PATH environment variable
+
 ## Installation
 
 1. Clone the repository:

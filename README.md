@@ -383,6 +383,27 @@ This creates the following binaries in the `bin/` directory:
 
 **Note**: Cross-compiled binaries are CPU-only and do not include GPU mining support (CGO is disabled for cross-compilation).
 
+### Analysis Tools
+
+RedTeamCoin includes a damage assessment report generator for analyzing the impact of cryptocurrency mining on systems:
+
+```bash
+make build-tools
+./bin/generate_report -log pool_log.json
+```
+
+This generates a comprehensive markdown report (`Report_Miner_Activity_from_<date>_to_<date>.md`) that includes:
+
+- **Resource Consumption Analysis** - CPU/GPU utilization, electricity costs, network impact
+- **Performance Impact Assessment** - System degradation levels and productivity loss estimates
+- **Infrastructure Damage** - Hardware wear, thermal stress, lifespan reduction
+- **Security Implications** - Breach indicators, persistence mechanisms, exposure risks
+- **Financial Impact Summary** - Direct and indirect costs with detailed breakdowns
+- **System-by-System Analysis** - Individual impact metrics for each compromised system
+- **Recommendations** - Immediate, short-term, and long-term remediation steps
+
+See [tools/README.md](tools/README.md) for complete documentation on the report generator.
+
 ### Project Structure
 
 - **Blockchain**: Implements a simple proof-of-work blockchain with SHA-256 hashing
@@ -408,6 +429,7 @@ This creates the following binaries in the `bin/` directory:
 - [DUAL_IP_TRACKING.md](DUAL_IP_TRACKING.md) - Dual IP address tracking documentation
 - [TLS_SETUP.md](TLS_SETUP.md) - HTTPS/TLS configuration guide
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and design details
+- [tools/README.md](tools/README.md) - Analysis tools and damage assessment report generator
 
 ## Security Note
 

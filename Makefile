@@ -1,4 +1,4 @@
-.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms clean install-gpu-deps
+.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools clean install-gpu-deps
 
 # Ensure Go bin is in PATH
 export PATH := $(PATH):$(HOME)/go/bin
@@ -98,6 +98,13 @@ build-all-platforms: proto
 	@echo ""
 	@echo "All platform builds complete!"
 
+# Build analysis tools
+build-tools:
+	@echo "Building analysis tools..."
+	@mkdir -p bin
+	go build -o bin/generate_report ./tools/generate_report.go
+	@echo "✓ Report generator built: bin/generate_report"
+
 # Run server
 run-server: build
 	@echo "Starting RedTeamCoin server..."
@@ -136,6 +143,7 @@ help:
 	@echo "  make build-gpu          - Build with GPU support (auto-detects CUDA or OpenCL)"
 	@echo "  make build-windows      - Cross-compile client for Windows (CPU only)"
 	@echo "  make build-all-platforms - Cross-compile client for all platforms (Linux, Windows, macOS)"
+	@echo "  make build-tools        - Build analysis tools (damage report generator)"
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"
 	@echo "  make run-server         - Start the mining pool server"
 	@echo "  make run-client         - Start the mining client"

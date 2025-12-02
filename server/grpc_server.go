@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/xyplex2/redteamcoin/proto"
+	pb "redteamcoin/proto"
 	"google.golang.org/grpc/peer"
 )
 

@@ -692,9 +692,34 @@ func main() {
 		log.Fatalf("Failed to create miner: %v", err)
 	}
 
-	err = miner.Connect()
-	if err != nil {
-		log.Fatalf("Failed to connect to pool: %v", err)
+	// Connection retry logic: try to connect for up to 5 minutes
+	const (
+		retryInterval = 10 * time.Second
+		maxRetryTime  = 5 * time.Minute
+	)
+
+	startTime := time.Now()
+	connected := false
+
+	for !connected {
+		err = miner.Connect()
+		if err == nil {
+			connected = true
+			break
+		}
+
+		// Check if we've exceeded the maximum retry time
+		elapsed := time.Since(startTime)
+		if elapsed >= maxRetryTime {
+			log.Fatalf("Failed to connect to pool after %v: %v", maxRetryTime, err)
+		}
+
+		// Calculate remaining time
+		remaining := maxRetryTime - elapsed
+		fmt.Printf("Failed to connect: %v\n", err)
+		fmt.Printf("Retrying in %v... (%.0f seconds remaining before timeout)\n",
+			retryInterval, remaining.Seconds())
+		time.Sleep(retryInterval)
 	}
 
 	// Handle graceful shutdown

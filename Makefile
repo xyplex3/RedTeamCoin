@@ -1,4 +1,4 @@
-.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu clean install-gpu-deps
+.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms clean install-gpu-deps
 
 # Ensure Go bin is in PATH
 export PATH := $(PATH):$(HOME)/go/bin
@@ -69,6 +69,35 @@ build-gpu: proto
 		exit 1; \
 	fi
 
+# Cross-compile client for Windows (CPU only)
+build-windows: proto
+	@echo "Building client for Windows (CPU only)..."
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/client.exe ./client
+	@echo "✓ Windows client built: bin/client.exe"
+
+# Cross-compile client for multiple platforms
+build-all-platforms: proto
+	@echo "Building client for multiple platforms..."
+	@mkdir -p bin
+	@echo "Building Linux AMD64..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/client-linux-amd64 ./client
+	@echo "✓ Linux AMD64 client built: bin/client-linux-amd64"
+	@echo "Building Linux ARM64..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/client-linux-arm64 ./client
+	@echo "✓ Linux ARM64 client built: bin/client-linux-arm64"
+	@echo "Building Windows AMD64..."
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/client-windows-amd64.exe ./client
+	@echo "✓ Windows AMD64 client built: bin/client-windows-amd64.exe"
+	@echo "Building macOS AMD64..."
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/client-darwin-amd64 ./client
+	@echo "✓ macOS AMD64 client built: bin/client-darwin-amd64"
+	@echo "Building macOS ARM64 (Apple Silicon)..."
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/client-darwin-arm64 ./client
+	@echo "✓ macOS ARM64 client built: bin/client-darwin-arm64"
+	@echo ""
+	@echo "All platform builds complete!"
+
 # Run server
 run-server: build
 	@echo "Starting RedTeamCoin server..."
@@ -101,15 +130,17 @@ init: install-tools deps proto
 help:
 	@echo "RedTeamCoin Makefile targets:"
 	@echo ""
-	@echo "  make build           - Build server and client (CPU only)"
-	@echo "  make build-cuda      - Build with NVIDIA CUDA GPU support"
-	@echo "  make build-opencl    - Build with OpenCL GPU support (AMD, Intel, etc.)"
-	@echo "  make build-gpu       - Build with GPU support (auto-detects CUDA or OpenCL)"
-	@echo "  make install-gpu-deps - Check and report GPU dependencies"
-	@echo "  make run-server      - Start the mining pool server"
-	@echo "  make run-client      - Start the mining client"
-	@echo "  make clean           - Remove build artifacts"
-	@echo "  make deps            - Download Go dependencies"
-	@echo "  make proto           - Generate protobuf code"
-	@echo "  make init            - Initialize project"
-	@echo "  make help            - Show this help message"
+	@echo "  make build              - Build server and client (CPU only)"
+	@echo "  make build-cuda         - Build with NVIDIA CUDA GPU support"
+	@echo "  make build-opencl       - Build with OpenCL GPU support (AMD, Intel, etc.)"
+	@echo "  make build-gpu          - Build with GPU support (auto-detects CUDA or OpenCL)"
+	@echo "  make build-windows      - Cross-compile client for Windows (CPU only)"
+	@echo "  make build-all-platforms - Cross-compile client for all platforms (Linux, Windows, macOS)"
+	@echo "  make install-gpu-deps   - Check and report GPU dependencies"
+	@echo "  make run-server         - Start the mining pool server"
+	@echo "  make run-client         - Start the mining client"
+	@echo "  make clean              - Remove build artifacts"
+	@echo "  make deps               - Download Go dependencies"
+	@echo "  make proto              - Generate protobuf code"
+	@echo "  make init               - Initialize project"
+	@echo "  make help               - Show this help message"

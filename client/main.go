@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/xyplex2/redteamcoin/proto"
+	pb "redteamcoin/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

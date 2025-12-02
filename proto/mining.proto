@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mining;
 
-option go_package = "github.com/xyplex2/redteamcoin/proto";
+option go_package = "redteamcoin/proto";
 
 // Mining service for pool communication
 service MiningPool {

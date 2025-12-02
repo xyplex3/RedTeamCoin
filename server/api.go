@@ -348,11 +348,27 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             }
         }
 
+        function getMiningType(miner) {
+            if (!miner.GPUEnabled) {
+                return 'CPU';
+            }
+
+            // Check GPU devices to determine type
+            if (miner.GPUDevices && miner.GPUDevices.length > 0) {
+                const gpuTypes = miner.GPUDevices.map(gpu => gpu.Type).filter((v, i, a) => a.indexOf(v) === i);
+                const typeStr = gpuTypes.join('/');
+                return miner.HybridMode ? 'CPU+' + typeStr : typeStr;
+            }
+
+            return miner.HybridMode ? 'CPU+GPU' : 'GPU';
+        }
+
         function updateMiners(miners) {
-            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Mining</th><th>CPU Throttle</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
+            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Mining Type</th><th>Status</th><th>Mining</th><th>CPU Throttle</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
             miners.forEach(miner => {
                 const status = miner.Active ? '<span class="active">Active</span>' : '<span class="inactive">Inactive</span>';
                 const miningStatus = miner.ShouldMine ? '<span class="active">Mining</span>' : '<span class="inactive">Paused</span>';
+                const miningType = getMiningType(miner);
                 const throttleDisplay = miner.CPUThrottlePercent === 0 ? 'None' : miner.CPUThrottlePercent + '%';
                 const lastSeen = new Date(miner.LastHeartbeat).toLocaleString();
                 const pauseResumeBtn = miner.ShouldMine
@@ -360,7 +376,7 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     : '<button onclick="controlMiner(\'resume\', \'' + miner.ID + '\')">Resume</button>';
                 const throttleBtn = '<button onclick="setThrottle(\'' + miner.ID + '\')">Throttle</button>';
                 const deleteBtn = '<button onclick="if(confirm(\'Delete miner ' + miner.ID + '?\')) controlMiner(\'delete\', \'' + miner.ID + '\')">Delete</button>';
-                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + throttleDisplay + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + throttleBtn + ' ' + deleteBtn + '</td></tr>';
+                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td><span class="stat-label">' + miningType + '</span></td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + throttleDisplay + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + throttleBtn + ' ' + deleteBtn + '</td></tr>';
             });
             html += '</table>';
             document.getElementById('miners').innerHTML = html;
@@ -417,22 +433,48 @@ func (api *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 	miners := api.pool.GetMiners()
 
+	type GPUDeviceResponse struct {
+		ID           int    `json:"ID"`
+		Name         string `json:"Name"`
+		Type         string `json:"Type"`
+		Memory       uint64 `json:"Memory"`
+		ComputeUnits int    `json:"ComputeUnits"`
+		Available    bool   `json:"Available"`
+	}
+
 	type MinerResponse struct {
-		ID                 string    `json:"ID"`
-		IPAddress          string    `json:"IPAddress"`
-		IPAddressActual    string    `json:"IPAddressActual"`
-		Hostname           string    `json:"Hostname"`
-		RegisteredAt       time.Time `json:"RegisteredAt"`
-		LastHeartbeat      time.Time `json:"LastHeartbeat"`
-		Active             bool      `json:"Active"`
-		ShouldMine         bool      `json:"ShouldMine"`
-		CPUThrottlePercent int       `json:"CPUThrottlePercent"`
-		BlocksMined        int64     `json:"BlocksMined"`
-		HashRate           int64     `json:"HashRate"`
+		ID                 string              `json:"ID"`
+		IPAddress          string              `json:"IPAddress"`
+		IPAddressActual    string              `json:"IPAddressActual"`
+		Hostname           string              `json:"Hostname"`
+		RegisteredAt       time.Time           `json:"RegisteredAt"`
+		LastHeartbeat      time.Time           `json:"LastHeartbeat"`
+		Active             bool                `json:"Active"`
+		ShouldMine         bool                `json:"ShouldMine"`
+		CPUThrottlePercent int                 `json:"CPUThrottlePercent"`
+		BlocksMined        int64               `json:"BlocksMined"`
+		HashRate           int64               `json:"HashRate"`
+		GPUDevices         []GPUDeviceResponse `json:"GPUDevices,omitempty"`
+		GPUHashRate        int64               `json:"GPUHashRate,omitempty"`
+		GPUEnabled         bool                `json:"GPUEnabled"`
+		HybridMode         bool                `json:"HybridMode"`
 	}
 
 	response := make([]MinerResponse, len(miners))
 	for i, miner := range miners {
+		// Convert GPU devices
+		gpuDevices := make([]GPUDeviceResponse, len(miner.GPUDevices))
+		for j, gpu := range miner.GPUDevices {
+			gpuDevices[j] = GPUDeviceResponse{
+				ID:           gpu.ID,
+				Name:         gpu.Name,
+				Type:         gpu.Type,
+				Memory:       gpu.Memory,
+				ComputeUnits: gpu.ComputeUnits,
+				Available:    gpu.Available,
+			}
+		}
+
 		response[i] = MinerResponse{
 			ID:                 miner.ID,
 			IPAddress:          miner.IPAddress,
@@ -445,6 +487,10 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 			CPUThrottlePercent: miner.CPUThrottlePercent,
 			BlocksMined:        miner.BlocksMined,
 			HashRate:           miner.HashRate,
+			GPUDevices:         gpuDevices,
+			GPUHashRate:        miner.GPUHashRate,
+			GPUEnabled:         miner.GPUEnabled,
+			HybridMode:         miner.HybridMode,
 		}
 	}
 

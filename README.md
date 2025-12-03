@@ -2,6 +2,32 @@
 
 A blockchain-based cryptocurrency mining pool implementation in Go, featuring a server-side blockchain and pool management system, client miners, and a web-based administration dashboard.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Usage](#usage)
+  - [Running the Server](#running-the-server)
+  - [Running a Miner](#running-a-miner)
+  - [Connecting to Remote Servers](#connecting-to-remote-servers)
+- [GPU Mining](#gpu-mining)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Documentation](#documentation)
+
+## Overview
+
+RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system that simulates a non-Ethereum based cryptocurrency. The system consists of three main components:
+
+1. **Blockchain Server** - Manages the blockchain and mining pool
+2. **Client Miner** - Performs proof-of-work mining
+3. **Web Dashboard** - Provides administration and monitoring
+
 ## Features
 
 - **Blockchain Implementation**: Custom proof-of-work blockchain with configurable difficulty
@@ -18,22 +44,346 @@ A blockchain-based cryptocurrency mining pool implementation in Go, featuring a 
 - **Protocol Buffers**: Efficient client-server communication using protobuf/gRPC
 - **Auto-Termination**: Miners automatically shut down and self-delete when removed from the server
 
+## Quick Start
+
+### Prerequisites
+
+- Go 1.21 or later
+- protoc (Protocol Buffer Compiler)
+- protoc-gen-go and protoc-gen-go-grpc
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install -y golang-go protobuf-compiler
+```
+
+**macOS:**
+```bash
+brew install go protobuf
+```
+
+**Windows:**
+- Install Go from: https://golang.org/dl/
+- Install protoc from: https://github.com/protocolbuffers/protobuf/releases
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/xyplex3/RedTeamCoin.git
+cd RedTeamCoin
+
+# Install tools and dependencies
+make install-tools
+make deps
+
+# Build the project
+make build
+```
+
+### Running
+
+**Start the server:**
+```bash
+make run-server
+```
+
+The server starts on:
+- gRPC: port **50051**
+- Web dashboard: **http://localhost:8080**
+
+Copy the authentication token URL from the console.
+
+**Start a miner:**
+```bash
+make run-client
+```
+
+**Access the dashboard:**
+Navigate to the URL displayed in the server console or:
+```
+http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
+```
+
+## How It Works
+
+1. **Server starts** and initializes the blockchain with a genesis block
+2. **Miners connect** via gRPC, providing their IP address and hostname
+3. **Server assigns work** to miners (blocks to be mined)
+4. **Miners compute hashes** trying to find a valid nonce that meets the difficulty requirement
+5. **Miners submit solutions** back to the server
+6. **Server validates** and adds accepted blocks to the blockchain
+7. **Web dashboard** displays real-time statistics and blockchain data
+
+## Usage
+
+### Running the Server
+
+**HTTP (Default):**
+```bash
+./bin/server
+```
+- gRPC server: port **50051**
+- Web dashboard: **http://localhost:8080**
+
+**HTTPS/TLS (Recommended):**
+```bash
+# Generate certificates (one time)
+./generate_certs.sh
+
+# Start with TLS
+RTC_USE_TLS=true ./bin/server
+```
+- gRPC server: port **50051**
+- Web dashboard: **https://localhost:8443**
+- HTTP redirect: **http://localhost:8080**
+
+**Note:** With HTTPS, browsers will show a security warning for self-signed certificates. Click "Advanced" → "Proceed to localhost".
+
+### Running a Miner
+
+**Basic usage:**
+```bash
+./bin/client
+```
+
+**Run multiple miners:**
+Open additional terminals and run `./bin/client` in each.
+
+### Connecting to Remote Servers
+
+By default, clients connect to `localhost:50051`. To connect to a remote server:
+
+**Using command-line flag (recommended):**
+```bash
+./bin/client -server 192.168.1.100:50051
+./bin/client -s mining-pool.example.com:50051
+```
+
+**Using environment variable:**
+```bash
+export POOL_SERVER=192.168.1.100:50051
+./bin/client
+```
+
+**Priority:** Command-line flag > Environment variable > Default (localhost:50051)
+
+See [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) for detailed remote configuration.
+
+## GPU Mining
+
+RedTeamCoin supports GPU-accelerated mining with automatic detection and fallback.
+
+### Build Options
+
+```bash
+make build              # CPU-only (default)
+make build-gpu          # Auto-detect and build with available GPU
+make build-cuda         # NVIDIA CUDA support
+make build-opencl       # AMD/Intel OpenCL support
+```
+
+### Installing GPU Dependencies
+
+**NVIDIA GPUs:**
+```bash
+sudo apt install cuda-toolkit
+make build-cuda
+```
+
+**AMD/Intel GPUs:**
+```bash
+sudo apt install ocl-icd-opencl-dev
+make build-opencl
+```
+
+### Running with GPU
+
+```bash
+# Auto-detect (default)
+./bin/client
+
+# Force CPU only
+GPU_MINING=false ./bin/client
+
+# Hybrid mode (CPU + GPU)
+HYBRID_MINING=true ./bin/client
+
+# GPU with remote server
+GPU_MINING=true ./bin/client -server mining-pool.example.com:50051
+```
+
+### Performance Comparison
+
+| Configuration | Hash Rate | Speedup |
+|--------------|-----------|---------|
+| CPU (1 core) | ~2 MH/s | Baseline |
+| CPU (8 cores) | ~16 MH/s | 8x |
+| GPU (RTX 3080) | ~500 MH/s | 250x |
+| Hybrid (CPU+GPU) | ~620 MH/s | 310x |
+
+See [GPU_MINING.md](GPU_MINING.md) for complete GPU mining guide.
+
+## Configuration
+
+### Environment Variables
+
+**Server:**
+- `RTC_USE_TLS` - Enable HTTPS (default: `false`)
+- `RTC_CERT_FILE` - TLS certificate path (default: `certs/server.crt`)
+- `RTC_KEY_FILE` - TLS private key path (default: `certs/server.key`)
+- `RTC_AUTH_TOKEN` - Custom authentication token (auto-generated if not set)
+
+**Client:**
+- `POOL_SERVER` - Remote server address (default: `localhost:50051`)
+- `GPU_MINING` - Enable/disable GPU mining (default: auto-detect)
+- `HYBRID_MINING` - Enable CPU+GPU simultaneous mining (default: `false`)
+
+### Authentication
+
+All API endpoints (except the dashboard homepage) require Bearer token authentication.
+
+**Auto-generated token:**
+The server generates a secure token on startup and displays it in the console.
+
+**Custom token:**
+```bash
+export RTC_AUTH_TOKEN="your-secret-token"
+./bin/server
+```
+
+### Code Configuration
+
+**Server (`server/main.go`):**
+```go
+const (
+    grpcPort      = 50051
+    apiPort       = 8443   // HTTPS (8080 for HTTP)
+    httpPort      = 8080
+    difficulty    = 4      // Mining difficulty
+)
+```
+
+**Client (`client/main.go`):**
+```go
+const (
+    serverAddress = "localhost:50051"
+    heartbeatInterval = 30 * time.Second
+)
+```
+
+**Pool (`server/pool.go`):**
+```go
+blockReward = 50  // RTC reward per block
+```
+
+### HTTPS Configuration
+
+```bash
+# Generate certificates
+./generate_certs.sh
+
+# Start with HTTPS
+export RTC_USE_TLS=true
+export RTC_AUTH_TOKEN="my-secure-token"
+./bin/server
+
+# Custom certificates
+export RTC_CERT_FILE="/path/to/cert.pem"
+export RTC_KEY_FILE="/path/to/key.pem"
+./bin/server
+```
+
+See [TLS_SETUP.md](TLS_SETUP.md) for detailed TLS configuration.
+
+## API Reference
+
+### REST API Endpoints
+
+**Public endpoints:**
+- `GET /` - Web dashboard (HTML)
+- `GET /blocks` - View all blocks page (HTML)
+
+**Authenticated endpoints:**
+- `GET /api/stats` - Pool statistics (JSON)
+- `GET /api/miners` - List of all miners (JSON)
+- `GET /api/blockchain` - Complete blockchain (JSON)
+- `GET /api/blocks/{index}` - Specific block details (JSON)
+- `GET /api/validate` - Validate blockchain integrity (JSON)
+- `GET /api/cpu` - CPU and GPU usage statistics (JSON)
+- `POST /api/miner/pause` - Pause mining for a specific miner
+- `POST /api/miner/resume` - Resume mining for a specific miner
+- `POST /api/miner/delete` - Delete a miner (auto-terminates and self-deletes)
+- `POST /api/miner/throttle` - Set CPU throttle percentage (0-100%)
+
+### Authentication Examples
+
+**cURL:**
+```bash
+# Get stats
+curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/api/stats
+
+# Get miners
+curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/api/miners
+
+# Pause a miner
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890"}' \
+  http://localhost:8080/api/miner/pause
+
+# Set CPU throttle to 50%
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"miner_id":"miner-hostname-1234567890","throttle_percent":50}' \
+  http://localhost:8080/api/miner/throttle
+
+# HTTPS (with self-signed cert)
+curl -k -H "Authorization: Bearer YOUR_TOKEN" https://localhost:8443/api/stats
+```
+
+**JavaScript:**
+```javascript
+const token = 'YOUR_TOKEN_HERE';
+const headers = { 'Authorization': `Bearer ${token}` };
+
+fetch('http://localhost:8080/api/stats', { headers })
+  .then(r => r.json())
+  .then(data => console.log(data));
+```
+
+**Python:**
+```python
+import requests
+
+headers = {'Authorization': 'Bearer YOUR_TOKEN'}
+response = requests.get('http://localhost:8080/api/stats', headers=headers)
+print(response.json())
+```
+
+### gRPC Services
+
+```protobuf
+service MiningPool {
+  rpc RegisterMiner(MinerInfo) returns (RegistrationResponse);
+  rpc GetWork(WorkRequest) returns (WorkResponse);
+  rpc SubmitWork(WorkSubmission) returns (SubmissionResponse);
+  rpc Heartbeat(MinerStatus) returns (HeartbeatResponse);
+  rpc StopMining(MinerInfo) returns (StopResponse);
+}
+```
+
 ## Architecture
-
-RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system that simulates a non-Ethereum based cryptocurrency. The system consists of three main components:
-
-1. **Blockchain Server** - Manages the blockchain and mining pool
-2. **Client Miner** - Performs proof-of-work mining
-3. **Web Dashboard** - Provides administration and monitoring
 
 ### Technology Stack
 
 - **Language**: Go 1.21+
 - **RPC Framework**: gRPC with Protocol Buffers
 - **Web Server**: Go net/http standard library
-- **Dependencies**:
-  - google.golang.org/protobuf
-  - google.golang.org/grpc
+- **Dependencies**: google.golang.org/protobuf, google.golang.org/grpc
+
+### Project Structure
 
 ```
 RedTeamCoin/
@@ -49,540 +399,251 @@ RedTeamCoin/
 │   └── mining.proto # Mining service definitions
 └── Makefile         # Build automation
 ```
+
 ### Component Details
 
 #### 1. Blockchain (`server/blockchain.go`)
 
-The blockchain implementation uses SHA-256 proof-of-work with configurable difficulty.
+SHA-256 proof-of-work blockchain with configurable difficulty.
 
 **Key Types:**
-- `Block` - Represents a single block with index, timestamp, data, hash, previous hash, nonce, and miner ID
-- `Blockchain` - Thread-safe blockchain with block validation and chain integrity checking
+- `Block` - Block with index, timestamp, data, hash, previous hash, nonce, miner ID
+- `Blockchain` - Thread-safe blockchain with validation
 
 **Key Functions:**
 - `NewBlockchain(difficulty)` - Creates blockchain with genesis block
-- `AddBlock(block)` - Validates and adds a new block
-- `ValidateChain()` - Validates entire blockchain integrity
-- `calculateHash(block)` - Computes SHA-256 hash of block
+- `AddBlock(block)` - Validates and adds a block
+- `ValidateChain()` - Validates blockchain integrity
+- `calculateHash(block)` - Computes SHA-256 hash
 
-**Difficulty**: Number of leading zeros required in block hash (default: 4)
+**Difficulty:** Number of leading zeros in block hash (default: 4)
 
 #### 2. Mining Pool (`server/pool.go`)
 
-Manages multiple miners, distributes work, and processes block submissions.
+Manages miners, distributes work, processes submissions.
 
 **Key Types:**
-- `MinerRecord` - Stores miner information (ID, IP, hostname, stats)
-- `PendingWork` - Tracks work assigned to miners
-- `MiningPool` - Coordinates miners and work distribution
-
-**Key Functions:**
-- `RegisterMiner()` - Registers new miner with IP and hostname logging
-- `GetWork()` - Assigns mining work to miners
-- `SubmitWork()` - Validates and processes mined blocks
-- `UpdateHeartbeat()` - Tracks miner health
-- `StopMiner()` - Handles miner disconnection
+- `MinerRecord` - Miner info (ID, IP, hostname, stats)
+- `PendingWork` - Work assignments
+- `MiningPool` - Coordinates distribution
 
 **Features:**
-- Work queue for pending blocks
-- Automatic stale block detection
-- Real-time miner statistics
+- Work queue
+- Stale block detection
+- Real-time statistics
 - 50 RTC block reward
 
 #### 3. gRPC Server (`server/grpc_server.go`)
 
-Implements Protocol Buffer service for miner communication.
+Protocol Buffer service for miner communication.
 
-**gRPC Services:**
-```protobuf
-service MiningPool {
-  rpc RegisterMiner(MinerInfo) returns (RegistrationResponse);
-  rpc GetWork(WorkRequest) returns (WorkResponse);
-  rpc SubmitWork(WorkSubmission) returns (SubmissionResponse);
-  rpc Heartbeat(MinerStatus) returns (HeartbeatResponse);
-  rpc StopMining(MinerInfo) returns (StopResponse);
-}
-```
-
-**Communication Flow:**
-1. Miner connects and registers with IP/hostname
-2. Miner requests work
-3. Miner receives block template
-4. Miner computes hash with different nonces
-5. Miner submits solution
+**Flow:**
+1. Miner registers with IP/hostname
+2. Requests work
+3. Receives block template
+4. Computes hashes
+5. Submits solution
 6. Server validates and rewards
 
 #### 4. Web API (`server/api.go`)
 
-Provides HTTP REST API and HTML dashboard for administration with token-based authentication.
+HTTP REST API and dashboard with token authentication.
 
-**Authentication:**
-- Bearer token authentication via `Authorization` header
-- Token can be set via `RTC_AUTH_TOKEN` environment variable
-- Auto-generated secure random token if not provided
-- Homepage is public, all API endpoints require authentication
-
-**API Endpoints:**
-- `GET /` - Web dashboard (auto-refreshing) - Public
-- `GET /api/stats` - Pool statistics - **Authenticated**
-- `GET /api/miners` - List of all miners - **Authenticated**
-- `GET /api/blockchain` - Complete blockchain - **Authenticated**
-- `GET /api/blocks/{index}` - Specific block - **Authenticated**
-- `GET /api/validate` - Validate blockchain - **Authenticated**
-
-**Dashboard Features:**
+**Features:**
 - Real-time pool statistics
-- Active miner monitoring with IP addresses and hostnames
+- Active miner monitoring
 - Recent block history
-- Auto-refresh every 5 seconds
-- Token-based API authentication via URL parameter
+- Auto-refresh (5 seconds)
 
-### 5. Client Miner (`client/main.go`)
+#### 5. Client Miner (`client/main.go`)
 
-Automated mining client that connects to the pool.
+Automated mining client.
 
-**Key Features:**
-- Automatic IP address detection
+**Features:**
+- Auto IP detection
 - Hostname logging
-- Configurable mining algorithm
 - Hash rate calculation
-- Periodic heartbeat (every 30 seconds)
-- Graceful shutdown with Ctrl+C
+- Heartbeat (30s intervals)
+- Graceful shutdown
 
-**Mining Process:**
-1. Detect and log IP address and hostname
-2. Connect to server via gRPC
-3. Register with pool
-4. Request work
-5. Compute hashes until valid nonce found
-6. Submit solution
-7. Repeat
+**Hash:** `SHA256(index + timestamp + data + previousHash + nonce)`
 
-**Hash Calculation:**
-```
-hash = SHA256(index + timestamp + data + previousHash + nonce)
-```
-
-## Data Flow
+### Data Flow
 
 ```
 Client Miner                    Server
     |                              |
     |--RegisterMiner(IP,Hostname)->|
     |<--RegistrationResponse-------|
-    |                              |
     |--GetWork()------------------>|
     |<--WorkResponse(Block)--------|
-    |                              |
     | [Mining: compute hashes]     |
-    |                              |
     |--SubmitWork(nonce,hash)----->|
-    |                              | [Validate]
-    |                              | [Add to blockchain]
+    |                              | [Validate & Add]
     |<--SubmissionResponse---------|
-    |    (accepted + reward)       |
-    |                              |
     |--Heartbeat(stats)----------->|
     |<--HeartbeatResponse----------|
-    |                              |
 ```
 
-## Prerequisites
+### Concurrency
 
-- Go 1.21 or later
-- protoc (Protocol Buffer Compiler)
-- protoc-gen-go and protoc-gen-go-grpc
+- **Blockchain**: Thread-safe (`sync.RWMutex`)
+- **Mining Pool**: Thread-safe (`sync.RWMutex`)
+- **Work Generator**: Goroutine (30s intervals)
+- **Client Heartbeat**: Goroutine (30s intervals)
+- **Multiple Miners**: Fully supported
 
-### Installing Prerequisites
+### Performance
 
-**Ubuntu/Debian:**
-```bash
-# Install Go (if not already installed)
-sudo apt update
-sudo apt install -y golang-go
+- **Difficulty 4**: ~1-10 seconds/block (single CPU)
+- **Difficulty 5**: ~10-60 seconds/block
+- **Difficulty 6**: ~1-10 minutes/block
 
-# Install protoc (Protocol Buffer Compiler)
-sudo apt install -y protobuf-compiler
-
-# Verify installations
-go version
-protoc --version
-```
-
-**macOS:**
-```bash
-# Install using Homebrew
-brew install go
-brew install protobuf
-
-# Verify installations
-go version
-protoc --version
-```
-
-**Windows:**
-- Install Go from: https://golang.org/dl/
-- Install protoc from: https://github.com/protocolbuffers/protobuf/releases
-- Add both to your PATH environment variable
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/xyplex3/RedTeamCoin.git
-cd RedTeamCoin
-```
-
-2. Install required tools and dependencies:
-```bash
-make install-tools
-make deps
-```
-
-3. Generate protobuf code and build:
-```bash
-make build
-```
-
-4. (Optional) Generate TLS certificates for HTTPS:
-```bash
-./generate_certs.sh
-```
-
-## Usage
-
-### Running the Server
-
-**Option 1: HTTP (Default)**
-```bash
-make run-server
-# or
-./bin/server
-```
-
-The server will start on:
-- gRPC server: port **50051**
-- Web dashboard: **http://localhost:8080**
-
-**Option 2: HTTPS/TLS (Recommended)**
-
-First, generate certificates:
-```bash
-./generate_certs.sh
-```
-
-Then start the server with TLS enabled:
-```bash
-export RTC_USE_TLS=true
-make run-server
-# or
-RTC_USE_TLS=true ./bin/server
-```
-
-The server will start on:
-- gRPC server: port **50051**
-- Web dashboard: **https://localhost:8443**
-- HTTP redirect: **http://localhost:8080** (redirects to HTTPS)
-
-**Important Notes:**
-- The server generates a secure authentication token displayed in the console
-- With HTTPS, browsers will show a security warning (self-signed certificate) - click "Advanced" → "Proceed to localhost"
-- Copy the complete URL with token from the console output
-
-### Running a Miner
-
-In a separate terminal, start a mining client:
-```bash
-make run-client
-```
-
-Or directly:
-```bash
-./bin/client
-```
-
-**GPU Mining:**
-
-The client automatically detects available GPUs (NVIDIA CUDA and AMD/Intel OpenCL). To control GPU mining:
-
-```bash
-# Default: Auto-detect GPUs and use if available
-./bin/client
-
-# Disable GPU mining (CPU only)
-GPU_MINING=false ./bin/client
-
-# Enable hybrid mode (CPU + GPU simultaneously)
-HYBRID_MINING=true ./bin/client
-```
-
-**Note:** GPU mining is currently in framework mode. See [GPU_MINING.md](GPU_MINING.md) for production setup instructions.
-
-You can run multiple miners simultaneously by opening additional terminals and running the client command again.
-
-### Web Dashboard
-
-The server console will display a URL with the authentication token included. Copy and paste this URL into your browser, or manually navigate to:
-
-```
-http://<server IP address>:8080?token=YOUR_AUTH_TOKEN_HERE
-```
-
-Replace `YOUR_AUTH_TOKEN_HERE` with the token displayed when the server started.
-
-The dashboard displays:
-- **Pool Statistics**: Total miners, active miners, hash rate, blockchain height
-- **Connected Miners**: List of all miners with IP addresses, hostnames, and stats
-- **Recent Blocks**: Last 10 mined blocks with details
-
-The dashboard auto-refreshes every 5 seconds.
-
-### Authentication
-
-All API endpoints (except the dashboard homepage) require authentication via Bearer token in the `Authorization` header.
-
-**Setting a Custom Token:**
-```bash
-export RTC_AUTH_TOKEN="your-secret-token-here"
-./bin/server
-```
-
-**Using the Auto-Generated Token:**
-When you start the server without setting `RTC_AUTH_TOKEN`, a secure random token is automatically generated and displayed in the console.
-
-### TLS/HTTPS Configuration
-
-**Environment Variables:**
-- `RTC_USE_TLS` - Set to `true` to enable HTTPS (default: `false`)
-- `RTC_CERT_FILE` - Path to TLS certificate (default: `certs/server.crt`)
-- `RTC_KEY_FILE` - Path to TLS private key (default: `certs/server.key`)
-- `RTC_AUTH_TOKEN` - Custom authentication token (optional)
-
-**Example with HTTPS:**
-```bash
-# Generate certificates (one time)
-./generate_certs.sh
-
-# Start server with HTTPS
-export RTC_USE_TLS=true
-export RTC_AUTH_TOKEN="my-secure-token"
-./bin/server
-```
-
-**Using Custom Certificates:**
-```bash
-export RTC_USE_TLS=true
-export RTC_CERT_FILE="/path/to/your/cert.pem"
-export RTC_KEY_FILE="/path/to/your/key.pem"
-./bin/server
-```
-
-## API Endpoints
-
-The server provides the following REST API endpoints:
-
-- `GET /` - Web dashboard (HTML) - **No authentication required**
-- `GET /blocks` - View all blocks page (HTML) - **No authentication required**
-- `GET /api/stats` - Pool statistics (JSON) - **Requires authentication**
-- `GET /api/miners` - List of all miners (JSON) - **Requires authentication**
-- `GET /api/blockchain` - Complete blockchain (JSON) - **Requires authentication**
-- `GET /api/blocks/{index}` - Specific block details (JSON) - **Requires authentication**
-- `GET /api/validate` - Validate blockchain integrity (JSON) - **Requires authentication**
-- `GET /api/cpu` - CPU and GPU usage statistics for all miners (JSON) - **Requires authentication**
-- `POST /api/miner/pause` - Pause mining for a specific miner - **Requires authentication**
-- `POST /api/miner/resume` - Resume mining for a specific miner - **Requires authentication**
-- `POST /api/miner/delete` - Delete a miner from the pool (client auto-terminates and self-deletes) - **Requires authentication**
-- `POST /api/miner/throttle` - Set CPU throttle percentage for a specific miner - **Requires authentication**
-
-### API Authentication Examples
-
-**Using curl (HTTP):**
-```bash
-# Get pool statistics
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/stats
-
-# Get miners list
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/miners
-
-# Get blockchain
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/blockchain
-
-# Validate blockchain
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/validate
-
-# Get CPU and GPU usage statistics (total and per miner)
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/cpu
-
-# View GPU-enabled miners
-curl -H "Authorization: Bearer YOUR_TOKEN_HERE" http://localhost:8080/api/cpu | \
-  jq '.miner_stats[] | select(.gpu_enabled == true)'
-
-# Pause a miner
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"miner_id":"miner-hostname-1234567890"}' \
-  http://localhost:8080/api/miner/pause
-
-# Resume a miner
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"miner_id":"miner-hostname-1234567890"}' \
-  http://localhost:8080/api/miner/resume
-
-# Delete a miner (client will auto-terminate and delete its executable)
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"miner_id":"miner-hostname-1234567890"}' \
-  http://localhost:8080/api/miner/delete
-
-# Set CPU throttle (0-100%, 0 = no limit)
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"miner_id":"miner-hostname-1234567890","throttle_percent":50}' \
-  http://localhost:8080/api/miner/throttle
-```
-
-**Using curl (HTTPS with self-signed certificate):**
-```bash
-# Use -k flag to accept self-signed certificates
-curl -k -H "Authorization: Bearer YOUR_TOKEN_HERE" https://localhost:8443/api/stats
-curl -k -H "Authorization: Bearer YOUR_TOKEN_HERE" https://localhost:8443/api/miners
-curl -k -H "Authorization: Bearer YOUR_TOKEN_HERE" https://localhost:8443/api/blockchain
-```
-
-**Using JavaScript/Fetch:**
-```javascript
-const token = 'YOUR_TOKEN_HERE';
-const headers = { 'Authorization': `Bearer ${token}` };
-
-fetch('http://localhost:8080/api/stats', { headers })
-  .then(r => r.json())
-  .then(data => console.log(data));
-```
-
-**Using Python requests:**
-```python
-import requests
-
-token = 'YOUR_TOKEN_HERE'
-headers = {'Authorization': f'Bearer {token}'}
-
-response = requests.get('http://localhost:8080/api/stats', headers=headers)
-print(response.json())
-```
-
-## gRPC Services
-
-The mining pool provides the following gRPC services:
-
-- `RegisterMiner` - Register a new miner with IP and hostname
-- `GetWork` - Request mining work from the pool
-- `SubmitWork` - Submit a mined block
-- `Heartbeat` - Send miner status updates
-- `StopMining` - Gracefully stop mining
-
-## Configuration
-
-Default configuration in the code:
-
-- **Blockchain Difficulty**: 4 (leading zeros required in block hash)
-- **Block Reward**: 50 RTC
-- **gRPC Port**: 50051
-- **API Port**: 8080
-- **Heartbeat Interval**: 30 seconds
-
-To modify these, edit the constants in:
-- `server/main.go` - Server configuration
-- `client/main.go` - Client configuration
+Times vary by CPU performance and luck.
 
 ## Development
 
 ### Build Commands
 
 ```bash
-make proto                # Generate protobuf code only
+make proto                # Generate protobuf code
 make build                # Build server and client (CPU only)
-make build-windows        # Cross-compile client for Windows
-make build-all-platforms  # Cross-compile client for all platforms
+make build-gpu            # Build with GPU support (auto-detect)
+make build-cuda           # Build with NVIDIA CUDA
+make build-opencl         # Build with AMD/Intel OpenCL
+make build-windows        # Cross-compile for Windows
+make build-all-platforms  # Cross-compile for all platforms
 make clean                # Remove build artifacts
-make deps                 # Download Go dependencies
-make init                 # Full project initialization
+make deps                 # Download dependencies
+make init                 # Full initialization
 ```
 
-### Cross-Compilation for Windows
+### Cross-Compilation
 
-To build the client for Windows from Linux/macOS:
-
+**Windows:**
 ```bash
 make build-windows
 ```
+Creates `bin/client.exe`
 
-This creates `bin/client.exe` which can be transferred to Windows systems.
-
-### Cross-Compilation for Multiple Platforms
-
-To build clients for all supported platforms:
-
+**Multiple Platforms:**
 ```bash
 make build-all-platforms
 ```
-
-This creates the following binaries in the `bin/` directory:
-- `client-linux-amd64` - Linux 64-bit (Intel/AMD)
-- `client-linux-arm64` - Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
+Creates:
+- `client-linux-amd64` - Linux 64-bit
+- `client-linux-arm64` - Linux ARM64
 - `client-windows-amd64.exe` - Windows 64-bit
-- `client-darwin-amd64` - macOS 64-bit (Intel)
-- `client-darwin-arm64` - macOS ARM64 (Apple Silicon M1/M2/M3)
+- `client-darwin-amd64` - macOS Intel
+- `client-darwin-arm64` - macOS Apple Silicon
 
-**Note**: Cross-compiled binaries are CPU-only and do not include GPU mining support (CGO is disabled for cross-compilation).
+**Note:** Cross-compiled binaries are CPU-only (CGO disabled).
 
 ### Analysis Tools
 
-RedTeamCoin includes a damage assessment report generator for analyzing the impact of cryptocurrency mining on systems:
+Generate damage assessment reports for mining impact analysis:
 
 ```bash
 make build-tools
 ./bin/generate_report -log pool_log.json
 ```
 
-This generates a comprehensive markdown report (`Report_Miner_Activity_from_<date>_to_<date>.md`) that includes:
+**Report includes:**
+- Resource consumption analysis
+- Performance impact assessment
+- Infrastructure damage
+- Security implications
+- Financial impact summary
+- System-by-system analysis
+- Remediation recommendations
 
-- **Resource Consumption Analysis** - CPU/GPU utilization, electricity costs, network impact
-- **Performance Impact Assessment** - System degradation levels and productivity loss estimates
-- **Infrastructure Damage** - Hardware wear, thermal stress, lifespan reduction
-- **Security Implications** - Breach indicators, persistence mechanisms, exposure risks
-- **Financial Impact Summary** - Direct and indirect costs with detailed breakdowns
-- **System-by-System Analysis** - Individual impact metrics for each compromised system
-- **Recommendations** - Immediate, short-term, and long-term remediation steps
+**Cost Assumptions:**
 
-See [tools/README.md](tools/README.md) for complete documentation on the report generator.
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| CPU Power | 150W | Full load |
+| GPU Power | 250W | Full load |
+| Electricity | $0.12/kWh | Adjust for region |
+| Lifespan Reduction | 20-40% | From sustained mining |
 
-### Project Structure
+**Converting Reports:**
 
-- **Blockchain**: Implements a simple proof-of-work blockchain with SHA-256 hashing
-- **Mining Pool**: Manages work distribution, miner registration, and block validation
-- **Client Miner**: Connects to pool, receives work, mines blocks, and submits solutions
-- **gRPC Communication**: All miner-server communication uses Protocol Buffers
-- **Web API**: HTTP API built with Go's standard `net/http` package
+```bash
+# PDF
+pandoc Report_Miner_Activity_from_<date>_to_<date>.md -o report.pdf
 
-## How It Works
+# HTML
+pandoc Report_Miner_Activity_from_<date>_to_<date>.md -o report.html
 
-1. **Server starts** and initializes the blockchain with a genesis block
-2. **Miners connect** via gRPC, providing their IP address and hostname
-3. **Server assigns work** to miners (blocks to be mined)
-4. **Miners compute hashes** trying to find a valid nonce that meets the difficulty requirement
-5. **Miners submit solutions** back to the server
-6. **Server validates** and adds accepted blocks to the blockchain
-7. **Web dashboard** displays real-time statistics and blockchain data
+# DOCX
+pandoc Report_Miner_Activity_from_<date>_to_<date>.md -o report.docx
+```
+
+**Use Cases:**
+- Post-incident analysis
+- Executive briefings
+- Financial justification
+- Compliance documentation
+- Insurance claims
+- Legal evidence
+
+See [tools/README.md](tools/README.md) for complete documentation.
+
+## Troubleshooting
+
+### Remote Connection Issues
+
+**Testing connectivity:**
+```bash
+# Test connection
+ping <server_ip>
+nc -zv <server_ip> 50051
+
+# Check server (on server side)
+lsof -i :50051
+ss -an | grep 50051
+```
+
+**Common issues:**
+- Verify server address and port
+- Ensure server is running
+- Check firewall rules (client and server)
+- Confirm network connectivity
+- Verify port 50051 is listening
+
+### GPU Mining Issues
+
+| Problem | Solution |
+|---------|----------|
+| "cannot find -lcuda" | `export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH` |
+| "nvcc not found" | `sudo apt install cuda-toolkit` |
+| "No OpenCL device" | `sudo apt install ocl-icd-opencl-dev` |
+| GPU slow | `export GPU_MINING=true` |
+| CGo build error | `sudo apt install build-essential` |
+
+### General Issues
+
+**Build failures:**
+- Ensure Go 1.21+ installed
+- Run `make deps` to install dependencies
+- Run `make install-tools` for protoc tools
+
+**Connection refused:**
+- Check server is running
+- Verify port not in use: `lsof -i :50051`
+- Check firewall settings
+
+**Authentication errors:**
+- Verify token matches server output
+- Check `Authorization: Bearer TOKEN` header format
+- Ensure token included in URL or headers
 
 ## Documentation
 
-- [GPU_MINING.md](GPU_MINING.md) - Complete guide to GPU mining with CUDA and OpenCL
-- [CPU_STATS_API.md](CPU_STATS_API.md) - Detailed API documentation for CPU and GPU statistics
-- [DUAL_IP_TRACKING.md](DUAL_IP_TRACKING.md) - Dual IP address tracking documentation
-- [TLS_SETUP.md](TLS_SETUP.md) - HTTPS/TLS configuration guide
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and design details
-- [tools/README.md](tools/README.md) - Analysis tools and damage assessment report generator
+- [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
+- [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration
+- [TLS_SETUP.md](TLS_SETUP.md) - HTTPS/TLS configuration
+- [tools/README.md](tools/README.md) - Analysis tools and reports
 
 ## Security Note
 
@@ -591,52 +652,3 @@ This is a **demonstration/educational project** for understanding blockchain and
 ## License
 
 This project is for educational purposes.
-
-## Configuration
-
-### Server Configuration (`server/main.go`)
-```go
-const (
-    grpcPort      = 50051  // gRPC port for miners
-    apiPort       = 8443   // HTTPS port (8080 for HTTP fallback)
-    httpPort      = 8080   // HTTP redirect port (when TLS enabled)
-    difficulty    = 4      // Mining difficulty
-    defaultCertFile = "certs/server.crt"
-    defaultKeyFile  = "certs/server.key"
-)
-```
-
-**Environment Variables:**
-- `RTC_USE_TLS=true` - Enable HTTPS/TLS (default: false)
-- `RTC_CERT_FILE` - TLS certificate path (default: certs/server.crt)
-- `RTC_KEY_FILE` - TLS key path (default: certs/server.key)
-- `RTC_AUTH_TOKEN` - Custom auth token (optional, auto-generated if not set)
-
-### Client Configuration (`client/main.go`)
-```go
-const (
-    serverAddress = "localhost:50051"
-    heartbeatInterval = 30 * time.Second
-)
-```
-
-### Pool Configuration (`server/pool.go`)
-```go
-blockReward = 50  // RTC reward per block
-```
-
-## Threading and Concurrency
-
-- **Blockchain**: Thread-safe with `sync.RWMutex`
-- **Mining Pool**: Thread-safe with `sync.RWMutex`
-- **Work Generator**: Runs in goroutine, generates work every 30 seconds
-- **Client Heartbeat**: Runs in goroutine, sends heartbeat every 30 seconds
-- **Multiple Miners**: Fully supported, each in separate process
-
-## Performance Characteristics
-
-- **Difficulty 4**: ~1-10 seconds per block (single CPU)
-- **Difficulty 5**: ~10-60 seconds per block
-- **Difficulty 6**: ~1-10 minutes per block
-
-Actual times vary based on CPU performance and luck.

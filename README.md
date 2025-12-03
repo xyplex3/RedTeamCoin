@@ -520,11 +520,24 @@ make init                 # Full initialization
 
 ### Cross-Compilation
 
-**Windows:**
+**Windows (CPU-only):**
 ```bash
 make build-windows
 ```
 Creates `bin/client.exe`
+
+**Windows with OpenCL (GPU support):**
+```bash
+# Requires MinGW-w64 and Windows OpenCL SDK
+make build-windows-opencl
+```
+Creates `bin/client-windows-opencl.exe`
+
+See [WINDOWS_BUILD.md](WINDOWS_BUILD.md) for complete Windows build instructions including:
+- Native Windows builds with GPU support
+- Cross-compilation setup from Linux
+- Authentication token configuration
+- Troubleshooting guide
 
 **Multiple Platforms:**
 ```bash
@@ -537,7 +550,7 @@ Creates:
 - `client-darwin-amd64` - macOS Intel
 - `client-darwin-arm64` - macOS Apple Silicon
 
-**Note:** Cross-compiled binaries are CPU-only (CGO disabled).
+**Note:** Cross-compiled binaries are CPU-only (CGO disabled) unless using `build-windows-opencl`.
 
 ### Analysis Tools
 
@@ -640,6 +653,7 @@ ss -an | grep 50051
 
 ## Documentation
 
+- [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
 - [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
 - [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration
 - [TLS_SETUP.md](TLS_SETUP.md) - HTTPS/TLS configuration
@@ -651,4 +665,25 @@ This is a **demonstration/educational project** for understanding blockchain and
 
 ## License
 
-This project is for educational purposes.
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
+
+### GNU General Public License v3.0
+
+Copyright (C) 2024 RedTeamCoin Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+### Educational Purpose
+
+This project is intended for educational and demonstration purposes to understand blockchain and cryptocurrency concepts. It is not intended for production use and lacks many features required for a real cryptocurrency (cryptographic signatures, wallets, transaction validation, etc.).

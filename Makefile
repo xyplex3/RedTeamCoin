@@ -76,6 +76,29 @@ build-windows: proto
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/client.exe ./client
 	@echo "✓ Windows client built: bin/client.exe"
 
+# Cross-compile client for Windows with OpenCL support
+build-windows-opencl: proto
+	@echo "Building client for Windows with OpenCL support..."
+	@echo "Checking for MinGW-w64 cross-compiler..."
+	@command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || (echo "Error: MinGW-w64 not found. Install with: sudo apt install mingw-w64" && exit 1)
+	@echo "Checking for Windows OpenCL SDK..."
+	@test -f /usr/x86_64-w64-mingw32/include/CL/cl.h || (echo "Error: Windows OpenCL headers not found. See WINDOWS_BUILD.md for setup instructions." && exit 1)
+	@test -f /usr/x86_64-w64-mingw32/lib/libOpenCL.a || (echo "Error: Windows OpenCL library not found. See WINDOWS_BUILD.md for setup instructions." && exit 1)
+	@mkdir -p bin
+	@echo "Building Windows client with OpenCL..."
+	CGO_ENABLED=1 \
+	GOOS=windows \
+	GOARCH=amd64 \
+	CC=x86_64-w64-mingw32-gcc \
+	CXX=x86_64-w64-mingw32-g++ \
+	CGO_CFLAGS="-I/usr/x86_64-w64-mingw32/include -DCL_TARGET_OPENCL_VERSION=120" \
+	CGO_LDFLAGS="-L/usr/x86_64-w64-mingw32/lib -lOpenCL -static-libgcc -static-libstdc++" \
+	go build -tags opencl -ldflags="-s -w" -o bin/client-windows-opencl.exe ./client
+	@echo "✓ Windows OpenCL client built: bin/client-windows-opencl.exe"
+	@echo ""
+	@echo "Note: The client will need OpenCL.dll on the Windows system to run."
+	@echo "See WINDOWS_BUILD.md for deployment instructions."
+
 # Cross-compile client for multiple platforms
 build-all-platforms: proto
 	@echo "Building client for multiple platforms..."
@@ -142,6 +165,7 @@ help:
 	@echo "  make build-opencl       - Build with OpenCL GPU support (AMD, Intel, etc.)"
 	@echo "  make build-gpu          - Build with GPU support (auto-detects CUDA or OpenCL)"
 	@echo "  make build-windows      - Cross-compile client for Windows (CPU only)"
+	@echo "  make build-windows-opencl - Cross-compile client for Windows with OpenCL support"
 	@echo "  make build-all-platforms - Cross-compile client for all platforms (Linux, Windows, macOS)"
 	@echo "  make build-tools        - Build analysis tools (damage report generator)"
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"

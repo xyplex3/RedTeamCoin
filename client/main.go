@@ -79,6 +79,13 @@ func NewMiner(serverAddr string) (*Miner, error) {
 	hybridMode := os.Getenv("HYBRID_MINING") == "true"
 	gpuEnabled := os.Getenv("GPU_MINING") != "false" // Enabled by default if GPUs found
 
+	// GPU can only be enabled if GPUs are actually detected
+	hasGPU := gpuMiner.HasGPUs()
+	if !hasGPU {
+		gpuEnabled = false
+		hybridMode = false
+	}
+
 	miner := &Miner{
 		id:                 minerID,
 		ipAddress:          ipAddress,
@@ -91,7 +98,7 @@ func NewMiner(serverAddr string) (*Miner, error) {
 		cpuThrottlePercent: 0,     // No throttling by default
 		deletedByServer:    false,
 		gpuMiner:           gpuMiner,
-		hasGPU:             gpuMiner.HasGPUs(),
+		hasGPU:             hasGPU,
 		gpuEnabled:         gpuEnabled,
 		hybridMode:         hybridMode,
 	}

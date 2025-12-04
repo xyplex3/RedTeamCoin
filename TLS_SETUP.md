@@ -5,6 +5,7 @@ This guide explains how to configure and use HTTPS/TLS encryption for the RedTea
 ## Overview
 
 RedTeamCoin supports both HTTP and HTTPS modes for the REST API:
+
 - **HTTP Mode** (default): Runs on port 8080, no encryption
 - **HTTPS Mode**: Runs on port 8443 with TLS encryption, HTTP redirect on port 8080
 
@@ -19,6 +20,7 @@ Run the certificate generation script:
 ```
 
 This creates:
+
 - `certs/server.crt` - Self-signed TLS certificate
 - `certs/server.key` - Private key
 
@@ -41,11 +43,12 @@ RTC_USE_TLS=true ./bin/server
 
 The server will display the HTTPS URL in the console:
 
-```
+```text
 https://localhost:8443?token=YOUR_TOKEN_HERE
 ```
 
 **Browser Warning**: Since the certificate is self-signed, browsers will show a security warning:
+
 1. Click "Advanced"
 2. Click "Proceed to localhost" (or similar)
 3. Dashboard will load
@@ -85,10 +88,12 @@ export RTC_KEY_FILE="certs/server.key"
 ## Port Configuration
 
 ### HTTP Mode (Default)
+
 - REST API: `http://localhost:8080`
 - gRPC: `localhost:50051`
 
 ### HTTPS Mode
+
 - REST API: `https://localhost:8443`
 - HTTP Redirect: `http://localhost:8080` → redirects to HTTPS
 - gRPC: `localhost:50051`
@@ -163,6 +168,7 @@ export RTC_AUTH_TOKEN="your-token-here"
 **Error**: `TLS is enabled but certificates not found!`
 
 **Solution**: Generate certificates:
+
 ```bash
 ./generate_certs.sh
 ```
@@ -172,6 +178,7 @@ export RTC_AUTH_TOKEN="your-token-here"
 **Error**: Permission denied reading certificate files
 
 **Solution**: Check file permissions:
+
 ```bash
 chmod 644 certs/server.crt
 chmod 600 certs/server.key
@@ -182,6 +189,7 @@ chmod 600 certs/server.key
 **Problem**: Browser shows "This site can't provide a secure connection"
 
 **Solutions**:
+
 1. Verify server is running with `RTC_USE_TLS=true`
 2. Check you're using the correct port (8443 for HTTPS)
 3. Try using the HTTP redirect URL first (http://localhost:8080)
@@ -191,6 +199,7 @@ chmod 600 certs/server.key
 **Error**: `SSL certificate problem: self signed certificate`
 
 **Solution**: Use `-k` or `--insecure` flag:
+
 ```bash
 curl -k https://localhost:8443/api/stats
 ```
@@ -200,11 +209,13 @@ curl -k https://localhost:8443/api/stats
 **Error**: `SSLError: [SSL: CERTIFICATE_VERIFY_FAILED]`
 
 **Solution**: Set `verify=False` in requests:
+
 ```python
 response = requests.get(url, headers=headers, verify=False)
 ```
 
 Or disable warnings:
+
 ```python
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -217,11 +228,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 The included certificate generation script creates **self-signed certificates**:
 
 **✓ Pros:**
+
 - Free and easy to generate
 - Provides encryption for development/testing
 - No external dependencies
 
 **✗ Cons:**
+
 - Not trusted by browsers (shows warnings)
 - Not suitable for production
 - No identity verification
@@ -231,6 +244,7 @@ The included certificate generation script creates **self-signed certificates**:
 For production use, obtain certificates from a trusted CA:
 
 **Options:**
+
 1. **Let's Encrypt** (Free)
    - Use `certbot` to obtain free certificates
    - Automatic renewal
@@ -248,6 +262,7 @@ For production use, obtain certificates from a trusted CA:
 ### Certificate Management
 
 **Best Practices:**
+
 - Keep private keys secure (permissions 600)
 - Rotate certificates before expiration
 - Store private keys outside version control
@@ -257,6 +272,7 @@ For production use, obtain certificates from a trusted CA:
 ### Additional Security
 
 For enhanced security, consider:
+
 - Implement certificate rotation
 - Add mutual TLS (mTLS) for client authentication
 - Use hardware security modules (HSM) for key storage
@@ -267,7 +283,7 @@ For enhanced security, consider:
 
 The generated self-signed certificate includes:
 
-```
+```text
 Subject: C=US, ST=State, L=City, O=RedTeamCoin, OU=Mining, CN=localhost
 Subject Alternative Names: DNS:localhost, IP:127.0.0.1
 Key Algorithm: RSA 4096-bit
@@ -277,6 +293,7 @@ Validity: 365 days
 ## Next Steps
 
 After setting up HTTPS:
+
 1. Test API endpoints with authentication
 2. Verify HTTP to HTTPS redirect works
 3. Configure firewall rules if needed
@@ -286,6 +303,7 @@ After setting up HTTPS:
 ## Support
 
 For issues or questions about TLS/HTTPS configuration:
+
 - Check server console logs for error messages
 - Verify environment variables are set correctly
 - Ensure certificates are in the correct location

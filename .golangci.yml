@@ -1,4 +1,6 @@
 ---
+version: 2
+
 linters-settings:
   errcheck:
     check-blank: false

@@ -31,12 +31,16 @@ repos:
       - id: go-imports
       - id: go-cyclo
         args: [-over=15]
-      - id: golangci-lint
-        args: [--timeout=5m]
       - id: go-critic
       - id: go-build
         exclude: 'client/(cuda|opencl|gpu)\.go$'
       - id: go-mod-tidy
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.63.4
+    hooks:
+      - id: golangci-lint
+        args: [--timeout=5m]
 
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
     rev: 3.0.0
@@ -66,9 +70,9 @@ repos:
       - id: go-unit-tests
         name: Go unit tests
         language: script
-        entry: .hooks/run-go-tests.sh modified
+        entry: .hooks/run-go-tests.sh short
         files: '\.go$'
-        pass_filenames: true
+        pass_filenames: false
 
       - id: go-vet
         name: Run go vet

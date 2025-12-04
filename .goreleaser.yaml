@@ -1,0 +1,207 @@
+# GoReleaser configuration for RedTeamCoin
+# Handles native platform builds with GPU support
+
+version: 2
+
+before:
+  hooks:
+    - go mod download
+    - make proto
+
+builds:
+  # Server binary (Linux only)
+  - id: server
+    main: ./server
+    binary: server
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  # Client - CPU only (all platforms)
+  - id: client-cpu
+    main: ./client
+    binary: client
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    ignore:
+      # macOS doesn't support darwin/arm64 cross-compilation easily
+      - goos: windows
+        goarch: arm64
+
+  # Client - Linux with OpenCL (built on Linux runner)
+  - id: client-linux-opencl
+    main: ./client
+    binary: client-opencl
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+    tags:
+      - opencl
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    hooks:
+      pre:
+        # Ensure OpenCL is available
+        - sh -c "command -v clinfo || echo 'Warning: OpenCL not detected'"
+
+  # Client - Linux with CUDA (built on Linux runner with CUDA)
+  - id: client-linux-cuda
+    main: ./client
+    binary: client-cuda
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+    tags:
+      - cuda
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    hooks:
+      pre:
+        # Compile CUDA kernel
+        - sh -c "if command -v nvcc > /dev/null; then nvcc -c -m64 -O3 client/mine.cu -o bin/mine_cuda.o; fi"
+
+  # Client - macOS with OpenCL (built on macOS runner)
+  - id: client-macos-opencl
+    main: ./client
+    binary: client-opencl
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=1
+    tags:
+      - opencl
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  # Client - Windows with OpenCL (built on Windows runner)
+  - id: client-windows-opencl
+    main: ./client
+    binary: client-opencl
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+    tags:
+      - opencl
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - WINDOWS_BUILD.md
+      - GPU_MINING.md
+      - REMOTE_SERVER_SETUP.md
+      - TLS_SETUP.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'typo'
+  groups:
+    - title: 'New Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: 'GPU Support'
+      regexp: "^.*(cuda|opencl|gpu).*$"
+      order: 3
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: xyplex3
+    name: RedTeamCoin
+  draft: false
+  prerelease: auto
+  name_template: "RedTeamCoin {{.Version}}"
+  header: |
+    ## RedTeamCoin Release {{.Version}}
+
+    ### Download Options
+
+    **CPU-Only Binaries** (no GPU dependencies):
+    - Linux: `redteamcoin_{{.Version}}_Linux_x86_64.tar.gz`
+    - Windows: `redteamcoin_{{.Version}}_Windows_x86_64.zip`
+    - macOS: `redteamcoin_{{.Version}}_Darwin_x86_64.tar.gz`
+
+    **GPU-Enabled Binaries** (requires GPU drivers):
+    - Linux + OpenCL: `client-opencl` (AMD, Intel GPUs)
+    - Linux + CUDA: `client-cuda` (NVIDIA GPUs)
+    - Windows + OpenCL: `client-opencl.exe`
+    - macOS + OpenCL: `client-opencl`
+
+    ### Installation
+
+    1. Download the appropriate archive for your platform
+    2. Extract: `tar -xzf redteamcoin_*.tar.gz` (or unzip for Windows)
+    3. Run: `./bin/server` or `./bin/client`
+
+    For GPU mining, see [GPU_MINING.md](https://github.com/xyplex3/RedTeamCoin/blob/main/GPU_MINING.md)
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/xyplex3/RedTeamCoin/compare/{{.PreviousTag}}...{{.Tag}}
+
+    ### Build Information
+    - Go Version: {{ .Env.GO_VERSION }}
+    - Commit: {{ .Commit }}
+    - Built: {{ .Date }}

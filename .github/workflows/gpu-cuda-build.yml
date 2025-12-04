@@ -1,0 +1,156 @@
+name: GPU Build (CUDA) - Self-Hosted
+
+# This workflow requires a self-hosted runner with NVIDIA GPU and CUDA toolkit
+# To enable: Set up a self-hosted runner with label 'gpu-cuda'
+# Docs: https://docs.github.com/en/actions/hosting-your-own-runners
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: 'Build target'
+        required: true
+        type: choice
+        options:
+          - cuda
+          - opencl
+          - both
+        default: 'both'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  build-cuda:
+    name: Build with CUDA Support
+    runs-on: [self-hosted, linux, gpu-cuda]
+    if: ${{ inputs.build_target == 'cuda' || inputs.build_target == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Verify CUDA Installation
+        run: |
+          nvidia-smi
+          nvcc --version
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler build-essential
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Build CUDA client
+        run: make build-linux-cuda
+
+      - name: Test CUDA binary
+        run: |
+          ./bin/client-linux-amd64-cuda --version || echo "Version check not implemented"
+          file ./bin/client-linux-amd64-cuda
+
+      - name: Upload CUDA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-cuda-linux-amd64
+          path: bin/client-linux-amd64-cuda
+          retention-days: 30
+
+  build-opencl:
+    name: Build with OpenCL Support
+    runs-on: [self-hosted, linux, gpu]
+    if: ${{ inputs.build_target == 'opencl' || inputs.build_target == 'both' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Verify OpenCL Installation
+        run: |
+          clinfo || echo "clinfo not available"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler ocl-icd-opencl-dev build-essential
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Build OpenCL client
+        run: make build-linux-opencl
+
+      - name: Test OpenCL binary
+        run: |
+          ./bin/client-linux-amd64-opencl --version || echo "Version check not implemented"
+          file ./bin/client-linux-amd64-opencl
+
+      - name: Upload OpenCL artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-opencl-linux-amd64
+          path: bin/client-linux-amd64-opencl
+          retention-days: 30
+
+  release-gpu-builds:
+    name: Add GPU builds to latest release
+    needs: [build-cuda, build-opencl]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download CUDA artifact
+        if: ${{ inputs.build_target == 'cuda' || inputs.build_target == 'both' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: client-cuda-linux-amd64
+          path: ./cuda
+
+      - name: Download OpenCL artifact
+        if: ${{ inputs.build_target == 'opencl' || inputs.build_target == 'both' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: client-opencl-linux-amd64
+          path: ./opencl
+
+      - name: Create GPU builds archive
+        run: |
+          mkdir -p gpu-builds
+          [ -d cuda ] && cp cuda/* gpu-builds/ || true
+          [ -d opencl ] && cp opencl/* gpu-builds/ || true
+          tar -czf redteamcoin-gpu-linux-amd64.tar.gz -C gpu-builds .
+          sha256sum redteamcoin-gpu-linux-amd64.tar.gz > checksums-gpu.txt
+
+      - name: Upload to latest release (if exists)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            redteamcoin-gpu-linux-amd64.tar.gz
+            checksums-gpu.txt
+          tag_name: latest
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

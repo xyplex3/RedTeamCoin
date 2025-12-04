@@ -705,6 +705,7 @@ ss -an | grep 50051
 
 ## Documentation
 
+- [.github/README.md](.github/README.md) - GitHub Actions workflows and release process
 - [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
 - [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
 - [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration

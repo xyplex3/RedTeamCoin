@@ -60,11 +60,13 @@ jobs:
 
       - name: Generate protobuf
         run: make proto
+        shell: bash
 
       - name: Build CPU binaries
         run: |
           mkdir -p dist
           make build
+        shell: bash
 
       - name: Upload CPU artifacts
         uses: actions/upload-artifact@v4

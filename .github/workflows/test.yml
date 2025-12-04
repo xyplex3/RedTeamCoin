@@ -55,11 +55,11 @@ jobs:
         run: make proto
 
       - name: Run go vet
-        run: go vet ./...
+        run: CGO_ENABLED=0 go vet ./...
 
       - name: Run go fmt check
         run: |
-          fmt_output=$(go fmt ./...)
+          fmt_output=$(CGO_ENABLED=0 go fmt ./...)
           if [ -n "$fmt_output" ]; then
             echo "Code needs formatting:"
             echo "$fmt_output"

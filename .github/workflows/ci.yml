@@ -52,7 +52,7 @@ jobs:
         run: make proto
 
       - name: Run go vet
-        run: go vet ./...
+        run: CGO_ENABLED=0 go vet ./...
 
       - name: Build CPU binaries
         run: make build
@@ -85,6 +85,8 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+        env:
+          CGO_ENABLED: 0
 
   security:
     name: Security Scan
@@ -98,3 +100,5 @@ jobs:
         uses: securego/gosec@master
         with:
           args: ./...
+        env:
+          CGO_ENABLED: 0

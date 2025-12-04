@@ -99,9 +99,9 @@ build-windows-opencl: proto
 	@echo "Note: The client will need OpenCL.dll on the Windows system to run."
 	@echo "See WINDOWS_BUILD.md for deployment instructions."
 
-# Cross-compile client for multiple platforms
+# Cross-compile client for multiple platforms (CPU-only)
 build-all-platforms: proto
-	@echo "Building client for multiple platforms..."
+	@echo "Building client for multiple platforms (CPU-only)..."
 	@mkdir -p bin
 	@echo "Building Linux AMD64..."
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/client-linux-amd64 ./client
@@ -119,7 +119,24 @@ build-all-platforms: proto
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/client-darwin-arm64 ./client
 	@echo "✓ macOS ARM64 client built: bin/client-darwin-arm64"
 	@echo ""
-	@echo "All platform builds complete!"
+	@echo "All platform builds complete (CPU-only)!"
+	@echo "For GPU support, use platform-specific targets or build on target system."
+
+# Build Linux client with GPU support (requires OpenCL/CUDA on build system)
+build-linux-opencl: proto
+	@echo "Building Linux client with OpenCL support..."
+	@mkdir -p bin
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags opencl -o bin/client-linux-amd64-opencl ./client
+	@echo "✓ Linux OpenCL client built: bin/client-linux-amd64-opencl"
+
+# Build Linux client with CUDA support (requires CUDA toolkit on build system)
+build-linux-cuda: proto
+	@echo "Building Linux client with CUDA support..."
+	@command -v nvcc >/dev/null 2>&1 || (echo "Error: nvcc not found. Install CUDA Toolkit." && exit 1)
+	@mkdir -p bin
+	nvcc -c -m64 -O3 client/mine.cu -o bin/mine_cuda.o
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags cuda -o bin/client-linux-amd64-cuda ./client
+	@echo "✓ Linux CUDA client built: bin/client-linux-amd64-cuda"
 
 # Build analysis tools
 build-tools:
@@ -161,12 +178,14 @@ help:
 	@echo "RedTeamCoin Makefile targets:"
 	@echo ""
 	@echo "  make build              - Build server and client (CPU only)"
-	@echo "  make build-cuda         - Build with NVIDIA CUDA GPU support"
-	@echo "  make build-opencl       - Build with OpenCL GPU support (AMD, Intel, etc.)"
+	@echo "  make build-cuda         - Build with NVIDIA CUDA GPU support (native)"
+	@echo "  make build-opencl       - Build with OpenCL GPU support (native)"
 	@echo "  make build-gpu          - Build with GPU support (auto-detects CUDA or OpenCL)"
+	@echo "  make build-linux-opencl - Build Linux client with OpenCL support"
+	@echo "  make build-linux-cuda   - Build Linux client with CUDA support"
 	@echo "  make build-windows      - Cross-compile client for Windows (CPU only)"
 	@echo "  make build-windows-opencl - Cross-compile client for Windows with OpenCL support"
-	@echo "  make build-all-platforms - Cross-compile client for all platforms (Linux, Windows, macOS)"
+	@echo "  make build-all-platforms - Cross-compile client for all platforms (CPU-only)"
 	@echo "  make build-tools        - Build analysis tools (damage report generator)"
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"
 	@echo "  make run-server         - Start the mining pool server"

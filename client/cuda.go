@@ -15,8 +15,12 @@ import (
 	"unsafe"
 )
 
-// #cgo CFLAGS: -I/usr/include
-// #cgo LDFLAGS: ${SRCDIR}/mine_cuda.o -L/usr/lib/x86_64-linux-gnu -lcudart -lstdc++
+// #cgo linux CFLAGS: -I/usr/local/cuda/include -I/usr/include
+// #cgo linux LDFLAGS: ${SRCDIR}/mine_cuda.o -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lcuda -lcudart -lstdc++
+// #cgo windows CFLAGS: -IC:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v12.0/include
+// #cgo windows LDFLAGS: ${SRCDIR}/mine_cuda.o -LC:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v12.0/lib/x64 -lcuda -lcudart
+// #cgo darwin CFLAGS: -I/usr/local/cuda/include
+// #cgo darwin LDFLAGS: ${SRCDIR}/mine_cuda.o -L/usr/local/cuda/lib -lcuda -lcudart -lstdc++
 // #include <stdint.h>
 // #include <stdbool.h>
 // #include <cuda_runtime.h>

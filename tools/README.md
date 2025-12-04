@@ -4,7 +4,8 @@ This directory contains tools for analyzing mining pool activity and generating 
 
 ## Damage Assessment Report Generator
 
-The `generate_report` tool analyzes mining pool log files and generates comprehensive damage assessment reports focused on the impact of cryptocurrency mining on company resources.
+The `generate_report` tool analyzes mining pool log files and generates comprehensive damage assessment
+reports focused on the impact of cryptocurrency mining on company resources.
 
 ### Building the Tool
 
@@ -22,12 +23,14 @@ This creates `bin/generate_report`.
 ```
 
 **Example:**
+
 ```bash
 ./bin/generate_report -log pool_log.json
 ```
 
 The tool will generate a markdown report file named:
-```
+
+```text
 Report_Miner_Activity_from_<start_date>_to_<end_date>.md
 ```
 
@@ -36,12 +39,14 @@ Report_Miner_Activity_from_<start_date>_to_<end_date>.md
 The generated report includes comprehensive analysis across seven main sections:
 
 #### 1. Executive Summary
+
 - Key findings and metrics
 - Total mining time and computational work
 - Energy consumption estimates
 - Number of affected systems
 
 #### 2. Resource Consumption Analysis
+
 - **Compute Power Impact**
   - CPU/GPU utilization statistics
   - Mining type distribution (CPU, GPU, Hybrid)
@@ -55,6 +60,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Data transfer patterns
 
 #### 3. Performance Impact Assessment
+
 - **System Degradation Categories**
   - CRITICAL (90-100% CPU usage)
   - HIGH (70-89% CPU usage)
@@ -66,6 +72,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Business disruption assessment
 
 #### 4. Infrastructure Damage Assessment
+
 - **Hardware Wear and Lifespan Impact**
   - Component stress analysis
   - Expected lifespan reduction (20-40%)
@@ -75,6 +82,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Maintenance recommendations
 
 #### 5. Security Implications
+
 - **Breach Indicators**
   - Affected infrastructure inventory
   - Potential deployment vectors
@@ -85,6 +93,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Broader exposure concerns
 
 #### 6. Financial Impact Summary
+
 - **Direct Costs**
   - Electricity costs
   - Hardware replacement costs
@@ -96,6 +105,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Reputational risk
 
 #### 7. Detailed System-by-System Analysis
+
 - Individual miner impact metrics
 - Top 10 highest impact systems
 - Detailed per-system breakdowns including:
@@ -106,6 +116,7 @@ The generated report includes comprehensive analysis across seven main sections:
   - Impact assessment
 
 #### 8. Recommendations and Next Steps
+
 - **Immediate Actions** (Within 24 hours)
 - **Short-Term Actions** (Within 1 week)
 - **Long-Term Actions** (Within 1 month)
@@ -127,6 +138,7 @@ The report uses the following default assumptions for cost calculations:
 | Thermal Maintenance | $150/system | Inspection and repairs |
 
 To customize these values, edit the constants in `tools/generate_report.go`:
+
 - `avgCPUPowerWatts`
 - `avgGPUPowerWatts`
 - `electricityCostPer`
@@ -142,7 +154,8 @@ To customize these values, edit the constants in `tools/generate_report.go`:
 **Blocks Mined:** Number of valid blocks found and submitted to the blockchain.
 
 **Energy Consumption:** Calculated as:
-```
+
+```text
 Energy (kWh) = (Power Watts × Mining Hours) / 1000
 ```
 
@@ -151,6 +164,7 @@ For CPU-only systems, power is adjusted by CPU usage percentage. For GPU and hyb
 **Estimated Cost:** Energy consumption × electricity rate per kWh.
 
 **Impact Level:** Based on average CPU usage:
+
 - **CRITICAL:** ≥90% - System severely degraded, near-unusable
 - **HIGH:** 70-89% - Significant slowdowns, major productivity impact
 - **MODERATE:** 50-69% - Noticeable performance reduction
@@ -182,9 +196,11 @@ The RedTeamCoin server automatically generates `pool_log.json` with detailed min
 1. Stop the mining pool server
 2. Locate the `pool_log.json` file in the server directory
 3. Run the report generator:
+
    ```bash
    ./bin/generate_report -log pool_log.json
    ```
+
 4. Review the generated markdown report
 
 ### Customization
@@ -199,6 +215,7 @@ To customize the report for your organization:
 ### Output Format
 
 Reports are generated in **Markdown format** for maximum compatibility:
+
 - Easily converted to PDF, HTML, or DOCX
 - Version control friendly (diff/track changes)
 - Readable in any text editor
@@ -210,16 +227,19 @@ Reports are generated in **Markdown format** for maximum compatibility:
 To convert the markdown report to other formats:
 
 **PDF (using pandoc):**
+
 ```bash
 pandoc Report_Miner_Activity_from_2025-11-25_to_2025-11-27.md -o report.pdf
 ```
 
 **HTML:**
+
 ```bash
 pandoc Report_Miner_Activity_from_2025-11-25_to_2025-11-27.md -o report.html
 ```
 
 **DOCX (Microsoft Word):**
+
 ```bash
 pandoc Report_Miner_Activity_from_2025-11-25_to_2025-11-27.md -o report.docx
 ```
@@ -227,6 +247,7 @@ pandoc Report_Miner_Activity_from_2025-11-25_to_2025-11-27.md -o report.docx
 ## Future Tools
 
 Additional analysis tools planned for this directory:
+
 - Network traffic analyzer for mining pool connections
 - Real-time monitoring dashboard
 - Automated alerting based on CPU usage thresholds

@@ -3,17 +3,20 @@
 ## What Was Implemented
 
 ### New Files Created
+
 - `client/mine.cu` - CUDA GPU kernel (SHA256 mining)
 - `client/mine.cl` - OpenCL GPU kernel (cross-platform)
 - `GPU_IMPLEMENTATION.md` - Complete setup and usage guide
 - `GPU_IMPLEMENTATION_COMPLETE.md` - Implementation summary
 
 ### Files Modified
+
 - `client/cuda.go` - Added CUDA bindings and GPU execution
 - `client/opencl.go` - Added OpenCL bindings and GPU execution
 - `Makefile` - Added GPU build targets
 
 ### No Changes Needed
+
 - `client/gpu.go` - Already compatible
 - `client/main.go` - Already compatible
 - All server code - No GPU changes needed
@@ -37,6 +40,7 @@ make build-opencl # For AMD/Intel
 ## Installation by System
 
 ### If you have NVIDIA GPU
+
 ```bash
 # Install CUDA
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-repo-ubuntu2004_11.8.0-1_amd64.deb
@@ -49,6 +53,7 @@ make build-cuda
 ```
 
 ### If you have AMD GPU
+
 ```bash
 # Install ROCm
 sudo apt install rocm-opencl-runtime rocm-opencl-dev
@@ -59,6 +64,7 @@ make build-opencl
 ```
 
 ### If no GPU (or just testing)
+
 ```bash
 # Build CPU-only
 make build
@@ -68,7 +74,7 @@ make build
 ## How It Works
 
 1. **Detection Phase**: Client checks for NVIDIA GPU (CUDA) or AMD/Intel GPU (OpenCL)
-2. **Mining Phase**: 
+2. **Mining Phase**:
    - If GPU found: Sends work to GPU kernel → GPU computes SHA256 in parallel → Returns result
    - If GPU fails: Automatically falls back to CPU mining
    - If no GPU: Uses CPU mining from start
@@ -95,7 +101,7 @@ make build
 
 ## Files Location
 
-```
+```text
 RedTeamCoin/
 ├── client/
 │   ├── main.go          # Main client code (unchanged)
@@ -126,18 +132,21 @@ make help               # Show all options
 ## What Each GPU Implementation Does
 
 ### CUDA (mine.cu)
+
 - Optimized for NVIDIA GPUs
 - Full SHA256 on GPU
 - ~500x speedup on high-end GPUs
 - Requires CUDA Toolkit
 
 ### OpenCL (mine.cl)
+
 - Works on NVIDIA, AMD, Intel, and others
 - Full SHA256 on GPU
 - ~250-500x speedup depending on hardware
 - Cross-platform, more flexible
 
 ### CPU Fallback (cuda.go & opencl.go)
+
 - Automatic CPU implementation
 - Used if GPU unavailable or fails
 - Same mining algorithm, just slower

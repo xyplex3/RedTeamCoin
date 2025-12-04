@@ -1,0 +1,52 @@
+---
+version: 2
+
+linters-settings:
+  errcheck:
+    check-blank: false
+    check-type-assertions: false
+  govet:
+    enable:
+      - assign
+      - atomic
+      - bools
+      - buildtag
+      - composites
+      - copylocks
+      - httpresponse
+      - loopclosure
+      - lostcancel
+      - nilfunc
+      - printf
+      - shift
+      - tests
+      - unmarshal
+      - unreachable
+      - unsafeptr
+      - unusedresult
+
+linters:
+  enable:
+    - govet
+    - typecheck
+    - unused
+  disable:
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - proto
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - "client/cuda\\.go$"
+    - "client/opencl\\.go$"
+    - "client/gpu\\.go$"
+
+run:
+  timeout: 5m

@@ -2,7 +2,7 @@ module redteamcoin
 
 go 1.24.0
 
-toolchain go1.24.10
+toolchain go1.24.11
 
 require (
 	google.golang.org/grpc v1.77.0

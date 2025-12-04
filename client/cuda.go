@@ -1,5 +1,5 @@
-//go:build cgo
-// +build cgo
+//go:build cuda && cgo
+// +build cuda,cgo
 
 package main
 

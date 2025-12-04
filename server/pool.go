@@ -16,44 +16,59 @@ type GPUDeviceInfo struct {
 	Available    bool
 }
 
+// PoolStats represents statistics about the mining pool
+type PoolStats struct {
+	TotalMiners      int
+	ActiveMiners     int
+	TotalHashRate    int64
+	TotalBlocksMined int64
+	TotalHashes      int64
+	TotalMiningTime  float64
+	AvgCPUUsage      float64
+	TotalCPUUsage    float64
+	BlockchainHeight int
+	Difficulty       int
+	BlockReward      int64
+}
+
 // MinerRecord represents information about a connected miner
 type MinerRecord struct {
 	ID                 string
-	IPAddress          string        // Client-reported IP address
-	IPAddressActual    string        // Server-detected actual IP address
-	Hostname           string        // Client-reported hostname
+	IPAddress          string // Client-reported IP address
+	IPAddressActual    string // Server-detected actual IP address
+	Hostname           string // Client-reported hostname
 	RegisteredAt       time.Time
 	LastHeartbeat      time.Time
 	Active             bool
-	ShouldMine         bool          // Server control: whether miner should mine
-	CPUThrottlePercent int           // CPU usage limit (0-100), 0 = no limit
+	ShouldMine         bool // Server control: whether miner should mine
+	CPUThrottlePercent int  // CPU usage limit (0-100), 0 = no limit
 	BlocksMined        int64
 	HashRate           int64
-	TotalMiningTime    time.Duration      // Total time spent mining
-	CPUUsagePercent    float64            // Current CPU usage percentage
-	TotalHashes        int64              // Total hashes computed
-	GPUDevices         []GPUDeviceInfo    // GPU devices available to this miner
-	GPUHashRate        int64              // Hash rate from GPU mining
-	GPUEnabled         bool               // Whether GPU mining is enabled
-	HybridMode         bool               // Whether hybrid CPU+GPU mining is enabled
+	TotalMiningTime    time.Duration   // Total time spent mining
+	CPUUsagePercent    float64         // Current CPU usage percentage
+	TotalHashes        int64           // Total hashes computed
+	GPUDevices         []GPUDeviceInfo // GPU devices available to this miner
+	GPUHashRate        int64           // Hash rate from GPU mining
+	GPUEnabled         bool            // Whether GPU mining is enabled
+	HybridMode         bool            // Whether hybrid CPU+GPU mining is enabled
 }
 
 // PendingWork represents work assigned to a miner
 type PendingWork struct {
-	MinerID       string
-	Block         *Block
-	AssignedAt    time.Time
+	MinerID    string
+	Block      *Block
+	AssignedAt time.Time
 }
 
 // MiningPool manages the pool of miners and work distribution
 type MiningPool struct {
-	blockchain    *Blockchain
-	miners        map[string]*MinerRecord
-	pendingWork   map[string]*PendingWork
-	mu            sync.RWMutex
-	workQueue     chan *Block
-	blockReward   int64
-	logger        *PoolLogger
+	blockchain  *Blockchain
+	miners      map[string]*MinerRecord
+	pendingWork map[string]*PendingWork
+	mu          sync.RWMutex
+	workQueue   chan *Block
+	blockReward int64
+	logger      *PoolLogger
 }
 
 // NewMiningPool creates a new mining pool
@@ -350,7 +365,7 @@ func (mp *MiningPool) generateWork() {
 }
 
 // GetPoolStats returns pool statistics
-func (mp *MiningPool) GetPoolStats() map[string]interface{} {
+func (mp *MiningPool) GetPoolStats() PoolStats {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
 
@@ -378,18 +393,18 @@ func (mp *MiningPool) GetPoolStats() map[string]interface{} {
 		avgCPU = totalCPUUsage / float64(activeMiners)
 	}
 
-	return map[string]interface{}{
-		"total_miners":        len(mp.miners),
-		"active_miners":       activeMiners,
-		"total_hash_rate":     totalHashRate,
-		"total_blocks_mined":  totalBlocksMined,
-		"total_hashes":        totalHashes,
-		"total_mining_time":   totalMiningTime.Seconds(),
-		"avg_cpu_usage":       avgCPU,
-		"total_cpu_usage":     totalCPUUsage,
-		"blockchain_height":   mp.blockchain.GetBlockCount(),
-		"difficulty":          mp.blockchain.Difficulty,
-		"block_reward":        mp.blockReward,
+	return PoolStats{
+		TotalMiners:      len(mp.miners),
+		ActiveMiners:     activeMiners,
+		TotalHashRate:    totalHashRate,
+		TotalBlocksMined: totalBlocksMined,
+		TotalHashes:      totalHashes,
+		TotalMiningTime:  totalMiningTime.Seconds(),
+		AvgCPUUsage:      avgCPU,
+		TotalCPUUsage:    totalCPUUsage,
+		BlockchainHeight: mp.blockchain.GetBlockCount(),
+		Difficulty:       mp.blockchain.Difficulty,
+		BlockReward:      mp.blockReward,
 	}
 }
 
@@ -405,37 +420,37 @@ type GPUDeviceStats struct {
 }
 
 type CPUStats struct {
-	MinerID         string            `json:"miner_id"`
-	IPAddress       string            `json:"ip_address"`
-	IPAddressActual string            `json:"ip_address_actual"`
-	Hostname        string            `json:"hostname"`
-	CPUUsagePercent float64           `json:"cpu_usage_percent"`
-	TotalHashes     int64             `json:"total_hashes"`
-	MiningTimeHours float64           `json:"mining_time_hours"`
-	MiningTimeSec   float64           `json:"mining_time_seconds"`
-	HashRate        int64             `json:"hash_rate"`
-	Active          bool              `json:"active"`
-	RegisteredAt    string            `json:"registered_at"`
-	GPUDevices      []GPUDeviceStats  `json:"gpu_devices,omitempty"`
-	GPUHashRate     int64             `json:"gpu_hash_rate,omitempty"`
-	GPUEnabled      bool              `json:"gpu_enabled"`
-	HybridMode      bool              `json:"hybrid_mode"`
+	MinerID         string           `json:"miner_id"`
+	IPAddress       string           `json:"ip_address"`
+	IPAddressActual string           `json:"ip_address_actual"`
+	Hostname        string           `json:"hostname"`
+	CPUUsagePercent float64          `json:"cpu_usage_percent"`
+	TotalHashes     int64            `json:"total_hashes"`
+	MiningTimeHours float64          `json:"mining_time_hours"`
+	MiningTimeSec   float64          `json:"mining_time_seconds"`
+	HashRate        int64            `json:"hash_rate"`
+	Active          bool             `json:"active"`
+	RegisteredAt    string           `json:"registered_at"`
+	GPUDevices      []GPUDeviceStats `json:"gpu_devices,omitempty"`
+	GPUHashRate     int64            `json:"gpu_hash_rate,omitempty"`
+	GPUEnabled      bool             `json:"gpu_enabled"`
+	HybridMode      bool             `json:"hybrid_mode"`
 }
 
 // TotalCPUStats represents aggregate CPU and GPU statistics
 type TotalCPUStats struct {
-	TotalMiners       int         `json:"total_miners"`
-	ActiveMiners      int         `json:"active_miners"`
-	TotalCPUUsage     float64     `json:"total_cpu_usage_percent"`
-	AverageCPUUsage   float64     `json:"average_cpu_usage_percent"`
-	TotalHashes       int64       `json:"total_hashes"`
-	TotalMiningHours  float64     `json:"total_mining_hours"`
-	TotalMiningTime   float64     `json:"total_mining_seconds"`
-	TotalHashRate     int64       `json:"total_hash_rate"`
-	TotalGPUHashRate  int64       `json:"total_gpu_hash_rate"`
-	GPUEnabledMiners  int         `json:"gpu_enabled_miners"`
-	HybridMiners      int         `json:"hybrid_miners"`
-	MinerStats        []CPUStats  `json:"miner_stats"`
+	TotalMiners      int        `json:"total_miners"`
+	ActiveMiners     int        `json:"active_miners"`
+	TotalCPUUsage    float64    `json:"total_cpu_usage_percent"`
+	AverageCPUUsage  float64    `json:"average_cpu_usage_percent"`
+	TotalHashes      int64      `json:"total_hashes"`
+	TotalMiningHours float64    `json:"total_mining_hours"`
+	TotalMiningTime  float64    `json:"total_mining_seconds"`
+	TotalHashRate    int64      `json:"total_hash_rate"`
+	TotalGPUHashRate int64      `json:"total_gpu_hash_rate"`
+	GPUEnabledMiners int        `json:"gpu_enabled_miners"`
+	HybridMiners     int        `json:"hybrid_miners"`
+	MinerStats       []CPUStats `json:"miner_stats"`
 }
 
 // PauseMiner pauses mining for a specific miner

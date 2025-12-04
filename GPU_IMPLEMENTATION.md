@@ -1,7 +1,9 @@
 # GPU Mining Implementation Guide
 
 ## Overview
-This project now includes complete GPU mining support for NVIDIA CUDA and OpenCL-compatible devices (AMD, Intel, etc.). The implementation includes:
+
+This project now includes complete GPU mining support for NVIDIA CUDA and OpenCL-compatible devices
+(AMD, Intel, etc.). The implementation includes:
 
 - **CUDA Kernel** (`client/mine.cu`) - Full SHA256 implementation on NVIDIA GPUs
 - **OpenCL Kernel** (`client/mine.cl`) - Cross-platform GPU support
@@ -10,25 +12,29 @@ This project now includes complete GPU mining support for NVIDIA CUDA and OpenCL
 
 ## Quick Start
 
-### For CPU-Only Mining (No GPU):
+### For CPU-Only Mining (No GPU)
+
 ```bash
 make build
 ./bin/client -server localhost:50051
 ```
 
-### For CUDA (NVIDIA GPU) Mining:
+### For CUDA (NVIDIA GPU) Mining
+
 ```bash
 make build-cuda
 ./bin/client -server localhost:50051
 ```
 
-### For OpenCL (AMD/Intel/Other GPU) Mining:
+### For OpenCL (AMD/Intel/Other GPU) Mining
+
 ```bash
 make build-opencl
 ./bin/client -server localhost:50051
 ```
 
-### Auto-Detect GPU and Build:
+### Auto-Detect GPU and Build
+
 ```bash
 make build-gpu
 ./bin/client -server localhost:50051
@@ -39,6 +45,7 @@ make build-gpu
 ### CUDA (NVIDIA GPUs)
 
 **Ubuntu/Debian:**
+
 ```bash
 # Add NVIDIA package repositories
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-repo-ubuntu2004_11.8.0-1_amd64.deb
@@ -55,17 +62,20 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 ```
 
 **CentOS/RHEL:**
+
 ```bash
 sudo yum install cuda-toolkit
 ```
 
 **Windows:**
+
 - Download from: https://developer.nvidia.com/cuda-downloads
 - Install CUDA Toolkit and add to PATH
 
 ### OpenCL (AMD/Intel/Cross-Platform)
 
 **AMD GPUs (ROCm):**
+
 ```bash
 # Ubuntu/Debian
 sudo apt install rocm-opencl-runtime rocm-opencl-dev
@@ -75,17 +85,20 @@ docker pull rocm/rocm-terminal
 ```
 
 **Intel GPUs:**
+
 ```bash
 sudo apt install intel-opencl-icd intel-opencl-dev
 ```
 
 **Generic OpenCL:**
+
 ```bash
 sudo apt install ocl-icd-libopencl1 ocl-icd-opencl-dev
 clinfo  # Verify installation
 ```
 
 **macOS:**
+
 ```bash
 # OpenCL is built-in on macOS
 brew install ocl-icd
@@ -127,11 +140,13 @@ make help
 - Seamless integration with Go via CGo
 
 **Compilation:**
+
 ```bash
 nvcc -c -m64 -O3 client/mine.cu -o bin/mine.o
 ```
 
 **Performance:**
+
 - Single GPU can achieve 10-100x speedup over CPU
 - Scales with number of CUDA cores
 - Optimized memory transfers and kernel launches
@@ -145,6 +160,7 @@ nvcc -c -m64 -O3 client/mine.cu -o bin/mine.o
 - Graceful fallback to CPU
 
 **Supported Devices:**
+
 - NVIDIA GPUs (via CUDA or OpenCL)
 - AMD Radeon GPUs (via ROCm)
 - Intel Arc GPUs (via Intel OpenCL)
@@ -152,13 +168,14 @@ nvcc -c -m64 -O3 client/mine.cu -o bin/mine.o
 - Any OpenCL 1.2+ compatible device
 
 **Performance:**
+
 - Similar to CUDA on comparable hardware
 - Cross-platform compatibility
 - Wider hardware support
 
 ## Execution Flow
 
-```
+```text
 Client Start
     ↓
 GPU Miner Initialization
@@ -233,7 +250,7 @@ nvidia-smi  # For NVIDIA
 
 The miner reports GPU statistics in heartbeats:
 
-```
+```text
 GPU Devices Found: 1
   - NVIDIA RTX 3080 (CUDA) - 10240 MB, 68 compute units
 Mode: Hybrid (CPU + GPU)
@@ -250,6 +267,7 @@ export HYBRID_MINING=true
 ```
 
 This:
+
 - Runs GPU kernel on separate nonce range
 - Runs CPU mining in parallel
 - Returns first solution found
@@ -258,6 +276,7 @@ This:
 ## CPU Fallback
 
 If GPU mining fails:
+
 1. Kernel compilation error → fall back to CPU
 2. GPU out of memory → fall back to CPU
 3. GPU not available → use CPU

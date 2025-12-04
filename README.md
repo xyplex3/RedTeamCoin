@@ -1,7 +1,13 @@
 # RedTeamCoin
 
-A blockchain-based cryptocurrency mining pool implementation in Go, featuring a server-side blockchain and pool
-management system, client miners, and a web-based administration dashboard.
+[![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
+[![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
+[![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml)
+[![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml)
+
+A blockchain-based cryptocurrency mining pool implementation in Go, featuring a
+server-side blockchain and pool management system, client miners, and a
+web-based administration dashboard.
 
 ## Table of Contents
 
@@ -23,8 +29,9 @@ management system, client miners, and a web-based administration dashboard.
 
 ## Overview
 
-RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system that simulates a non-Ethereum based
-cryptocurrency. The system consists of three main components:
+RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system
+that simulates a non-Ethereum based cryptocurrency. The system consists of
+three main components:
 
 1. **Blockchain Server** - Manages the blockchain and mining pool
 2. **Client Miner** - Performs proof-of-work mining
@@ -32,19 +39,23 @@ cryptocurrency. The system consists of three main components:
 
 ## Features
 
-- **Blockchain Implementation**: Custom proof-of-work blockchain with configurable difficulty
+- **Blockchain Implementation**: Custom proof-of-work blockchain with
+  configurable difficulty
 - **Mining Pool Server**: Manages multiple miners and work distribution via gRPC
 - **Client Miner**: Automated mining client with IP address and hostname logging
-- **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete miners remotely
+- **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete
+  miners remotely
 - **CPU Throttling**: Limit miner CPU usage from 0-100% to manage resources
 - **GPU Mining Support**: CUDA and OpenCL support for GPU-accelerated mining
 - **Hybrid Mining**: Simultaneous CPU and GPU mining for maximum performance
-- **Web Dashboard**: Real-time monitoring of miners, statistics, and blockchain with control buttons
+- **Web Dashboard**: Real-time monitoring of miners, statistics, and blockchain
+  with control buttons
 - **REST API Authentication**: Secure token-based authentication for API endpoints
 - **Dual IP Tracking**: Records both client-reported and server-detected IP addresses
 - **CPU & GPU Statistics**: Comprehensive resource usage tracking and reporting
 - **Protocol Buffers**: Efficient client-server communication using protobuf/gRPC
-- **Auto-Termination**: Miners automatically shut down and self-delete when removed from the server
+- **Auto-Termination**: Miners automatically shut down and self-delete when
+  removed from the server
 
 ## Quick Start
 
@@ -120,7 +131,8 @@ http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
 1. **Server starts** and initializes the blockchain with a genesis block
 2. **Miners connect** via gRPC, providing their IP address and hostname
 3. **Server assigns work** to miners (blocks to be mined)
-4. **Miners compute hashes** trying to find a valid nonce that meets the difficulty requirement
+4. **Miners compute hashes** trying to find a valid nonce that meets the
+   difficulty requirement
 5. **Miners submit solutions** back to the server
 6. **Server validates** and adds accepted blocks to the blockchain
 7. **Web dashboard** displays real-time statistics and blockchain data
@@ -152,8 +164,8 @@ RTC_USE_TLS=true ./bin/server
 - Web dashboard: **https://localhost:8443**
 - HTTP redirect: **http://localhost:8080**
 
-**Note:** With HTTPS, browsers will show a security warning for self-signed certificates. Click "Advanced" →
-"Proceed to localhost".
+**Note:** With HTTPS, browsers will show a security warning for self-signed
+certificates. Click "Advanced" → "Proceed to localhost".
 
 ### Running a Miner
 
@@ -235,12 +247,12 @@ GPU_MINING=true ./bin/client -server mining-pool.example.com:50051
 
 ### Performance Comparison
 
-| Configuration | Hash Rate | Speedup |
-|--------------|-----------|---------|
-| CPU (1 core) | ~2 MH/s | Baseline |
-| CPU (8 cores) | ~16 MH/s | 8x |
-| GPU (RTX 3080) | ~500 MH/s | 250x |
-| Hybrid (CPU+GPU) | ~620 MH/s | 310x |
+| Configuration    | Hash Rate | Speedup  |
+| ---------------- | --------- | -------- |
+| CPU (1 core)     | ~2 MH/s   | Baseline |
+| CPU (8 cores)    | ~16 MH/s  | 8x       |
+| GPU (RTX 3080)   | ~500 MH/s | 250x     |
+| Hybrid (CPU+GPU) | ~620 MH/s | 310x     |
 
 See [GPU_MINING.md](GPU_MINING.md) for complete GPU mining guide.
 
@@ -374,12 +386,12 @@ curl -k -H "Authorization: Bearer YOUR_TOKEN" https://localhost:8443/api/stats
 **JavaScript:**
 
 ```javascript
-const token = 'YOUR_TOKEN_HERE';
-const headers = { 'Authorization': `Bearer ${token}` };
+const token = "YOUR_TOKEN_HERE";
+const headers = { Authorization: `Bearer ${token}` };
 
-fetch('http://localhost:8080/api/stats', { headers })
-  .then(r => r.json())
-  .then(data => console.log(data));
+fetch("http://localhost:8080/api/stats", { headers })
+  .then((r) => r.json())
+  .then((data) => console.log(data));
 ```
 
 **Python:**
@@ -438,7 +450,8 @@ SHA-256 proof-of-work blockchain with configurable difficulty.
 
 **Key Types:**
 
-- `Block` - Block with index, timestamp, data, hash, previous hash, nonce, miner ID
+- `Block` - Block with index, timestamp, data, hash, previous hash, nonce,
+  miner ID
 - `Blockchain` - Thread-safe blockchain with validation
 
 **Key Functions:**
@@ -574,7 +587,8 @@ make build-windows-opencl
 
 Creates `bin/client-windows-opencl.exe`
 
-See [WINDOWS_BUILD.md](WINDOWS_BUILD.md) for complete Windows build instructions including:
+See [WINDOWS_BUILD.md](WINDOWS_BUILD.md) for complete Windows build
+instructions including:
 
 - Native Windows builds with GPU support
 - Cross-compilation setup from Linux
@@ -618,12 +632,12 @@ make build-tools
 
 **Cost Assumptions:**
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| CPU Power | 150W | Full load |
-| GPU Power | 250W | Full load |
-| Electricity | $0.12/kWh | Adjust for region |
-| Lifespan Reduction | 20-40% | From sustained mining |
+| Parameter          | Default   | Notes                 |
+| ------------------ | --------- | --------------------- |
+| CPU Power          | 150W      | Full load             |
+| GPU Power          | 250W      | Full load             |
+| Electricity        | $0.12/kWh | Adjust for region     |
+| Lifespan Reduction | 20-40%    | From sustained mining |
 
 **Converting Reports:**
 
@@ -675,13 +689,13 @@ ss -an | grep 50051
 
 ### GPU Mining Issues
 
-| Problem | Solution |
-|---------|----------|
+| Problem              | Solution                                                        |
+| -------------------- | --------------------------------------------------------------- |
 | "cannot find -lcuda" | `export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH` |
-| "nvcc not found" | `sudo apt install cuda-toolkit` |
-| "No OpenCL device" | `sudo apt install ocl-icd-opencl-dev` |
-| GPU slow | `export GPU_MINING=true` |
-| CGo build error | `sudo apt install build-essential` |
+| "nvcc not found"     | `sudo apt install cuda-toolkit`                                 |
+| "No OpenCL device"   | `sudo apt install ocl-icd-opencl-dev`                           |
+| GPU slow             | `export GPU_MINING=true`                                        |
+| CGo build error      | `sudo apt install build-essential`                              |
 
 ### General Issues
 
@@ -713,8 +727,9 @@ ss -an | grep 50051
 
 ## Security Note
 
-This is a **demonstration/educational project** for understanding blockchain and cryptocurrency concepts. It is not
-intended for production use and lacks many features required for a real cryptocurrency (cryptographic signatures,
+This is a **demonstration/educational project** for understanding blockchain
+and cryptocurrency concepts. It is not intended for production use and lacks
+many features required for a real cryptocurrency (cryptographic signatures,
 wallets, transaction validation, etc.).
 
 ## License
@@ -740,6 +755,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ### Educational Purpose
 
-This project is intended for educational and demonstration purposes to understand blockchain and cryptocurrency
-concepts. It is not intended for production use and lacks many features required for a real cryptocurrency
+This project is intended for educational and demonstration purposes to
+understand blockchain and cryptocurrency concepts. It is not intended for
+production use and lacks many features required for a real cryptocurrency
 (cryptographic signatures, wallets, transaction validation, etc.).

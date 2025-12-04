@@ -54,12 +54,15 @@ jobs:
 
       - name: Generate protobuf
         run: make proto
+        shell: bash
 
       - name: Build server
         run: CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }} ./server
+        shell: bash
 
       - name: Build client (CPU)
         run: CGO_ENABLED=0 go build -v -o bin/client-${{ matrix.os }} ./client
+        shell: bash
 
       - name: Verify binaries exist
         run: |

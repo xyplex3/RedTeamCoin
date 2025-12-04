@@ -6,7 +6,7 @@ TESTS_TO_RUN=${1:-}
 RETURN_CODE=0
 GITHUB_ACTIONS=${GITHUB_ACTIONS:-}
 # Dynamically set project name from Go module
-PROJECT_NAME=$(go list -m -f "{{.Name}}" 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null)" || echo "project")
+PROJECT_NAME=$(go list -m -f "{{.Name}}" 2> /dev/null || basename "$(git rev-parse --show-toplevel 2> /dev/null)" || echo "project")
 
 TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 LOGFILE="/tmp/${PROJECT_NAME}-unit-test-results-$TIMESTAMP.log"

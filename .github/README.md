@@ -14,6 +14,7 @@ git push origin v1.0.0
 ```
 
 GitHub Actions automatically builds and publishes:
+
 - CPU binaries for Linux, Windows, macOS
 - GPU binaries (OpenCL) for Linux and macOS
 - Archives with checksums
@@ -21,28 +22,34 @@ GitHub Actions automatically builds and publishes:
 ## Workflows
 
 ### `test.yml` - Test & Build Verification
+
 Runs on every push and PR. Tests:
+
 - Code compilation on all platforms
 - Cross-compilation to Linux, Windows, macOS
 - GPU build compilation (OpenCL)
 - CGO directive validation
 
 ### `release.yml` - Release Builder
+
 Triggered by version tags (e.g., `v1.0.0`). Builds:
+
 - Native platform binaries with GPU support
 - Aggregates artifacts into unified release
 - Generates checksums
 
 ### `ci.yml` - Code Quality
+
 Runs linting, formatting, and security scans.
 
 ### `gpu-cuda-build.yml` - CUDA Builds (Optional)
+
 Manual workflow for NVIDIA CUDA builds.
 Requires self-hosted runner with GPU.
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    GitHub Actions                        │
 ├─────────────────────────────────────────────────────────┤
@@ -104,7 +111,7 @@ For NVIDIA CUDA builds, set up a self-hosted runner with GPU:
 
 Go to **Actions** → **Release** → **Run workflow** → Enter version
 
-## Workflows
+## All Workflows Summary
 
 - `release.yml` - Creates releases (triggered by tags)
 - `ci.yml` - Tests on push/PR

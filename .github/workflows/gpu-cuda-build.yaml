@@ -1,3 +1,4 @@
+---
 name: GPU Build (CUDA) - Self-Hosted
 
 # This workflow requires a self-hosted runner with NVIDIA GPU and CUDA toolkit

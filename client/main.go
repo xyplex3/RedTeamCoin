@@ -16,10 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	pb "redteamcoin/proto"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	pb "redteamcoin/proto"
 )
 
 const (

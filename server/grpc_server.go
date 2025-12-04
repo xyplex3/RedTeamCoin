@@ -7,9 +7,8 @@ import (
 	"strings"
 	"time"
 
-	pb "redteamcoin/proto"
-
 	"google.golang.org/grpc/peer"
+	pb "redteamcoin/proto"
 )
 
 // MiningPoolServer implements the gRPC mining pool service

@@ -10,9 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	pb "redteamcoin/proto"
-
 	"google.golang.org/grpc"
+	pb "redteamcoin/proto"
 )
 
 const (

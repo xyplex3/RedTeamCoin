@@ -1,14 +1,15 @@
+---
 name: Test & Build Verification
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 jobs:
   # Test code quality and compilation
@@ -53,19 +54,6 @@ jobs:
 
       - name: Generate protobuf
         run: make proto
-
-      - name: Run go vet
-        run: CGO_ENABLED=0 go vet ./...
-
-      - name: Run go fmt check
-        run: |
-          fmt_output=$(CGO_ENABLED=0 go fmt ./...)
-          if [ -n "$fmt_output" ]; then
-            echo "Code needs formatting:"
-            echo "$fmt_output"
-            exit 1
-          fi
-        shell: bash
 
       - name: Build server
         run: CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }} ./server

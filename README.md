@@ -1,7 +1,7 @@
 # RedTeamCoin
 
-A blockchain-based cryptocurrency mining pool implementation in Go, featuring a server-side blockchain
-and pool management system, client miners, and a web-based administration dashboard.
+A blockchain-based cryptocurrency mining pool implementation in Go, featuring a server-side blockchain and pool
+management system, client miners, and a web-based administration dashboard.
 
 ## Table of Contents
 
@@ -23,8 +23,8 @@ and pool management system, client miners, and a web-based administration dashbo
 
 ## Overview
 
-RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system that simulates a
-non-Ethereum based cryptocurrency. The system consists of three main components:
+RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system that simulates a non-Ethereum based
+cryptocurrency. The system consists of three main components:
 
 1. **Blockchain Server** - Manages the blockchain and mining pool
 2. **Client Miner** - Performs proof-of-work mining
@@ -152,8 +152,8 @@ RTC_USE_TLS=true ./bin/server
 - Web dashboard: **https://localhost:8443**
 - HTTP redirect: **http://localhost:8080**
 
-**Note:** With HTTPS, browsers will show a security warning for self-signed certificates.
-Click "Advanced" → "Proceed to localhost".
+**Note:** With HTTPS, browsers will show a security warning for self-signed certificates. Click "Advanced" →
+"Proceed to localhost".
 
 ### Running a Miner
 
@@ -705,7 +705,6 @@ ss -an | grep 50051
 
 ## Documentation
 
-- [.github/README.md](.github/README.md) - GitHub Actions workflows and release process
 - [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
 - [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
 - [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration
@@ -714,9 +713,9 @@ ss -an | grep 50051
 
 ## Security Note
 
-This is a **demonstration/educational project** for understanding blockchain and cryptocurrency concepts.
-It is not intended for production use and lacks many features required for a real cryptocurrency
-(cryptographic signatures, wallets, transaction validation, etc.).
+This is a **demonstration/educational project** for understanding blockchain and cryptocurrency concepts. It is not
+intended for production use and lacks many features required for a real cryptocurrency (cryptographic signatures,
+wallets, transaction validation, etc.).
 
 ## License
 
@@ -741,6 +740,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ### Educational Purpose
 
-This project is intended for educational and demonstration purposes to understand blockchain
-and cryptocurrency concepts. It is not intended for production use and lacks many features
-required for a real cryptocurrency (cryptographic signatures, wallets, transaction validation, etc.).
+This project is intended for educational and demonstration purposes to understand blockchain and cryptocurrency
+concepts. It is not intended for production use and lacks many features required for a real cryptocurrency
+(cryptographic signatures, wallets, transaction validation, etc.).

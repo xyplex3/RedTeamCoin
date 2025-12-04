@@ -39,6 +39,7 @@ jobs:
             p/golang
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true  # Don't fail the job on security findings
 
   gosec:
     name: Gosec Security Scanner

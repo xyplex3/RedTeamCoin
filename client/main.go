@@ -17,6 +17,7 @@ import (
 	"time"
 
 	pb "redteamcoin/proto"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -43,12 +44,12 @@ type Miner struct {
 	blocksMined        int64
 	hashRate           int64
 	running            bool
-	shouldMine         bool   // Server control: whether to actively mine
-	cpuThrottlePercent int    // Server control: CPU usage limit (0-100), 0 = no limit
+	shouldMine         bool // Server control: whether to actively mine
+	cpuThrottlePercent int  // Server control: CPU usage limit (0-100), 0 = no limit
 	totalHashes        int64
 	startTime          time.Time
 	cpuUsagePercent    float64
-	deletedByServer    bool   // Track if miner was deleted by server
+	deletedByServer    bool // Track if miner was deleted by server
 
 	// GPU mining
 	gpuMiner   *GPUMiner
@@ -94,8 +95,8 @@ func NewMiner(serverAddr string) (*Miner, error) {
 		ctx:                ctx,
 		cancel:             cancel,
 		running:            false,
-		shouldMine:         true,  // Start with mining enabled by default
-		cpuThrottlePercent: 0,     // No throttling by default
+		shouldMine:         true, // Start with mining enabled by default
+		cpuThrottlePercent: 0,    // No throttling by default
 		deletedByServer:    false,
 		gpuMiner:           gpuMiner,
 		hasGPU:             hasGPU,
@@ -135,7 +136,8 @@ func (m *Miner) Connect() error {
 	fmt.Printf("  Hostname:   %s\n", m.hostname)
 
 	// Display GPU information
-	if m.hasGPU && m.gpuEnabled {
+	switch {
+	case m.hasGPU && m.gpuEnabled:
 		devices := m.gpuMiner.GetDevices()
 		fmt.Printf("  GPUs Found: %d\n", len(devices))
 		for _, dev := range devices {
@@ -147,9 +149,9 @@ func (m *Miner) Connect() error {
 		} else {
 			fmt.Printf("  Mode:       GPU only\n")
 		}
-	} else if m.hasGPU && !m.gpuEnabled {
+	case m.hasGPU && !m.gpuEnabled:
 		fmt.Printf("  GPUs:       Detected but disabled (set GPU_MINING=true to enable)\n")
-	} else {
+	default:
 		fmt.Printf("  GPUs:       None detected - using CPU only\n")
 	}
 
@@ -270,7 +272,7 @@ func (m *Miner) selfDelete() {
 
 func (m *Miner) mine() {
 	fmt.Println("Starting mining...")
-	fmt.Println("Press Ctrl+C to stop mining\n")
+	fmt.Println("Press Ctrl+C to stop mining")
 
 	startTime := time.Now()
 	totalHashes := int64(0)
@@ -300,7 +302,8 @@ func (m *Miner) mine() {
 		var hash string
 		var hashes int64
 
-		if m.hasGPU && m.gpuEnabled && m.hybridMode {
+		switch {
+		case m.hasGPU && m.gpuEnabled && m.hybridMode:
 			// Hybrid: CPU + GPU mining simultaneously
 			nonce, hash, hashes = m.mineBlockHybrid(
 				workResp.BlockIndex,
@@ -309,7 +312,7 @@ func (m *Miner) mine() {
 				workResp.PreviousHash,
 				int(workResp.Difficulty),
 			)
-		} else if m.hasGPU && m.gpuEnabled {
+		case m.hasGPU && m.gpuEnabled:
 			// GPU only
 			nonce, hash, hashes = m.mineBlockGPU(
 				workResp.BlockIndex,
@@ -318,7 +321,7 @@ func (m *Miner) mine() {
 				workResp.PreviousHash,
 				int(workResp.Difficulty),
 			)
-		} else {
+		default:
 			// CPU only
 			nonce, hash, hashes = m.mineBlock(
 				workResp.BlockIndex,
@@ -483,16 +486,16 @@ func (m *Miner) sendHeartbeat() {
 			}
 
 			resp, err := m.client.Heartbeat(m.ctx, &pb.MinerStatus{
-				MinerId:            m.id,
-				HashRate:           m.hashRate,
-				BlocksMined:        m.blocksMined,
-				CpuUsagePercent:    m.cpuUsagePercent,
-				TotalHashes:        m.totalHashes,
-				MiningTimeSeconds:  int64(miningTime.Seconds()),
-				GpuDevices:         gpuDevices,
-				GpuHashRate:        gpuHashRate,
-				GpuEnabled:         m.gpuEnabled,
-				HybridMode:         m.hybridMode,
+				MinerId:           m.id,
+				HashRate:          m.hashRate,
+				BlocksMined:       m.blocksMined,
+				CpuUsagePercent:   m.cpuUsagePercent,
+				TotalHashes:       m.totalHashes,
+				MiningTimeSeconds: int64(miningTime.Seconds()),
+				GpuDevices:        gpuDevices,
+				GpuHashRate:       gpuHashRate,
+				GpuEnabled:        m.gpuEnabled,
+				HybridMode:        m.hybridMode,
 			})
 
 			if err != nil {
@@ -618,7 +621,7 @@ func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash strin
 
 	// CPU mining goroutine
 	go func() {
-		const cpuNonceRange = 100000000 // CPU processes smaller ranges
+		const cpuNonceRange = 100000000    // CPU processes smaller ranges
 		cpuStartNonce := int64(5000000000) // Offset to avoid GPU overlap
 		cpuHashes := int64(0)
 

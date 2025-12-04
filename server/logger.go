@@ -10,11 +10,11 @@ import (
 
 // LogEntry represents a single log entry
 type LogEntry struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	EventType   string                 `json:"event_type"`
-	MinerID     string                 `json:"miner_id,omitempty"`
-	Details     map[string]interface{} `json:"details,omitempty"`
-	Message     string                 `json:"message"`
+	Timestamp time.Time              `json:"timestamp"`
+	EventType string                 `json:"event_type"`
+	MinerID   string                 `json:"miner_id,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	Message   string                 `json:"message"`
 }
 
 // MinerLogInfo represents miner information in the log
@@ -40,23 +40,23 @@ type MinerLogInfo struct {
 
 // PoolSnapshot represents a snapshot of the pool state
 type PoolSnapshot struct {
-	Timestamp         time.Time       `json:"timestamp"`
-	TotalMiners       int             `json:"total_miners"`
-	ActiveMiners      int             `json:"active_miners"`
-	TotalHashRate     int64           `json:"total_hash_rate"`
-	TotalBlocksMined  int64           `json:"total_blocks_mined"`
-	BlockchainHeight  int64           `json:"blockchain_height"`
-	Difficulty        int             `json:"difficulty"`
-	Miners            []MinerLogInfo  `json:"miners"`
+	Timestamp        time.Time      `json:"timestamp"`
+	TotalMiners      int            `json:"total_miners"`
+	ActiveMiners     int            `json:"active_miners"`
+	TotalHashRate    int64          `json:"total_hash_rate"`
+	TotalBlocksMined int64          `json:"total_blocks_mined"`
+	BlockchainHeight int64          `json:"blockchain_height"`
+	Difficulty       int            `json:"difficulty"`
+	Miners           []MinerLogInfo `json:"miners"`
 }
 
 // LogFile represents the complete log file structure
 type LogFile struct {
-	ServerStartTime time.Time      `json:"server_start_time"`
-	ServerUptime    float64        `json:"server_uptime_seconds"`
-	LastUpdate      time.Time      `json:"last_update"`
-	Events          []LogEntry     `json:"events"`
-	CurrentSnapshot PoolSnapshot   `json:"current_snapshot"`
+	ServerStartTime time.Time    `json:"server_start_time"`
+	ServerUptime    float64      `json:"server_uptime_seconds"`
+	LastUpdate      time.Time    `json:"last_update"`
+	Events          []LogEntry   `json:"events"`
+	CurrentSnapshot PoolSnapshot `json:"current_snapshot"`
 }
 
 // PoolLogger handles periodic logging of pool state to JSON file
@@ -134,14 +134,14 @@ func (pl *PoolLogger) GetPoolSnapshot() PoolSnapshot {
 	}
 
 	return PoolSnapshot{
-		Timestamp:         time.Now(),
-		TotalMiners:       stats["total_miners"].(int),
-		ActiveMiners:      stats["active_miners"].(int),
-		TotalHashRate:     stats["total_hash_rate"].(int64),
-		TotalBlocksMined:  stats["total_blocks_mined"].(int64),
-		BlockchainHeight:  int64(stats["blockchain_height"].(int)),
-		Difficulty:        stats["difficulty"].(int),
-		Miners:            minerInfos,
+		Timestamp:        time.Now(),
+		TotalMiners:      stats.TotalMiners,
+		ActiveMiners:     stats.ActiveMiners,
+		TotalHashRate:    stats.TotalHashRate,
+		TotalBlocksMined: stats.TotalBlocksMined,
+		BlockchainHeight: int64(stats.BlockchainHeight),
+		Difficulty:       stats.Difficulty,
+		Miners:           minerInfos,
 	}
 }
 

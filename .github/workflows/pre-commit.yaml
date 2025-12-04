@@ -1,0 +1,100 @@
+---
+name: Pre-Commit
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.21'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  pre-commit:
+    name: Pre-commit Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Install Go tools
+        run: |
+          # Install protobuf generators
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+          # Install shfmt
+          go install mvdan.cc/sh/v3/cmd/shfmt@latest
+
+          # Install goimports
+          go install golang.org/x/tools/cmd/goimports@latest
+
+          # Install gocyclo
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+
+          # Install golangci-lint
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+          # Install gocritic
+          go install github.com/go-critic/go-critic/cmd/gocritic@latest
+
+          # Install go-licenses
+          go install github.com/google/go-licenses@latest
+
+          # Install govulncheck
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+          # Add Go bin directory to PATH
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install Node.js tools
+        run: |
+          npm install -g prettier
+
+      - name: Generate protobuf files
+        run: make proto
+
+      - name: Install pre-commit
+        run: python3 -m pip install pre-commit
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
+        env:
+          CGO_ENABLED: 0

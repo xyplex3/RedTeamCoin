@@ -8,7 +8,9 @@
 
 ## Executive Summary
 
-This report documents the impact of unauthorized cryptocurrency mining operations on company resources. The analysis covers **5 unique systems** across **5 unique IP addresses** that were actively participating in mining operations.
+This report documents the impact of unauthorized cryptocurrency mining operations on company resources.
+The analysis covers **5 unique systems** across **5 unique IP addresses** that were actively participating in
+mining operations.
 
 ### Key Findings
 
@@ -37,7 +39,9 @@ The unauthorized mining operations consumed significant computational resources:
   - GPU Accelerated: 0 systems
   - Hybrid CPU+GPU: 1 systems
 
-**Impact:** Mining operations typically maximize processor utilization, severely degrading performance for legitimate workloads. Systems experiencing >80% CPU usage would have experienced significant slowdowns, delayed processing times, and poor user experience.
+**Impact:** Mining operations typically maximize processor utilization, severely degrading performance for
+legitimate workloads. Systems experiencing >80% CPU usage would have experienced significant slowdowns,
+delayed processing times, and poor user experience.
 
 ### Electricity Consumption
 
@@ -45,9 +49,11 @@ The unauthorized mining operations consumed significant computational resources:
 - **Estimated Cost:** $4.42 (at $0.120 per kWh)
 - **Daily Average:** 4.17 kWh/day ($0.50/day)
 
-**Methodology:** Energy estimates based on average CPU power consumption of 150W and GPU power consumption of 250W under sustained load, adjusted for actual CPU utilization percentages.
+**Methodology:** Energy estimates based on average CPU power consumption of 150W and GPU power consumption
+of 250W under sustained load, adjusted for actual CPU utilization percentages.
 
-**Impact:** Continuous high-utilization operations result in substantial electricity costs. This represents pure waste, as the computational work provided no business value.
+**Impact:** Continuous high-utilization operations result in substantial electricity costs. This represents
+pure waste, as the computational work provided no business value.
 
 ### Network Impact
 
@@ -55,7 +61,8 @@ The unauthorized mining operations consumed significant computational resources:
 - **Mining Pool Connections:** Persistent connections to external mining pool infrastructure
 - **Data Transfer:** Ongoing work requests and solution submissions
 
-**Impact:** While mining is not extremely bandwidth-intensive, it generates persistent outbound connections that may have bypassed security monitoring and created potential data exfiltration channels.
+**Impact:** While mining is not extremely bandwidth-intensive, it generates persistent outbound connections
+that may have bypassed security monitoring and created potential data exfiltration channels.
 
 ---
 
@@ -75,13 +82,15 @@ Based on CPU utilization levels, affected systems experienced the following perf
 ### Service Availability
 
 **Productivity Loss:** Users on affected systems would have experienced:
+
 - Increased application load times
 - Slower document processing and file operations
 - Delayed response to user input
 - Potential application timeouts or crashes due to resource starvation
 - Reduced multitasking capability
 
-**Business Impact:** For systems categorized as HIGH or CRITICAL impact (3 systems), productivity loss likely reached 40-70%, representing significant business disruption.
+**Business Impact:** For systems categorized as HIGH or CRITICAL impact (3 systems), productivity loss
+likely reached 40-70%, representing significant business disruption.
 
 ---
 
@@ -92,12 +101,14 @@ Based on CPU utilization levels, affected systems experienced the following perf
 Sustained high-utilization mining operations accelerate hardware degradation:
 
 **Component Stress:**
+
 - **Processors (CPU/GPU):** Running at maximum load for 212.00 total hours
 - **Cooling Systems:** Fans running at maximum speed to dissipate heat
 - **Power Supplies:** Operating under continuous high load
 - **Motherboards:** Sustained high current draw through VRM components
 
 **Expected Lifespan Reduction:**
+
 - Normal enterprise hardware lifespan: 5-7 years
 - Estimated lifespan reduction from sustained mining: 20-40%
 - Accelerated replacement costs for 5 affected systems
@@ -105,12 +116,14 @@ Sustained high-utilization mining operations accelerate hardware degradation:
 ### Thermal Stress
 
 **Risk Factors:**
+
 - Sustained high temperatures degrade silicon and solder joints
 - Increased risk of thermal shutdowns and component failure
 - Potential for thermal paste degradation requiring maintenance
 - Systems with GPU mining (1 systems) face additional thermal stress
 
-**Recommendation:** All affected systems should undergo thermal inspection and preventive maintenance, including thermal paste replacement and cooling system verification.
+**Recommendation:** All affected systems should undergo thermal inspection and preventive maintenance,
+including thermal paste replacement and cooling system verification.
 
 ---
 
@@ -121,12 +134,14 @@ Sustained high-utilization mining operations accelerate hardware degradation:
 The presence of cryptocurrency mining software indicates a security compromise:
 
 **Affected Infrastructure:**
+
 - **Total Compromised Systems:** 5
 - **Unique Hostnames:** 5
 - **Unique IP Addresses:** 5
 - **Mining Period:** 2d 0h 0m
 
 **Deployment Vectors (Requires Investigation):**
+
 - Malware infection (trojan, worm, or targeted attack)
 - Compromised credentials (employee accounts or service accounts)
 - Insider threat (authorized user deploying unauthorized software)
@@ -136,16 +151,19 @@ The presence of cryptocurrency mining software indicates a security compromise:
 ### Persistence Mechanisms
 
 **Operational Characteristics:**
+
 - Mining clients maintained persistent connections to external pool servers
 - Total operational time: 212.00 hours suggests robust persistence mechanisms
 - Systems likely configured for auto-start and restart after interruption
 
 **Access Level:**
+
 - Mining software requires sufficient privileges to consume resources
 - Likely has user-level or higher access on all 5 affected systems
 - Potential for lateral movement if network credentials were compromised
 
 **Broader Exposure Risk:**
+
 - If mining software was deployed via compromised credentials, attacker may still have access
 - Systems should be forensically analyzed for additional malware or backdoors
 - Network traffic logs should be reviewed for data exfiltration attempts
@@ -167,16 +185,19 @@ The presence of cryptocurrency mining software indicates a security compromise:
 ### Indirect Costs
 
 **Productivity Loss:**
+
 - 3 systems experienced significant performance degradation
 - Estimated productivity loss: 40-70% on severely affected systems
 - User time wasted on slow systems and rework
 
 **Operational Impact:**
+
 - IT staff time spent investigating and remediating
 - Potential SLA violations if critical services were affected
 - Management time spent on incident response coordination
 
 **Reputational Risk:**
+
 - Security breach may require disclosure depending on industry regulations
 - Potential loss of customer confidence
 - Regulatory implications if sensitive data was accessed
@@ -315,6 +336,7 @@ The following table shows impact metrics for each compromised system, sorted by 
 **Data Source:** Mining pool server log file (`pool_log.json`)
 
 **Energy Consumption Calculations:**
+
 - CPU Power Consumption: 150W average under full load
 - GPU Power Consumption: 250W average under full load
 - Hybrid Mode: Combined CPU + GPU power consumption
@@ -322,6 +344,7 @@ The following table shows impact metrics for each compromised system, sorted by 
 - Electricity rate: $0.120 per kWh
 
 **Impact Level Classifications:**
+
 - CRITICAL: CPU usage ≥90%
 - HIGH: CPU usage 70-89%
 - MODERATE: CPU usage 50-69%
@@ -335,4 +358,4 @@ The following table shows impact metrics for each compromised system, sorted by 
 
 ---
 
-*End of Report*
+## End of Report

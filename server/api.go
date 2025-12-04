@@ -638,8 +638,8 @@ func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request
 	}
 
 	var req struct {
-		MinerID          string `json:"miner_id"`
-		ThrottlePercent  int    `json:"throttle_percent"`
+		MinerID         string `json:"miner_id"`
+		ThrottlePercent int    `json:"throttle_percent"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

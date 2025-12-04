@@ -1,5 +1,5 @@
-//go:build !cgo
-// +build !cgo
+//go:build !opencl || !cgo
+// +build !opencl !cgo
 
 package main
 

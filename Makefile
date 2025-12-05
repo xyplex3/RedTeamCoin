@@ -1,4 +1,4 @@
-.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools clean install-gpu-deps
+.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools build-wasm build-java serve-web clean install-gpu-deps
 
 # Ensure Go bin is in PATH
 export PATH := $(PATH):$(HOME)/go/bin
@@ -161,6 +161,8 @@ clean:
 	rm -rf bin/
 	rm -f proto/*.pb.go
 	rm -f client/mine.o
+	rm -f web/miner.wasm
+	rm -rf java/target/
 	@echo "✓ Clean complete (removed all binaries and generated files)"
 
 # Download dependencies
@@ -168,6 +170,36 @@ deps:
 	@echo "Downloading dependencies..."
 	go mod download
 	@echo "✓ Dependencies downloaded"
+
+# Build WebAssembly miner
+build-wasm:
+	@echo "Building WebAssembly miner..."
+	@mkdir -p web
+	GOOS=js GOARCH=wasm go build -o web/miner.wasm ./web/
+	@echo "✓ WebAssembly miner built: web/miner.wasm"
+	@echo "Files needed for web deployment:"
+	@echo "  - web/miner.wasm"
+	@echo "  - web/wasm_exec.js"
+	@echo "  - web/miner.js"
+	@echo "  - web/worker.js"
+	@echo "  - web/index.html"
+	@echo "  - web/sha256.wgsl (for WebGPU)"
+
+# Build Java miner JAR
+build-java:
+	@echo "Building Java miner..."
+	@command -v mvn >/dev/null 2>&1 || (echo "Error: Maven not found. Install with: sudo apt install maven" && exit 1)
+	cd java && mvn clean package -q
+	@mkdir -p bin
+	cp java/target/redteamcoin-miner-1.0.0.jar bin/
+	@echo "✓ Java miner built: bin/redteamcoin-miner-1.0.0.jar"
+	@echo "Run with: java -jar bin/redteamcoin-miner-1.0.0.jar --pool localhost:50051"
+
+# Serve web miner locally for testing
+serve-web: build-wasm
+	@echo "Starting local web server on http://localhost:8080"
+	@echo "Press Ctrl+C to stop"
+	cd web && python3 -m http.server 8080
 
 # Initialize the project
 init: install-tools deps proto
@@ -186,6 +218,9 @@ help:
 	@echo "  make build-windows      - Cross-compile client for Windows (CPU only)"
 	@echo "  make build-windows-opencl - Cross-compile client for Windows with OpenCL support"
 	@echo "  make build-all-platforms - Cross-compile client for all platforms (CPU-only)"
+	@echo "  make build-wasm         - Build WebAssembly miner for browsers"
+	@echo "  make build-java         - Build Java miner JAR"
+	@echo "  make serve-web          - Start local web server for testing web miner"
 	@echo "  make build-tools        - Build analysis tools (damage report generator)"
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"
 	@echo "  make run-server         - Start the mining pool server"

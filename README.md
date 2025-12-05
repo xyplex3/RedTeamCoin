@@ -5,9 +5,15 @@
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml)
 
-A blockchain-based cryptocurrency mining pool implementation in Go, featuring a
-server-side blockchain and pool management system, client miners, and a
-web-based administration dashboard.
+RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed for authorized security testing and red team operations. Built in Go with Java client support, it simulates real-world cryptomining attacks to help organizations assess their detection capabilities and quantify potential damage from threat actor mining operations.
+
+This tool enables security teams to safely and legally demonstrate cryptomining attack scenarios on corporate systems, generate comprehensive impact reports, and validate security controls—all within a controlled environment using an isolated, non-public blockchain.
+
+**Created by:**
+- Peter Greko, Luciano Krigun, and TKTK
+
+**Source code reviewed by:**
+- Wes TKTK
 
 ## Table of Contents
 
@@ -34,7 +40,7 @@ that simulates a non-Ethereum based cryptocurrency. The system consists of
 three main components:
 
 1. **Blockchain Server** - Manages the blockchain and mining pool
-2. **Client Miner** - Performs proof-of-work mining
+2. **Client Miners** - Performs proof-of-work mining (Go and Java implementations)
 3. **Web Dashboard** - Provides administration and monitoring
 
 ## Features
@@ -42,7 +48,8 @@ three main components:
 - **Blockchain Implementation**: Custom proof-of-work blockchain with
   configurable difficulty
 - **Mining Pool Server**: Manages multiple miners and work distribution via gRPC
-- **Client Miner**: Automated mining client with IP address and hostname logging
+- **Client Miners**: Automated mining clients (Go and Java) with IP address and hostname logging
+- **Java Client**: Cross-platform JAR miner for easy deployment
 - **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete
   miners remotely
 - **CPU Throttling**: Limit miner CPU usage from 0-100% to manage resources
@@ -169,6 +176,8 @@ certificates. Click "Advanced" → "Proceed to localhost".
 
 ### Running a Miner
 
+#### Go Client (Native Binary)
+
 **Basic usage:**
 
 ```bash
@@ -177,6 +186,37 @@ certificates. Click "Advanced" → "Proceed to localhost".
 
 **Run multiple miners:**
 Open additional terminals and run `./bin/client` in each.
+
+#### Java Client (JAR File)
+
+**Prerequisites:**
+- Java 11 or later
+- Maven (for building only)
+
+**Build the JAR:**
+
+```bash
+cd java-client
+mvn clean package
+```
+
+**Run the JAR:**
+
+```bash
+# Connect to localhost
+java -jar java-client/target/redteamcoin-miner.jar
+
+# Connect to remote server
+java -jar java-client/target/redteamcoin-miner.jar -server 192.168.1.100:50051
+```
+
+**Benefits of Java Client:**
+- Single JAR file, easy to distribute
+- Cross-platform (Windows, Linux, macOS)
+- No compilation needed on target systems
+- Just requires Java Runtime (JRE)
+
+See [java-client/README.md](java-client/README.md) for complete Java client documentation.
 
 ### Connecting to Remote Servers
 
@@ -747,6 +787,7 @@ ss -an | grep 50051
 
 ## Documentation
 
+- [java-client/README.md](java-client/README.md) - Java miner client (JAR file)
 - [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
 - [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
 - [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration

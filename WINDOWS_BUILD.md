@@ -1,6 +1,7 @@
 # Building RedTeamCoin on Windows
 
-This guide covers building RedTeamCoin client on Windows with GPU (OpenCL) support, including authentication token configuration for connecting to remote mining pools.
+This guide covers building RedTeamCoin client on Windows with GPU (OpenCL) support,
+including authentication token configuration for connecting to remote mining pools.
 
 ## Table of Contents
 
@@ -15,12 +16,14 @@ This guide covers building RedTeamCoin client on Windows with GPU (OpenCL) suppo
 ### For Native Windows Build
 
 **Required Software:**
+
 - Go 1.21 or later for Windows: https://golang.org/dl/
 - Git for Windows: https://git-scm.com/download/win
 - MinGW-w64 (for CGO): https://www.mingw-w64.org/ or via MSYS2
 - Protocol Buffer Compiler (protoc): https://github.com/protocolbuffers/protobuf/releases
 
 **For GPU Support:**
+
 - **NVIDIA GPU**: CUDA Toolkit for Windows: https://developer.nvidia.com/cuda-downloads
 - **AMD/Intel GPU**: OpenCL SDK (included with GPU drivers)
   - AMD: Install AMD Radeon Software Adrenalin
@@ -30,6 +33,7 @@ This guide covers building RedTeamCoin client on Windows with GPU (OpenCL) suppo
 ### For Cross-Compilation from Linux
 
 **Required on Linux:**
+
 - MinGW-w64 cross-compiler: `sudo apt install mingw-w64`
 - Windows OpenCL SDK files (headers and libraries)
 
@@ -40,6 +44,7 @@ This method builds directly on Windows and is more reliable for GPU support.
 ### Step 1: Install Prerequisites
 
 **1.1 Install Go:**
+
 ```powershell
 # Download and install Go from https://golang.org/dl/
 # Verify installation
@@ -47,6 +52,7 @@ go version
 ```
 
 **1.2 Install MinGW-w64 via MSYS2 (Recommended):**
+
 ```powershell
 # Download and install MSYS2 from https://www.msys2.org/
 # In MSYS2 terminal:
@@ -57,6 +63,7 @@ C:\msys64\mingw64\bin
 ```
 
 **1.3 Install Protocol Buffer Compiler:**
+
 ```powershell
 # Download protoc from GitHub releases
 # Extract to C:\protoc
@@ -68,6 +75,7 @@ protoc --version
 ```
 
 **1.4 Install Go protoc plugins:**
+
 ```powershell
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
@@ -95,11 +103,13 @@ protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=p
 ### Step 5: Build Client
 
 **Option A: CPU-only build (simplest):**
+
 ```powershell
 go build -o bin/client.exe ./client
 ```
 
 **Option B: OpenCL build (GPU support):**
+
 ```powershell
 # Set CGO compiler
 $env:CC = "gcc"
@@ -110,6 +120,7 @@ go build -tags opencl -o bin/client.exe ./client
 ```
 
 **Option C: CUDA build (NVIDIA only):**
+
 ```powershell
 # Compile CUDA kernel
 nvcc -c -m64 -O3 client/mine.cu -o client/mine.o
@@ -148,6 +159,7 @@ sudo apt install mingw-w64
 You need Windows OpenCL headers and libraries. Several options:
 
 **Option A: Extract from OpenCL SDK:**
+
 1. Download Intel OpenCL SDK for Windows
 2. Extract `CL/` headers and `OpenCL.lib`
 3. Copy to MinGW paths:
@@ -166,6 +178,7 @@ sudo x86_64-w64-mingw32-dlltool -d OpenCL.def -l /usr/x86_64-w64-mingw32/lib/lib
 ```
 
 **Option B: Use pre-built libraries:**
+
 ```bash
 # Download from: https://github.com/KhronosGroup/OpenCL-Headers
 git clone https://github.com/KhronosGroup/OpenCL-Headers.git
@@ -184,6 +197,7 @@ make build-windows-opencl
 ### Step 4: Deploy to Windows
 
 Copy the built executable to Windows:
+
 ```bash
 scp bin/client-windows-opencl.exe user@windows-machine:C:/RedTeamCoin/
 ```
@@ -195,6 +209,7 @@ On Windows, ensure OpenCL.dll is available (comes with GPU drivers).
 ### Understanding Authentication Tokens
 
 Each RedTeamCoin server generates a unique authentication token when it starts. This token is required for:
+
 - API access (viewing stats, controlling miners)
 - Web dashboard access
 
@@ -202,7 +217,8 @@ Each RedTeamCoin server generates a unique authentication token when it starts. 
 
 ### Configuration Options
 
-**Method 1: Command-Line Flag (Recommended)**
+#### Method 1: Command-Line Flag (Recommended)
+
 ```powershell
 # Connect to remote server with specific address
 client.exe -server 192.168.1.100:50051
@@ -211,7 +227,8 @@ client.exe -server 192.168.1.100:50051
 client.exe -s mining-pool.example.com:50051
 ```
 
-**Method 2: Environment Variable**
+#### Method 2: Environment Variable
+
 ```powershell
 # PowerShell
 $env:POOL_SERVER = "192.168.1.100:50051"
@@ -222,7 +239,8 @@ set POOL_SERVER=192.168.1.100:50051
 client.exe
 ```
 
-**Method 3: Default (localhost)**
+#### Method 3: Default (localhost)
+
 ```powershell
 # Connects to localhost:50051 by default
 client.exe
@@ -249,10 +267,11 @@ client.exe -server 192.168.1.100:50051
 
 The mining pool server provides a web dashboard for monitoring and control.
 
-**Step 1: Get the Authentication Token**
+#### Step 1: Get the Authentication Token
 
 When the server starts, it displays output like:
-```
+
+```text
 ===========================================
 RedTeamCoin Mining Pool Server
 ===========================================
@@ -262,15 +281,17 @@ Web Dashboard: http://localhost:8080?token=abc123def456ghi789xyz
 ===========================================
 ```
 
-**Step 2: Access the Dashboard**
+#### Step 2: Access the Dashboard
 
 Copy the complete URL with token and paste it into your browser:
-```
+
+```text
 http://<server-ip>:8080?token=abc123def456ghi789xyz
 ```
 
 **For HTTPS (if TLS is enabled):**
-```
+
+```text
 https://<server-ip>:8443?token=abc123def456ghi789xyz
 ```
 
@@ -281,6 +302,7 @@ https://<server-ip>:8443?token=abc123def456ghi789xyz
 If you need to access the API programmatically:
 
 **PowerShell:**
+
 ```powershell
 $token = "abc123def456ghi789xyz"
 $headers = @{
@@ -291,6 +313,7 @@ Invoke-RestMethod -Uri "http://192.168.1.100:8080/api/stats" -Headers $headers
 ```
 
 **Python:**
+
 ```python
 import requests
 
@@ -302,6 +325,7 @@ print(response.json())
 ```
 
 **cURL (Git Bash on Windows):**
+
 ```bash
 curl -H "Authorization: Bearer abc123def456ghi789xyz" http://192.168.1.100:8080/api/stats
 ```
@@ -322,11 +346,13 @@ export RTC_AUTH_TOKEN="your-strong-custom-token-here"
 ## Environment Variables Reference
 
 **Client Configuration:**
+
 - `POOL_SERVER` - Server address (default: `localhost:50051`)
 - `GPU_MINING` - Enable GPU mining (`true`/`false`, default: auto-detect)
 - `HYBRID_MINING` - Enable CPU+GPU hybrid mode (`true`/`false`, default: `false`)
 
 **Examples:**
+
 ```powershell
 # Disable GPU mining
 $env:GPU_MINING = "false"
@@ -345,13 +371,15 @@ client.exe
 
 ### Build Issues
 
-**Error: "gcc: command not found"**
+#### Error: "gcc: command not found"
+
 ```powershell
 # Install MinGW-w64 via MSYS2
 # Add C:\msys64\mingw64\bin to PATH
 ```
 
-**Error: "cannot find -lOpenCL"**
+#### Error: "cannot find -lOpenCL"
+
 ```powershell
 # Install GPU drivers with OpenCL support
 # For NVIDIA: Install CUDA Toolkit
@@ -360,6 +388,7 @@ client.exe
 ```
 
 **Error: "undefined reference to `clGetPlatformIDs`"**
+
 ```powershell
 # OpenCL library not linked correctly
 # Ensure GPU drivers are installed
@@ -368,28 +397,33 @@ client.exe
 
 ### Runtime Issues
 
-**Error: "OpenCL.dll not found"**
+#### Error: "OpenCL.dll not found"
+
 - Install/update GPU drivers
 - Copy OpenCL.dll to same directory as client.exe
 - Check: `C:\Windows\System32\OpenCL.dll`
 
-**Error: "No OpenCL platforms found"**
+#### Error: "No OpenCL platforms found"
+
 - Update GPU drivers
 - Verify GPU is detected: Run `clinfo` (if available)
 - Use CPU-only build if no GPU available
 
 **Connection refused errors:**
+
 - Verify server is running
 - Check firewall allows port 50051
 - Use correct server IP address
 - Test with: `telnet server-ip 50051`
 
 **Authentication errors (API/Dashboard):**
+
 - Verify token matches server output
 - Check token is included in URL or Authorization header
 - Ensure no extra spaces in token string
 
-**"Failed to connect to pool"**
+#### "Failed to connect to pool"
+
 ```powershell
 # Test network connectivity
 ping server-ip
@@ -402,12 +436,14 @@ client.exe -server 192.168.1.100:50051
 ### Performance Issues
 
 **Low hash rate:**
+
 - Ensure GPU mining is enabled: `$env:GPU_MINING = "true"`
 - Check GPU is being used (Task Manager → Performance → GPU)
 - Try hybrid mode: `$env:HYBRID_MINING = "true"`
 - Update GPU drivers
 
 **High CPU usage:**
+
 - Use GPU-only mode (don't enable HYBRID_MINING)
 - Check CPU throttling is not set on server dashboard
 
@@ -468,6 +504,7 @@ $env:GPU_MINING = "true"
 ## Getting Help
 
 If you encounter issues:
+
 1. Check this troubleshooting guide
 2. Verify all prerequisites are installed
 3. Check GPU drivers are up to date

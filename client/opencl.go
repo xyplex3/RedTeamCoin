@@ -1,5 +1,5 @@
-//go:build cgo
-// +build cgo
+//go:build opencl && cgo
+// +build opencl,cgo
 
 package main
 
@@ -15,13 +15,21 @@ import (
 	"unsafe"
 )
 
-// #cgo CFLAGS: -I/usr/include -DCL_TARGET_OPENCL_VERSION=120
-// #cgo LDFLAGS: -lOpenCL
+// #cgo linux CFLAGS: -I/usr/include -DCL_TARGET_OPENCL_VERSION=120
+// #cgo linux LDFLAGS: -lOpenCL
+// #cgo windows CFLAGS: -I/usr/x86_64-w64-mingw32/include -DCL_TARGET_OPENCL_VERSION=120
+// #cgo windows LDFLAGS: -L/usr/x86_64-w64-mingw32/lib -lOpenCL
+// #cgo darwin CFLAGS: -DCL_TARGET_OPENCL_VERSION=120
+// #cgo darwin LDFLAGS: -framework OpenCL
 // #include <stdint.h>
 // #include <stdbool.h>
 // #include <stdlib.h>
 // #include <string.h>
+// #ifdef __APPLE__
+// #include <OpenCL/cl.h>
+// #else
 // #include <CL/cl.h>
+// #endif
 //
 // static int opencl_mine(
 //     const uint8_t* block_data,

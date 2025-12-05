@@ -2,7 +2,8 @@
 
 ## Overview
 
-RedTeamCoin supports GPU-accelerated mining using both NVIDIA CUDA and AMD/Intel OpenCL. The client can automatically detect available GPUs and mine using:
+RedTeamCoin supports GPU-accelerated mining using both NVIDIA CUDA and AMD/Intel OpenCL.
+The client can automatically detect available GPUs and mine using:
 
 1. **GPU-only mode** - All mining on GPU hardware
 2. **Hybrid mode** - Simultaneous CPU + GPU mining for maximum performance
@@ -22,6 +23,7 @@ RedTeamCoin supports GPU-accelerated mining using both NVIDIA CUDA and AMD/Intel
 ### Framework (Current State)
 
 The current implementation provides a **framework** for GPU mining with:
+
 - Complete architecture and code structure
 - GPU detection interfaces
 - Mining orchestration logic
@@ -53,6 +55,7 @@ See the **Production Implementation** section below for details.
 ### Default Behavior (Framework Mode)
 
 By default, the client will:
+
 1. Attempt to detect GPUs (currently returns empty list)
 2. Fall back to CPU-only mining
 3. Log GPU detection status
@@ -64,7 +67,8 @@ go build
 ```
 
 Output:
-```
+
+```text
 === RedTeamCoin Miner ===
 
 Connecting to mining pool at localhost:50051...
@@ -97,20 +101,23 @@ export HYBRID_MINING=true
 
 ### GPU Mining Modes
 
-**1. CPU Only (Default - Current)**
+#### 1. CPU Only (Default - Current)
+
 ```bash
 # No GPUs detected or GPU_MINING=false
 export GPU_MINING=false
 ./client
 ```
 
-**2. GPU Only (Future - After Production Setup)**
+#### 2. GPU Only (Future - After Production Setup)
+
 ```bash
 # GPUs detected and GPU_MINING=true (default)
 ./client
 ```
 
-**3. Hybrid Mode (Future - After Production Setup)**
+#### 3. Hybrid Mode (Future - After Production Setup)
+
 ```bash
 # Simultaneous CPU and GPU mining
 export HYBRID_MINING=true
@@ -143,6 +150,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 **Response with GPU data:**
+
 ```json
 {
   "total_miners": 2,
@@ -190,11 +198,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### New API Fields
 
 **Aggregate Statistics:**
+
 - `total_gpu_hash_rate` - Combined GPU hash rate across all miners
 - `gpu_enabled_miners` - Number of miners with GPU mining enabled
 - `hybrid_miners` - Number of miners running hybrid CPU+GPU mode
 
 **Per-Miner Statistics:**
+
 - `gpu_devices[]` - Array of GPU devices available to the miner
   - `id` - GPU device ID
   - `name` - GPU model name
@@ -211,11 +221,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### Prerequisites
 
 **For NVIDIA CUDA:**
+
 1. NVIDIA GPU with CUDA support (compute capability 3.5+)
 2. CUDA Toolkit 11.0 or later
 3. NVIDIA drivers
 
 **For AMD/Intel OpenCL:**
+
 1. AMD GPU or Intel integrated graphics
 2. OpenCL runtime
 3. Appropriate GPU drivers
@@ -225,6 +237,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 #### 1. Install CUDA Toolkit (NVIDIA)
 
 **Ubuntu/Debian:**
+
 ```bash
 # Add NVIDIA package repository
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
@@ -241,6 +254,7 @@ source ~/.bashrc
 ```
 
 **Verify installation:**
+
 ```bash
 nvcc --version
 nvidia-smi
@@ -249,6 +263,7 @@ nvidia-smi
 #### 2. Install OpenCL Runtime (AMD/Intel)
 
 **Ubuntu/Debian:**
+
 ```bash
 # For AMD GPUs
 sudo apt-get install -y mesa-opencl-icd
@@ -277,6 +292,7 @@ sudo apt-get install -y build-essential
 See detailed implementation in `client/cuda.go` comments (lines 154-216).
 
 Key components:
+
 - SHA256 hash computation on GPU
 - Difficulty checking
 - Atomic result storage
@@ -287,6 +303,7 @@ Key components:
 See detailed implementation in `client/opencl.go` comments (lines 149-248).
 
 Key components:
+
 - Platform and device selection
 - Kernel compilation
 - Buffer management
@@ -299,21 +316,21 @@ Key components:
 ```makefile
 # Build client with CUDA support
 client-cuda:
-	cd client && \
-	nvcc -c kernels/sha256_cuda.cu -o sha256_cuda.o && \
-	CGO_ENABLED=1 go build -tags cuda -o client-cuda
+ cd client && \
+ nvcc -c kernels/sha256_cuda.cu -o sha256_cuda.o && \
+ CGO_ENABLED=1 go build -tags cuda -o client-cuda
 
 # Build client with OpenCL support
 client-opencl:
-	cd client && \
-	CGO_ENABLED=1 CGO_LDFLAGS="-lOpenCL" go build -tags opencl -o client-opencl
+ cd client && \
+ CGO_ENABLED=1 CGO_LDFLAGS="-lOpenCL" go build -tags opencl -o client-opencl
 
 # Build with both CUDA and OpenCL
 client-gpu:
-	cd client && \
-	nvcc -c kernels/sha256_cuda.cu -o sha256_cuda.o && \
-	CGO_ENABLED=1 CGO_LDFLAGS="-lOpenCL -L/usr/local/cuda/lib64 -lcuda -lcudart" \
-	go build -tags "cuda opencl" -o client-gpu
+ cd client && \
+ nvcc -c kernels/sha256_cuda.cu -o sha256_cuda.o && \
+ CGO_ENABLED=1 CGO_LDFLAGS="-lOpenCL -L/usr/local/cuda/lib64 -lcuda -lcudart" \
+ go build -tags "cuda opencl" -o client-gpu
 ```
 
 #### 6. Enable CGo Bindings
@@ -321,6 +338,7 @@ client-gpu:
 Update `client/cuda.go` and `client/opencl.go` to include CGo directives:
 
 **client/cuda.go:**
+
 ```go
 // +build cuda
 
@@ -339,6 +357,7 @@ import (
 ```
 
 **client/opencl.go:**
+
 ```go
 // +build opencl
 
@@ -368,6 +387,7 @@ import (
 | AMD RX 6800 XT | 400-800 MH/s | 40-80x |
 
 **Hybrid Mode Benefits:**
+
 - 5-10% additional hash rate from CPU contribution
 - Better hardware utilization
 - Increased chance of finding blocks
@@ -377,13 +397,15 @@ import (
 ### No GPUs Detected
 
 **Symptom:**
-```
+
+```text
 GPUs: None detected - using CPU only
 ```
 
 **Solutions:**
 
 1. **Check GPU drivers:**
+
    ```bash
    # For NVIDIA
    nvidia-smi
@@ -393,6 +415,7 @@ GPUs: None detected - using CPU only
    ```
 
 2. **Verify GPU support:**
+
    ```bash
    # Check CUDA-capable devices
    nvidia-smi -L
@@ -419,6 +442,7 @@ GPU mining is in framework mode. To enable actual GPU mining:
 **Future Debugging:**
 
 1. **Check CUDA availability:**
+
    ```go
    // In production code
    deviceCount := C.cudaGetDeviceCount(&count)
@@ -428,6 +452,7 @@ GPU mining is in framework mode. To enable actual GPU mining:
    ```
 
 2. **Check OpenCL availability:**
+
    ```go
    // In production code
    status := C.clGetPlatformIDs(0, nil, &platformCount)
@@ -437,6 +462,7 @@ GPU mining is in framework mode. To enable actual GPU mining:
    ```
 
 3. **Enable debug logging:**
+
    ```bash
    export DEBUG=1
    ./client
@@ -445,15 +471,18 @@ GPU mining is in framework mode. To enable actual GPU mining:
 ### Performance Issues
 
 **Low GPU utilization:**
+
 - Increase batch size (nonce range per kernel)
 - Adjust work group size
 - Check GPU memory limitations
 
 **Hybrid mode slower than GPU-only:**
+
 - CPU overhead may exceed benefit
 - Try GPU-only mode: `export HYBRID_MINING=false`
 
 **Thermal throttling:**
+
 - Monitor GPU temperature
 - Improve cooling
 - Reduce mining intensity
@@ -462,7 +491,7 @@ GPU mining is in framework mode. To enable actual GPU mining:
 
 ### Mining Flow
 
-```
+```text
 Client Startup
     ↓
 Detect GPUs (CUDA, OpenCL)
@@ -503,7 +532,7 @@ Register (send GPU info)
 
 ### Hybrid Mining Work Distribution
 
-```
+```text
 Nonce Space: 0 to 2^64
 
 GPU Thread Pool                CPU Thread
@@ -520,7 +549,7 @@ First to find valid hash wins → Signal stop → Submit
 
 ### Data Flow
 
-```
+```text
 Client                     Server                    API
 ┌──────┐                  ┌──────┐                 ┌─────┐
 │ GPU  │                  │ Pool │                 │/cpu │

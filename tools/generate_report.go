@@ -62,24 +62,24 @@ type LogFile struct {
 
 // MinerImpactStats represents impact statistics for a single miner
 type MinerImpactStats struct {
-	MinerID            string
-	Hostname           string
-	IPAddress          string
-	IPAddressActual    string
-	FirstSeen          time.Time
-	LastSeen           time.Time
-	TotalMiningTime    time.Duration
-	TotalHashes        int64
-	BlocksMined        int64
-	AvgCPUUsage        float64
-	PeakCPUUsage       float64
-	GPUEnabled         bool
-	HybridMode         bool
-	EstimatedCPUHours  float64
-	EstimatedKWh       float64
-	EstimatedCost      float64
-	ComputeImpact      string
-	MiningType         string
+	MinerID           string
+	Hostname          string
+	IPAddress         string
+	IPAddressActual   string
+	FirstSeen         time.Time
+	LastSeen          time.Time
+	TotalMiningTime   time.Duration
+	TotalHashes       int64
+	BlocksMined       int64
+	AvgCPUUsage       float64
+	PeakCPUUsage      float64
+	GPUEnabled        bool
+	HybridMode        bool
+	EstimatedCPUHours float64
+	EstimatedKWh      float64
+	EstimatedCost     float64
+	ComputeImpact     string
+	MiningType        string
 }
 
 // SystemImpactReport represents the overall impact report
@@ -93,31 +93,31 @@ type SystemImpactReport struct {
 	UniqueIPs         int
 
 	// Resource Consumption
-	TotalMiningHours      float64
-	TotalHashes           int64
-	TotalBlocksMined      int64
-	TotalEstimatedKWh     float64
-	TotalEstimatedCost    float64
-	AvgSystemCPUUsage     float64
-	PeakSystemCPUUsage    float64
+	TotalMiningHours   float64
+	TotalHashes        int64
+	TotalBlocksMined   int64
+	TotalEstimatedKWh  float64
+	TotalEstimatedCost float64
+	AvgSystemCPUUsage  float64
+	PeakSystemCPUUsage float64
 
 	// Performance Impact
-	MinersWithHighCPU     int // >80% CPU usage
-	MinersWithGPU         int
-	MinersWithHybrid      int
+	MinersWithHighCPU int // >80% CPU usage
+	MinersWithGPU     int
+	MinersWithHybrid  int
 
 	// Individual Miner Stats
-	MinerStats            []MinerImpactStats
+	MinerStats []MinerImpactStats
 }
 
 const (
 	// Cost assumptions
-	avgCPUPowerWatts    = 150.0 // Average CPU power consumption under load
-	avgGPUPowerWatts    = 250.0 // Average GPU power consumption under load
-	electricityCostPer  = 0.12  // $ per kWh (adjust for your region)
+	avgCPUPowerWatts   = 150.0 // Average CPU power consumption under load
+	avgGPUPowerWatts   = 250.0 // Average GPU power consumption under load
+	electricityCostPer = 0.12  // $ per kWh (adjust for your region)
 
 	// Performance thresholds
-	highCPUThreshold    = 80.0
+	highCPUThreshold = 80.0
 )
 
 func main() {
@@ -171,11 +171,20 @@ func analyzeImpact(logData *LogFile) SystemImpactReport {
 	uniqueHosts := make(map[string]bool)
 	uniqueIPs := make(map[string]bool)
 
-	// Analyze each miner
+	// Collect miners from events and snapshots
+	minerMap := collectMinersFromEvents(logData.Events)
+	processSnapshotData(logData.CurrentSnapshot.Miners, minerMap, uniqueHosts, uniqueIPs, &report)
+
+	// Calculate averages
+	finalizeReport(&report, minerMap, uniqueHosts, uniqueIPs)
+
+	return report
+}
+
+func collectMinersFromEvents(events []LogEntry) map[string]*MinerImpactStats {
 	minerMap := make(map[string]*MinerImpactStats)
 
-	// First, collect all miners from events
-	for _, event := range logData.Events {
+	for _, event := range events {
 		if event.MinerID == "" {
 			continue
 		}
@@ -196,104 +205,136 @@ func analyzeImpact(logData *LogFile) SystemImpactReport {
 		}
 	}
 
-	// Update with snapshot data (most recent and complete info)
-	for _, miner := range logData.CurrentSnapshot.Miners {
-		stats, exists := minerMap[miner.ID]
-		if !exists {
-			stats = &MinerImpactStats{
-				MinerID:   miner.ID,
-				FirstSeen: miner.RegisteredAt,
-				LastSeen:  miner.LastHeartbeat,
-			}
-			minerMap[miner.ID] = stats
-		}
+	return minerMap
+}
 
-		// Update with comprehensive miner data
-		stats.Hostname = miner.Hostname
-		stats.IPAddress = miner.IPAddress
-		stats.IPAddressActual = miner.IPAddressActual
-		stats.TotalMiningTime = time.Duration(miner.TotalMiningTime * float64(time.Second))
-		stats.TotalHashes = miner.TotalHashes
-		stats.BlocksMined = miner.BlocksMined
-		stats.AvgCPUUsage = miner.CPUUsagePercent
-		stats.PeakCPUUsage = miner.CPUUsagePercent // Approximation from last known value
-		stats.GPUEnabled = miner.GPUEnabled
-		stats.HybridMode = miner.HybridMode
+func processSnapshotData(miners []MinerLogInfo, minerMap map[string]*MinerImpactStats,
+	uniqueHosts, uniqueIPs map[string]bool, report *SystemImpactReport) {
 
-		// Determine mining type
-		if miner.GPUEnabled {
-			if miner.HybridMode {
-				stats.MiningType = "CPU+GPU Hybrid"
-			} else {
-				stats.MiningType = "GPU Only"
-			}
-		} else {
-			stats.MiningType = "CPU Only"
-		}
-
-		// Calculate estimated power consumption
-		cpuHours := stats.TotalMiningTime.Hours()
-		stats.EstimatedCPUHours = cpuHours
-
-		// Energy calculation
-		var powerWatts float64
-		if miner.HybridMode {
-			powerWatts = avgCPUPowerWatts + avgGPUPowerWatts
-		} else if miner.GPUEnabled {
-			powerWatts = avgGPUPowerWatts
-		} else {
-			powerWatts = avgCPUPowerWatts
-		}
-
-		// Adjust for CPU usage percentage
-		if !miner.GPUEnabled {
-			powerWatts = powerWatts * (miner.CPUUsagePercent / 100.0)
-		}
-
-		stats.EstimatedKWh = (powerWatts * cpuHours) / 1000.0
-		stats.EstimatedCost = stats.EstimatedKWh * electricityCostPer
-
-		// Compute impact assessment
-		if stats.AvgCPUUsage >= 90 {
-			stats.ComputeImpact = "CRITICAL - System severely degraded"
-		} else if stats.AvgCPUUsage >= 70 {
-			stats.ComputeImpact = "HIGH - Significant performance impact"
-		} else if stats.AvgCPUUsage >= 50 {
-			stats.ComputeImpact = "MODERATE - Noticeable slowdowns"
-		} else {
-			stats.ComputeImpact = "LOW - Minor impact"
-		}
-
-		// Track unique hosts and IPs
-		uniqueHosts[miner.Hostname] = true
-		if miner.IPAddress != "" {
-			uniqueIPs[miner.IPAddress] = true
-		}
-		if miner.IPAddressActual != "" && miner.IPAddressActual != miner.IPAddress {
-			uniqueIPs[miner.IPAddressActual] = true
-		}
-
-		// Update report totals
-		report.TotalMiningHours += cpuHours
-		report.TotalHashes += miner.TotalHashes
-		report.TotalBlocksMined += miner.BlocksMined
-		report.TotalEstimatedKWh += stats.EstimatedKWh
-		report.TotalEstimatedCost += stats.EstimatedCost
-
-		if miner.CPUUsagePercent >= highCPUThreshold {
-			report.MinersWithHighCPU++
-		}
-		if miner.GPUEnabled {
-			report.MinersWithGPU++
-		}
-		if miner.HybridMode {
-			report.MinersWithHybrid++
-		}
-
+	for _, miner := range miners {
+		stats := getOrCreateMinerStats(miner, minerMap)
+		updateMinerStats(stats, miner)
+		updateUniqueTracking(miner, uniqueHosts, uniqueIPs)
+		updateReportTotals(report, stats, miner)
 		report.MinerStats = append(report.MinerStats, *stats)
 	}
+}
 
-	// Calculate averages
+func getOrCreateMinerStats(miner MinerLogInfo, minerMap map[string]*MinerImpactStats) *MinerImpactStats {
+	stats, exists := minerMap[miner.ID]
+	if !exists {
+		stats = &MinerImpactStats{
+			MinerID:   miner.ID,
+			FirstSeen: miner.RegisteredAt,
+			LastSeen:  miner.LastHeartbeat,
+		}
+		minerMap[miner.ID] = stats
+	}
+	return stats
+}
+
+func updateMinerStats(stats *MinerImpactStats, miner MinerLogInfo) {
+	stats.Hostname = miner.Hostname
+	stats.IPAddress = miner.IPAddress
+	stats.IPAddressActual = miner.IPAddressActual
+	stats.TotalMiningTime = time.Duration(miner.TotalMiningTime * float64(time.Second))
+	stats.TotalHashes = miner.TotalHashes
+	stats.BlocksMined = miner.BlocksMined
+	stats.AvgCPUUsage = miner.CPUUsagePercent
+	stats.PeakCPUUsage = miner.CPUUsagePercent
+	stats.GPUEnabled = miner.GPUEnabled
+	stats.HybridMode = miner.HybridMode
+
+	// Determine mining type
+	stats.MiningType = determineMiningType(miner.GPUEnabled, miner.HybridMode)
+
+	// Calculate power consumption
+	cpuHours := stats.TotalMiningTime.Hours()
+	stats.EstimatedCPUHours = cpuHours
+
+	powerWatts := calculatePowerWatts(miner)
+	stats.EstimatedKWh = (powerWatts * cpuHours) / 1000.0
+	stats.EstimatedCost = stats.EstimatedKWh * electricityCostPer
+
+	// Compute impact assessment
+	stats.ComputeImpact = getComputeImpact(stats.AvgCPUUsage)
+}
+
+func determineMiningType(gpuEnabled, hybridMode bool) string {
+	switch {
+	case gpuEnabled && hybridMode:
+		return "CPU+GPU Hybrid"
+	case gpuEnabled:
+		return "GPU Only"
+	default:
+		return "CPU Only"
+	}
+}
+
+func calculatePowerWatts(miner MinerLogInfo) float64 {
+	var powerWatts float64
+	switch {
+	case miner.HybridMode:
+		powerWatts = avgCPUPowerWatts + avgGPUPowerWatts
+	case miner.GPUEnabled:
+		powerWatts = avgGPUPowerWatts
+	default:
+		powerWatts = avgCPUPowerWatts
+	}
+
+	// Adjust for CPU usage percentage
+	if !miner.GPUEnabled {
+		powerWatts *= (miner.CPUUsagePercent / 100.0)
+	}
+
+	return powerWatts
+}
+
+func getComputeImpact(cpuUsage float64) string {
+	switch {
+	case cpuUsage >= 90:
+		return "CRITICAL - System severely degraded"
+	case cpuUsage >= 70:
+		return "HIGH - Significant performance impact"
+	case cpuUsage >= 50:
+		return "MODERATE - Noticeable slowdowns"
+	default:
+		return "LOW - Minor impact"
+	}
+}
+
+func updateUniqueTracking(miner MinerLogInfo, uniqueHosts, uniqueIPs map[string]bool) {
+	uniqueHosts[miner.Hostname] = true
+	if miner.IPAddress != "" {
+		uniqueIPs[miner.IPAddress] = true
+	}
+	if miner.IPAddressActual != "" && miner.IPAddressActual != miner.IPAddress {
+		uniqueIPs[miner.IPAddressActual] = true
+	}
+}
+
+func updateReportTotals(report *SystemImpactReport, stats *MinerImpactStats, miner MinerLogInfo) {
+	cpuHours := stats.TotalMiningTime.Hours()
+	report.TotalMiningHours += cpuHours
+	report.TotalHashes += miner.TotalHashes
+	report.TotalBlocksMined += miner.BlocksMined
+	report.TotalEstimatedKWh += stats.EstimatedKWh
+	report.TotalEstimatedCost += stats.EstimatedCost
+
+	if miner.CPUUsagePercent >= highCPUThreshold {
+		report.MinersWithHighCPU++
+	}
+	if miner.GPUEnabled {
+		report.MinersWithGPU++
+	}
+	if miner.HybridMode {
+		report.MinersWithHybrid++
+	}
+}
+
+func finalizeReport(report *SystemImpactReport, minerMap map[string]*MinerImpactStats,
+	uniqueHosts, uniqueIPs map[string]bool) {
+
 	report.TotalMiners = len(report.MinerStats)
 	report.UniqueHosts = len(uniqueHosts)
 	report.UniqueIPs = len(uniqueIPs)
@@ -315,8 +356,6 @@ func analyzeImpact(logData *LogFile) SystemImpactReport {
 	sort.Slice(report.MinerStats, func(i, j int) bool {
 		return report.MinerStats[i].EstimatedCost > report.MinerStats[j].EstimatedCost
 	})
-
-	return report
 }
 
 func generateReportFilename(startDate, endDate time.Time) string {
@@ -413,13 +452,14 @@ func writeMarkdownReport(filename string, report *SystemImpactReport) error {
 	moderate := 0
 	low := 0
 	for _, stats := range report.MinerStats {
-		if stats.AvgCPUUsage >= 90 {
+		switch {
+		case stats.AvgCPUUsage >= 90:
 			critical++
-		} else if stats.AvgCPUUsage >= 70 {
+		case stats.AvgCPUUsage >= 70:
 			high++
-		} else if stats.AvgCPUUsage >= 50 {
+		case stats.AvgCPUUsage >= 50:
 			moderate++
-		} else {
+		default:
 			low++
 		}
 	}
@@ -670,36 +710,40 @@ func formatDuration(d time.Duration) string {
 
 	if hours > 24 {
 		days := hours / 24
-		hours = hours % 24
+		hours %= 24
 		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
 	}
 	return fmt.Sprintf("%dh %dm", hours, minutes)
 }
 
 func formatNumber(n int64) string {
-	if n >= 1e12 {
+	switch {
+	case n >= 1e12:
 		return fmt.Sprintf("%.2fT", float64(n)/1e12)
-	} else if n >= 1e9 {
+	case n >= 1e9:
 		return fmt.Sprintf("%.2fB", float64(n)/1e9)
-	} else if n >= 1e6 {
+	case n >= 1e6:
 		return fmt.Sprintf("%.2fM", float64(n)/1e6)
-	} else if n >= 1e3 {
+	case n >= 1e3:
 		return fmt.Sprintf("%.2fK", float64(n)/1e3)
+	default:
+		return fmt.Sprintf("%d", n)
 	}
-	return fmt.Sprintf("%d", n)
 }
 
 func formatNumberShort(n int64) string {
-	if n >= 1e12 {
+	switch {
+	case n >= 1e12:
 		return fmt.Sprintf("%.1fT", float64(n)/1e12)
-	} else if n >= 1e9 {
+	case n >= 1e9:
 		return fmt.Sprintf("%.1fB", float64(n)/1e9)
-	} else if n >= 1e6 {
+	case n >= 1e6:
 		return fmt.Sprintf("%.1fM", float64(n)/1e6)
-	} else if n >= 1e3 {
+	case n >= 1e3:
 		return fmt.Sprintf("%.1fK", float64(n)/1e3)
+	default:
+		return fmt.Sprintf("%d", n)
 	}
-	return fmt.Sprintf("%d", n)
 }
 
 func truncate(s string, maxLen int) string {
@@ -710,14 +754,16 @@ func truncate(s string, maxLen int) string {
 }
 
 func getImpactLevel(cpuUsage float64) string {
-	if cpuUsage >= 90 {
+	switch {
+	case cpuUsage >= 90:
 		return "CRITICAL"
-	} else if cpuUsage >= 70 {
+	case cpuUsage >= 70:
 		return "HIGH"
-	} else if cpuUsage >= 50 {
+	case cpuUsage >= 50:
 		return "MODERATE"
+	default:
+		return "LOW"
 	}
-	return "LOW"
 }
 
 func estimateHardwareReplacement(minerCount int) string {
@@ -733,7 +779,7 @@ func estimateHardwareReplacement(minerCount int) string {
 
 func estimateIncidentResponse(minerCount int) string {
 	// Base cost + per-system investigation
-	baseCost := 5000.0 // Initial investigation
+	baseCost := 5000.0     // Initial investigation
 	perSystemCost := 200.0 // Per-system remediation
 	cost := baseCost + (float64(minerCount) * perSystemCost)
 	if cost >= 1e6 {

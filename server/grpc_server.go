@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "redteamcoin/proto"
+
 	"google.golang.org/grpc/peer"
 )
 
@@ -165,10 +166,10 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 	}
 
 	return &pb.HeartbeatResponse{
-		Active:              true,
-		Message:             "Heartbeat received",
-		ShouldMine:          shouldMine,
-		CpuThrottlePercent:  int32(cpuThrottle),
+		Active:             true,
+		Message:            "Heartbeat received",
+		ShouldMine:         shouldMine,
+		CpuThrottlePercent: int32(cpuThrottle),
 	}, nil
 }
 

@@ -11,14 +11,15 @@ import (
 	"time"
 
 	pb "redteamcoin/proto"
+
 	"google.golang.org/grpc"
 )
 
 const (
-	grpcPort      = 50051
-	apiPort       = 8443 // HTTPS port (8080 for HTTP fallback)
-	httpPort      = 8080 // HTTP redirect port (when TLS is enabled)
-	difficulty    = 6
+	grpcPort        = 50051
+	apiPort         = 8443 // HTTPS port (8080 for HTTP fallback)
+	httpPort        = 8080 // HTTP redirect port (when TLS is enabled)
+	difficulty      = 6
 	defaultCertFile = "certs/server.crt"
 	defaultKeyFile  = "certs/server.key"
 )

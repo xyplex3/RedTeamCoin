@@ -188,6 +188,9 @@ certificates. Click "Advanced" → "Proceed to localhost".
 Open additional terminals and run `./bin/client` in each.
 
 #### Java Client (JAR File)
+The Java client option creates a JAR file that can be deployed on Java based systems.
+
+Note: this only does CPU mining.
 
 **Prerequisites:**
 - Java 11 or later

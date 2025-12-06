@@ -10,10 +10,7 @@ RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation desi
 This tool enables security teams to safely and legally demonstrate cryptomining attack scenarios on corporate systems, generate comprehensive impact reports, and validate security controls—all within a controlled environment using an isolated, non-public blockchain.
 
 **Created by:**
-- Peter Greko, Luciano Krigun, and TKTK
-
-**Source code reviewed by:**
-- Wes TKTK
+- Peter Greko, Luciano Krigun, Jayson Grace (@l50), and TKTK
 
 ## Table of Contents
 
@@ -88,7 +85,7 @@ brew install go protobuf
 **Windows:**
 
 - Install Go from: https://golang.org/dl/
-- Install protoc from: https://github.com/protocolbuffers/protobuf/releases
+- Install protHow oc from: https://github.com/protocolbuffers/protobuf/releases
 
 ### Installation
 
@@ -132,6 +129,7 @@ Navigate to the URL displayed in the server console or:
 ```text
 http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
 ```
+**NOTE: This will run on all interfaces of the server and can be used in place of localhost.**
 
 ## How It Works
 
@@ -173,6 +171,7 @@ RTC_USE_TLS=true ./bin/server
 
 **Note:** With HTTPS, browsers will show a security warning for self-signed
 certificates. Click "Advanced" → "Proceed to localhost".
+**NOTE:** The web dashboard and gRPC server will run on all interfaces of the server and can be used in place of localhost.
 
 ### Running a Miner
 
@@ -367,7 +366,7 @@ const (
     grpcPort      = 50051
     apiPort       = 8443   // HTTPS (8080 for HTTP)
     httpPort      = 8080
-    difficulty    = 4      // Mining difficulty
+    difficulty    = 6      // Mining difficulty
 )
 ```
 
@@ -500,17 +499,62 @@ service MiningPool {
 
 ```text
 RedTeamCoin/
-├── server/          # Blockchain and mining pool server
-│   ├── main.go      # Server entry point
-│   ├── blockchain.go # Blockchain implementation
-│   ├── pool.go      # Mining pool management
-│   ├── grpc_server.go # gRPC service implementation
-│   └── api.go       # HTTP API and web dashboard
-├── client/          # Mining client
-│   └── main.go      # Client miner implementation
-├── proto/           # Protocol buffer definitions
-│   └── mining.proto # Mining service definitions
-└── Makefile         # Build automation
+├── server/                 # Blockchain and mining pool server
+│   ├── main.go             # Server entry point
+│   ├── blockchain.go       # Blockchain implementation
+│   ├── blockchain_test.go  # Blockchain unit tests
+│   ├── pool.go             # Mining pool management
+│   ├── pool_test.go        # Pool unit tests
+│   ├── grpc_server.go      # gRPC service implementation
+│   ├── grpc_server_test.go # gRPC server unit tests
+│   ├── api.go              # HTTP API and web dashboard
+│   ├── api_test.go         # API unit tests
+│   └── logger.go           # Event logging system
+├── client/                 # Mining client (Go)
+│   ├── main.go             # Client miner implementation
+│   ├── main_test.go        # Client unit tests
+│   ├── gpu.go              # GPU mining coordinator
+│   ├── gpu_test.go         # GPU unit tests
+│   ├── cuda.go             # NVIDIA CUDA implementation
+│   ├── cuda_nocgo.go       # CUDA stub (no CGO)
+│   ├── opencl.go           # AMD/Intel OpenCL implementation
+│   ├── opencl_nocgo.go     # OpenCL stub (no CGO)
+│   ├── mine.cu             # CUDA kernel source
+│   └── mine.cl             # OpenCL kernel source
+├── java-client/            # Mining client (Java)
+│   ├── src/main/java/      # Java source code
+│   │   └── com/redteamcoin/miner/
+│   │       └── MinerClient.java
+│   ├── src/main/proto/     # Protobuf definitions
+│   │   └── mining.proto
+│   ├── pom.xml             # Maven build configuration
+│   ├── README.md           # Java client documentation
+│   ├── QUICKSTART.md       # Quick start guide
+│   └── BUILD_INSTRUCTIONS.md # Build instructions
+├── proto/                  # Protocol buffer definitions
+│   ├── mining.proto        # Service definitions
+│   ├── mining.pb.go        # Generated Go code
+│   └── mining_grpc.pb.go   # Generated gRPC code
+├── tools/                  # Analysis and reporting tools
+│   ├── generate_report.go  # Damage assessment report generator
+│   └── README.md           # Tools documentation
+├── bin/                    # Compiled binaries (generated)
+│   ├── server              # Mining pool server
+│   ├── client              # Go miner client
+│   └── generate_report     # Report generator
+├── certs/                  # TLS certificates (generated)
+│   ├── server.crt          # Server certificate
+│   └── server.key          # Server private key
+├── .github/workflows/      # CI/CD workflows
+│   ├── pre-commit.yaml     # Pre-commit checks
+│   ├── security.yaml       # Security scanning
+│   ├── release.yaml        # Release automation
+│   └── build-verification.yaml # Build & test verification
+├── Makefile                # Build automation
+├── go.mod                  # Go module definition
+├── go.sum                  # Go dependencies
+├── generate_certs.sh       # TLS certificate generator
+└── LICENSE                 # GPL-3.0 license
 ```
 
 ### Component Details
@@ -638,6 +682,67 @@ make clean                # Remove build artifacts
 make deps                 # Download dependencies
 make init                 # Full initialization
 ```
+
+### Testing
+
+RedTeamCoin includes comprehensive unit tests for both server and client components.
+
+**Run all tests:**
+
+```bash
+make test                 # Run all tests (server + client)
+```
+
+**Run specific test suites:**
+
+```bash
+# Server tests
+cd server && go test -v
+
+# Client tests
+cd client && go test -v -short
+
+# With coverage
+cd server && go test -cover
+cd client && go test -cover
+```
+
+**Test Coverage:**
+
+- **Server**: 76 tests, 66.3% coverage
+  - `blockchain_test.go`: 15 tests - Blockchain validation, hash calculation, concurrent access
+  - `pool_test.go`: 26 tests - Miner management, work distribution, statistics
+  - `grpc_server_test.go`: 17 tests - gRPC endpoints, miner control, heartbeats
+  - `api_test.go`: 18 tests - REST API, authentication, miner operations
+
+- **Client**: 41 tests, 16.2% coverage
+  - `main_test.go`: 24 tests - Mining logic, hash calculation, state management
+  - `gpu_test.go`: 18 tests - GPU detection, device management, statistics
+
+**Total**: 117 unit tests covering core functionality
+
+**What's tested:**
+
+- ✅ Blockchain validation and integrity
+- ✅ Block mining and proof-of-work
+- ✅ Mining pool work distribution
+- ✅ Miner registration and management
+- ✅ Server-side miner control (pause/resume/delete/throttle)
+- ✅ gRPC communication protocols
+- ✅ REST API endpoints and authentication
+- ✅ GPU device detection and initialization
+- ✅ Hash rate calculation and statistics
+- ✅ Concurrent operations and thread safety
+- ✅ Error handling and edge cases
+
+**CI/CD Testing:**
+
+All tests run automatically on:
+- Pull requests
+- Commits to main branch
+- Release builds
+
+See [.github/workflows/build-verification.yaml](.github/workflows/build-verification.yaml) for CI configuration.
 
 ### Cross-Compilation
 

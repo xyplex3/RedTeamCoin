@@ -296,7 +296,7 @@
                 <div class="controls">
                     <div class="control-group">
                         <label for="poolUrl">Pool Server (WebSocket)</label>
-                        <input type="text" id="poolUrl" placeholder="wss://pool.redteamcoin.com:50052" value="">
+                        <input type="text" id="poolUrl" placeholder="ws://localhost:8080/ws" value="ws://localhost:8080/ws">
                     </div>
                     <div class="control-group">
                         <label for="threads">Threads: <span id="threadCount">4</span></label>
@@ -343,6 +343,14 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
+            // Auto-detect pool URL based on current hostname
+            // This allows the miner to work from any device on the network
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.hostname || 'localhost';
+            const wsPort = 8080; // Pool WebSocket port
+            const autoPoolUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws`;
+            document.getElementById('poolUrl').value = autoPoolUrl;
+            
             // Update UI controls
             document.getElementById('threads').addEventListener('input', (e) => {
                 document.getElementById('threadCount').textContent = e.target.value;
@@ -358,36 +366,20 @@
             document.getElementById('threads').max = Math.min(navigator.hardwareConcurrency * 2 || 16, 32);
             document.getElementById('threadCount').textContent = defaultThreads;
 
-            // Initialize miner
-            try {
-                await RedTeamMiner.init({
-                    threads: defaultThreads,
-                    throttle: 0.8,
-                    useWebGPU: true,
-                    onReady: () => {
-                        log('Miner ready', 'success');
-                        updateStatus('offline');
-                    },
-                    onStats: updateStats,
-                    onFound: (result) => {
-                        log(`🎉 Block found! Nonce: ${result.nonce}`, 'success');
-                    },
-                    onError: (error) => {
-                        log(`Error: ${error}`, 'error');
-                    }
-                });
+            // Set up miner callbacks
+            RedTeamMiner.onStats((stats) => updateStats(stats));
+            RedTeamMiner.onFound((result) => {
+                log(`🎉 Block found! Nonce: ${result.nonce}`, 'success');
+            });
+            RedTeamMiner.onError((error) => {
+                log(`Error: ${error}`, 'error');
+            });
+            RedTeamMiner.onLog((message, type) => {
+                log(message, type);
+            });
 
-                // Check WebGPU
-                if (navigator.gpu) {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    if (adapter) {
-                        document.getElementById('gpuBadge').style.display = 'inline-block';
-                        log('WebGPU available - GPU acceleration enabled', 'success');
-                    }
-                }
-            } catch (error) {
-                log('Miner initialization failed: ' + error.message, 'error');
-            }
+            log('Miner ready', 'success');
+            updateStatus('offline');
         });
 
         async function toggleMining() {

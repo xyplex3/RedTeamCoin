@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -41,12 +42,12 @@ type WebSocketHub struct {
 	broadcast chan []byte
 	register  chan *WebMiner
 	unregist  chan *WebMiner
-	pool      *Pool
+	pool      *MiningPool
 	mu        sync.RWMutex
 }
 
 // NewWebSocketHub creates a new WebSocket hub
-func NewWebSocketHub(pool *Pool) *WebSocketHub {
+func NewWebSocketHub(pool *MiningPool) *WebSocketHub {
 	return &WebSocketHub{
 		miners:    make(map[string]*WebMiner),
 		broadcast: make(chan []byte, 256),
@@ -219,12 +220,15 @@ func (h *WebSocketHub) handleRegister(miner *WebMiner, msg map[string]interface{
 }
 
 func (h *WebSocketHub) handleGetWork(miner *WebMiner) {
+	// Register web miner with the pool first if not already registered
+	h.pool.RegisterMiner(miner.ID, "web", "browser", "web-client")
+
 	// Get work from the pool
-	work := h.pool.GetCurrentWork()
-	if work == nil {
+	block, err := h.pool.GetWork(miner.ID)
+	if err != nil || block == nil {
 		h.sendToMiner(miner, map[string]interface{}{
 			"type":    "error",
-			"message": "No work available",
+			"message": "No work available: " + err.Error(),
 		})
 		return
 	}
@@ -232,11 +236,11 @@ func (h *WebSocketHub) handleGetWork(miner *WebMiner) {
 	h.sendToMiner(miner, map[string]interface{}{
 		"type": "work",
 		"work": map[string]interface{}{
-			"blockIndex":   work.BlockIndex,
-			"previousHash": work.PreviousHash,
-			"data":         work.Data,
-			"difficulty":   work.Difficulty,
-			"timestamp":    work.Timestamp,
+			"blockIndex":   block.Index,
+			"previousHash": block.PreviousHash,
+			"data":         block.Data,
+			"difficulty":   4, // Default difficulty
+			"timestamp":    block.Timestamp,
 		},
 	})
 }
@@ -247,17 +251,25 @@ func (h *WebSocketHub) handleSubmit(miner *WebMiner, msg map[string]interface{})
 	hash := msg["hash"].(string)
 
 	// Verify and submit to pool
-	accepted, message := h.pool.SubmitWork(miner.ID, blockIndex, nonce, hash)
+	accepted, reward, err := h.pool.SubmitWork(miner.ID, blockIndex, nonce, hash)
+
+	message := "Block submitted"
+	if err != nil {
+		message = err.Error()
+	} else if accepted {
+		message = fmt.Sprintf("Block accepted! Reward: %d", reward)
+	}
 
 	if accepted {
 		miner.Blocks++
-		log.Printf("[WebSocket] Block accepted from %s: index=%d, nonce=%d", miner.ID, blockIndex, nonce)
+		log.Printf("[WebSocket] Block accepted from %s: index=%d, nonce=%d, reward=%d", miner.ID, blockIndex, nonce, reward)
 	}
 
 	h.sendToMiner(miner, map[string]interface{}{
 		"type":     "accepted",
 		"accepted": accepted,
 		"message":  message,
+		"reward":   reward,
 	})
 
 	// Send new work after submission
@@ -336,12 +348,3 @@ type Work struct {
 	Difficulty   int
 	Timestamp    int64
 }
-
-// Pool interface (you'll need to adapt this to your actual pool implementation)
-type PoolInterface interface {
-	GetCurrentWork() *Work
-	SubmitWork(minerID string, blockIndex int64, nonce int64, hash string) (bool, string)
-}
-
-// Ensure Pool implements PoolInterface
-var _ PoolInterface = (*Pool)(nil)

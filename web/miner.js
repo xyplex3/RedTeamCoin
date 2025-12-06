@@ -1,29 +1,13 @@
 /**
- * RedTeamCoin Web Miner - Embeddable Loader
- * Include this script to add mining capabilities to any webpage
- * 
- * Usage:
- *   <script src="https://yourserver.com/miner.js"></script>
- *   <script>
- *     RedTeamMiner.init({
- *       pool: 'wss://pool.redteamcoin.com:50052',
- *       threads: navigator.hardwareConcurrency || 4,
- *       throttle: 0.8,
- *       onReady: () => console.log('Miner ready'),
- *       onFound: (result) => console.log('Block found:', result),
- *       onStats: (stats) => console.log('Stats:', stats)
- *     });
- *     RedTeamMiner.start();
- *   </script>
+ * RedTeamCoin Web Miner
+ * Real mining implementation using Web Workers and WebSocket
  */
 
 (function(global) {
     'use strict';
 
     const VERSION = '1.0.0';
-    const DEFAULT_THREADS = 4;
-    const DEFAULT_THROTTLE = 0.8;
-    const NONCE_BATCH_SIZE = 100000;
+    const NONCE_BATCH_SIZE = 50000;
     const STATS_INTERVAL = 1000;
 
     class RedTeamMinerClass {
@@ -31,13 +15,8 @@
             this.workers = [];
             this.config = {
                 pool: null,
-                threads: DEFAULT_THREADS,
-                throttle: DEFAULT_THROTTLE,
-                useWebGPU: true,
-                onReady: null,
-                onFound: null,
-                onStats: null,
-                onError: null
+                threads: navigator.hardwareConcurrency || 4,
+                throttle: 0.8
             };
             this.stats = {
                 hashRate: 0,
@@ -47,115 +26,38 @@
                 connected: false,
                 uptime: 0
             };
+            this.callbacks = {
+                onStats: null,
+                onFound: null,
+                onError: null,
+                onLog: null
+            };
             this.ws = null;
             this.currentWork = null;
             this.currentNonce = 0;
-            this.wasmReady = false;
-            this.webGPUReady = false;
-            this.gpuMiner = null;
             this.startTime = null;
             this.statsInterval = null;
-            this.minerId = this.generateMinerId();
+            this.minerId = 'web-' + Math.random().toString(36).substr(2, 9);
+            this.workerHashRates = {};
+            this.pendingWorkers = 0;
         }
 
-        /**
-         * Initialize the miner with configuration
-         */
-        async init(options = {}) {
-            Object.assign(this.config, options);
-            
-            // Detect available threads
-            if (this.config.threads === 'auto') {
-                this.config.threads = navigator.hardwareConcurrency || DEFAULT_THREADS;
-            }
-
-            // Load WASM module
-            await this.loadWasm();
-
-            // Try to initialize WebGPU
-            if (this.config.useWebGPU) {
-                await this.initWebGPU();
-            }
-
-            // Connect to pool if specified
-            if (this.config.pool) {
-                await this.connect(this.config.pool);
-            }
-
-            if (this.config.onReady) {
-                this.config.onReady();
-            }
-
-            return this;
-        }
-
-        /**
-         * Load WebAssembly mining module
-         */
-        async loadWasm() {
-            return new Promise((resolve, reject) => {
-                // Check if Go WASM support exists
-                if (typeof Go === 'undefined') {
-                    // Load wasm_exec.js
-                    const script = document.createElement('script');
-                    script.src = this.getBaseUrl() + 'wasm_exec.js';
-                    script.onload = async () => {
-                        await this.instantiateWasm();
-                        resolve();
-                    };
-                    script.onerror = () => {
-                        console.warn('WASM support not available, using JavaScript fallback');
-                        resolve();
-                    };
-                    document.head.appendChild(script);
-                } else {
-                    this.instantiateWasm().then(resolve).catch(reject);
-                }
-            });
-        }
-
-        async instantiateWasm() {
-            try {
-                const go = new Go();
-                const result = await WebAssembly.instantiateStreaming(
-                    fetch(this.getBaseUrl() + 'miner.wasm'),
-                    go.importObject
-                );
-                go.run(result.instance);
-                this.wasmReady = true;
-                console.log('RedTeamMiner WASM loaded successfully');
-            } catch (error) {
-                console.warn('WASM loading failed, using JavaScript fallback:', error);
+        log(message, type = 'info') {
+            console.log(`[RedTeamMiner] ${message}`);
+            if (this.callbacks.onLog) {
+                this.callbacks.onLog(message, type);
             }
         }
 
-        /**
-         * Initialize WebGPU for GPU mining
-         */
-        async initWebGPU() {
-            if (!navigator.gpu) {
-                console.log('WebGPU not available');
-                return false;
-            }
+        // Set callbacks
+        onStats(callback) { this.callbacks.onStats = callback; }
+        onFound(callback) { this.callbacks.onFound = callback; }
+        onError(callback) { this.callbacks.onError = callback; }
+        onLog(callback) { this.callbacks.onLog = callback; }
 
-            try {
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) {
-                    console.log('No WebGPU adapter found');
-                    return false;
-                }
-
-                const device = await adapter.requestDevice();
-                this.gpuMiner = new WebGPUMiner(device);
-                await this.gpuMiner.init();
-                this.webGPUReady = true;
-                console.log('WebGPU initialized successfully');
-                return true;
-            } catch (error) {
-                console.warn('WebGPU initialization failed:', error);
-                return false;
-            }
-        }
+        // Set configuration
+        setThreads(n) { this.config.threads = Math.max(1, Math.min(n, 32)); }
+        setThrottle(t) { this.config.throttle = Math.max(0.1, Math.min(t, 1.0)); }
 
         /**
          * Connect to mining pool via WebSocket
@@ -163,33 +65,49 @@
         async connect(poolUrl) {
             return new Promise((resolve, reject) => {
                 try {
+                    this.log(`Connecting to ${poolUrl}...`);
                     this.ws = new WebSocket(poolUrl);
                     
                     this.ws.onopen = () => {
-                        console.log('Connected to pool:', poolUrl);
+                        this.log('Connected to pool', 'success');
                         this.stats.connected = true;
                         this.register();
                         resolve();
                     };
 
                     this.ws.onmessage = (event) => {
-                        this.handlePoolMessage(JSON.parse(event.data));
+                        try {
+                            const message = JSON.parse(event.data);
+                            this.handlePoolMessage(message);
+                        } catch (e) {
+                            this.log('Invalid message from pool: ' + e.message, 'error');
+                        }
                     };
 
                     this.ws.onclose = () => {
-                        console.log('Disconnected from pool');
+                        this.log('Disconnected from pool', 'warning');
                         this.stats.connected = false;
-                        // Attempt reconnection
-                        setTimeout(() => this.connect(poolUrl), 5000);
+                        // Attempt reconnection after 5 seconds
+                        if (this.stats.isRunning) {
+                            setTimeout(() => this.connect(poolUrl), 5000);
+                        }
                     };
 
                     this.ws.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                        if (this.config.onError) {
-                            this.config.onError(error);
+                        this.log('WebSocket error', 'error');
+                        if (this.callbacks.onError) {
+                            this.callbacks.onError(error);
                         }
                         reject(error);
                     };
+
+                    // Timeout after 10 seconds
+                    setTimeout(() => {
+                        if (this.ws.readyState !== WebSocket.OPEN) {
+                            reject(new Error('Connection timeout'));
+                        }
+                    }, 10000);
+
                 } catch (error) {
                     reject(error);
                 }
@@ -205,46 +123,9 @@
                 minerId: this.minerId,
                 userAgent: navigator.userAgent,
                 threads: this.config.threads,
-                hasGPU: this.webGPUReady,
+                hasGPU: false,
                 version: VERSION
             });
-        }
-
-        /**
-         * Handle messages from the pool
-         */
-        handlePoolMessage(message) {
-            switch (message.type) {
-                case 'work':
-                    this.currentWork = message.work;
-                    this.currentNonce = 0;
-                    if (this.stats.isRunning) {
-                        this.startMiningWork();
-                    }
-                    break;
-
-                case 'accepted':
-                    this.stats.blocksFound++;
-                    console.log('Block accepted!', message);
-                    if (this.config.onFound) {
-                        this.config.onFound(message);
-                    }
-                    break;
-
-                case 'rejected':
-                    console.warn('Block rejected:', message.reason);
-                    break;
-
-                case 'control':
-                    if (message.action === 'stop') {
-                        this.stop();
-                    } else if (message.action === 'start') {
-                        this.start();
-                    } else if (message.throttle !== undefined) {
-                        this.config.throttle = message.throttle;
-                    }
-                    break;
-            }
         }
 
         /**
@@ -257,16 +138,65 @@
         }
 
         /**
+         * Handle messages from the pool
+         */
+        handlePoolMessage(message) {
+            this.log(`Pool message: ${message.type}`);
+            
+            switch (message.type) {
+                case 'registered':
+                    this.log('Registered with pool, requesting work...');
+                    this.requestWork();
+                    break;
+
+                case 'work':
+                    this.log(`Received work: block ${message.work.blockIndex}, difficulty ${message.work.difficulty}`);
+                    this.currentWork = message.work;
+                    this.currentNonce = 0;
+                    if (this.stats.isRunning) {
+                        this.startMiningWork();
+                    }
+                    break;
+
+                case 'accepted':
+                    this.stats.blocksFound++;
+                    this.log(`Block accepted! Reward: ${message.reward || 0}`, 'success');
+                    if (this.callbacks.onFound) {
+                        this.callbacks.onFound(message);
+                    }
+                    break;
+
+                case 'rejected':
+                    this.log('Block rejected: ' + message.message, 'warning');
+                    break;
+
+                case 'error':
+                    this.log('Pool error: ' + message.message, 'error');
+                    break;
+            }
+        }
+
+        /**
+         * Request work from pool
+         */
+        requestWork() {
+            this.send({ type: 'getwork', minerId: this.minerId });
+        }
+
+        /**
          * Start mining
          */
         start() {
-            if (this.stats.isRunning) return;
+            if (this.stats.isRunning) {
+                this.log('Already mining');
+                return;
+            }
 
             this.stats.isRunning = true;
             this.startTime = Date.now();
             this.stats.totalHashes = 0;
 
-            // Create Web Workers for parallel mining
+            // Create Web Workers
             this.createWorkers();
 
             // Start stats reporting
@@ -277,9 +207,12 @@
             // Request work if connected
             if (this.stats.connected) {
                 this.requestWork();
+            } else if (this.currentWork) {
+                // Use existing work (demo mode)
+                this.startMiningWork();
             }
 
-            console.log(`Mining started with ${this.config.threads} threads`);
+            this.log(`Mining started with ${this.config.threads} threads`);
         }
 
         /**
@@ -288,8 +221,11 @@
         stop() {
             this.stats.isRunning = false;
             
-            // Terminate workers
-            this.workers.forEach(worker => worker.terminate());
+            // Stop workers
+            this.workers.forEach(worker => {
+                worker.postMessage({ type: 'stop' });
+                worker.terminate();
+            });
             this.workers = [];
 
             // Clear stats interval
@@ -298,7 +234,7 @@
                 this.statsInterval = null;
             }
 
-            console.log('Mining stopped');
+            this.log('Mining stopped');
         }
 
         /**
@@ -306,18 +242,38 @@
          */
         createWorkers() {
             this.workers = [];
+            this.pendingWorkers = this.config.threads;
             
+            // Get base URL for worker script
+            const scripts = document.getElementsByTagName('script');
+            let baseUrl = '';
+            for (let script of scripts) {
+                if (script.src && script.src.includes('miner.js')) {
+                    baseUrl = script.src.substring(0, script.src.lastIndexOf('/') + 1);
+                    break;
+                }
+            }
+            if (!baseUrl) {
+                baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+            }
+
             for (let i = 0; i < this.config.threads; i++) {
-                const worker = new Worker(this.getBaseUrl() + 'worker.js');
-                worker.workerId = i;
-                
-                worker.onmessage = (e) => this.handleWorkerMessage(e.data, i);
-                worker.onerror = (e) => console.error('Worker error:', e);
-                
-                // Initialize worker with WASM
-                worker.postMessage({ type: 'init' });
-                
-                this.workers.push(worker);
+                try {
+                    const worker = new Worker(baseUrl + 'worker.js');
+                    worker.workerId = i;
+                    
+                    worker.onmessage = (e) => this.handleWorkerMessage(e.data, i);
+                    worker.onerror = (e) => {
+                        this.log(`Worker ${i} error: ${e.message}`, 'error');
+                    };
+                    
+                    // Initialize worker
+                    worker.postMessage({ type: 'init' });
+                    
+                    this.workers.push(worker);
+                } catch (e) {
+                    this.log(`Failed to create worker ${i}: ${e.message}`, 'error');
+                }
             }
         }
 
@@ -327,37 +283,54 @@
         handleWorkerMessage(message, workerId) {
             switch (message.type) {
                 case 'ready':
-                    console.log(`Worker ${workerId} ready`);
-                    if (this.currentWork && this.stats.isRunning) {
-                        this.assignWork(workerId);
+                    this.pendingWorkers--;
+                    this.log(`Worker ${workerId} ready`);
+                    if (this.pendingWorkers === 0 && this.currentWork && this.stats.isRunning) {
+                        this.startMiningWork();
                     }
                     break;
 
                 case 'found':
+                    this.log(`Worker ${workerId} found solution! Nonce: ${message.nonce}`, 'success');
+                    this.stats.totalHashes += message.hashes;
+                    this.workerHashRates[workerId] = message.hashRate;
                     this.submitWork(message);
-                    // Request new work
-                    this.requestWork();
                     break;
 
                 case 'progress':
                     this.stats.totalHashes += message.hashes;
-                    // Assign next batch
-                    if (this.stats.isRunning && this.currentWork) {
+                    this.workerHashRates[workerId] = message.hashRate;
+                    // Assign next batch if complete
+                    if (message.complete && this.stats.isRunning && this.currentWork) {
                         this.assignWork(workerId);
                     }
                     break;
 
                 case 'error':
-                    console.error('Worker error:', message.error);
+                    this.log(`Worker ${workerId} error: ${message.error}`, 'error');
                     break;
             }
+        }
+
+        /**
+         * Start mining current work
+         */
+        startMiningWork() {
+            if (!this.currentWork) {
+                this.log('No work available');
+                return;
+            }
+            
+            this.currentNonce = 0;
+            this.log(`Starting mining on block ${this.currentWork.blockIndex}...`);
+            this.workers.forEach((_, i) => this.assignWork(i));
         }
 
         /**
          * Assign work to a specific worker
          */
         assignWork(workerId) {
-            if (!this.currentWork || !this.workers[workerId]) return;
+            if (!this.currentWork || !this.workers[workerId] || !this.stats.isRunning) return;
 
             const startNonce = this.currentNonce;
             this.currentNonce += NONCE_BATCH_SIZE;
@@ -365,74 +338,65 @@
             this.workers[workerId].postMessage({
                 type: 'mine',
                 data: {
-                    ...this.currentWork,
-                    startNonce,
+                    blockIndex: this.currentWork.blockIndex,
+                    timestamp: this.currentWork.timestamp,
+                    data: this.currentWork.data,
+                    previousHash: this.currentWork.previousHash,
+                    difficulty: this.currentWork.difficulty,
+                    startNonce: startNonce,
                     endNonce: startNonce + NONCE_BATCH_SIZE,
-                    workerId
+                    workerId: workerId
                 }
             });
         }
 
         /**
-         * Start mining current work
-         */
-        startMiningWork() {
-            this.currentNonce = 0;
-            this.workers.forEach((_, i) => this.assignWork(i));
-
-            // Also use WebGPU if available
-            if (this.webGPUReady && this.gpuMiner) {
-                this.startGPUMining();
-            }
-        }
-
-        /**
-         * Start GPU mining with WebGPU
-         */
-        async startGPUMining() {
-            if (!this.currentWork) return;
-
-            try {
-                const result = await this.gpuMiner.mine(this.currentWork);
-                if (result.found) {
-                    this.submitWork(result);
-                    this.requestWork();
-                }
-            } catch (error) {
-                console.error('GPU mining error:', error);
-            }
-        }
-
-        /**
-         * Submit found work to pool
+         * Submit found solution to pool
          */
         submitWork(result) {
-            this.send({
-                type: 'submit',
-                minerId: this.minerId,
-                blockIndex: this.currentWork.blockIndex,
-                nonce: result.nonce,
-                hash: result.hash
-            });
+            if (this.stats.connected) {
+                this.send({
+                    type: 'submit',
+                    minerId: this.minerId,
+                    blockIndex: this.currentWork.blockIndex,
+                    nonce: result.nonce,
+                    hash: result.hash
+                });
+            } else {
+                // Demo mode - just log
+                this.log(`Demo: Found block with nonce ${result.nonce}, hash ${result.hash}`, 'success');
+                this.stats.blocksFound++;
+                if (this.callbacks.onFound) {
+                    this.callbacks.onFound(result);
+                }
+            }
+            
+            // Request new work
+            if (this.stats.connected) {
+                this.requestWork();
+            }
         }
 
         /**
-         * Request new work from pool
-         */
-        requestWork() {
-            this.send({
-                type: 'getwork',
-                minerId: this.minerId
-            });
-        }
-
-        /**
-         * Update and report statistics
+         * Update and report stats
          */
         updateStats() {
-            const elapsed = (Date.now() - this.startTime) / 1000;
-            this.stats.uptime = Math.floor(elapsed);
-            this.stats.hashRate = Math.floor(this.stats.totalHashes / elapsed);
+            // Calculate total hash rate from all workers
+            let totalHashRate = 0;
+            for (let id in this.workerHashRates) {
+                totalHashRate += this.workerHashRates[id];
+            }
+            this.stats.hashRate = totalHashRate;
+            
+            // Calculate uptime
+            if (this.startTime) {
+                this.stats.uptime = Math.floor((Date.now() - this.startTime) / 1000);
+            }
+
+            // Call stats callback
+            if (this.callbacks.onStats) {
+                this.callbacks.onStats({...this.stats});
+            }
 
             // Send stats to pool
             if (this.stats.connected) {
@@ -440,141 +404,27 @@
                     type: 'stats',
                     minerId: this.minerId,
                     hashRate: this.stats.hashRate,
-                    totalHashes: this.stats.totalHashes,
-                    blocksFound: this.stats.blocksFound,
-                    uptime: this.stats.uptime
+                    totalHashes: this.stats.totalHashes
                 });
             }
-
-            // Call stats callback
-            if (this.config.onStats) {
-                this.config.onStats({ ...this.stats });
-            }
         }
 
         /**
-         * Get current statistics
+         * Get current stats
          */
         getStats() {
-            return { ...this.stats };
-        }
-
-        /**
-         * Set throttle level (0.0 - 1.0)
-         */
-        setThrottle(value) {
-            this.config.throttle = Math.max(0, Math.min(1, value));
-        }
-
-        /**
-         * Set number of threads
-         */
-        setThreads(count) {
-            const wasRunning = this.stats.isRunning;
-            if (wasRunning) this.stop();
-            this.config.threads = count;
-            if (wasRunning) this.start();
-        }
-
-        /**
-         * Generate unique miner ID
-         */
-        generateMinerId() {
-            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-            let id = 'web-';
-            for (let i = 0; i < 8; i++) {
-                id += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return id + '-' + Date.now().toString(36);
-        }
-
-        /**
-         * Get base URL for loading resources
-         */
-        getBaseUrl() {
-            const scripts = document.getElementsByTagName('script');
-            for (let script of scripts) {
-                if (script.src && script.src.includes('miner.js')) {
-                    return script.src.replace('miner.js', '');
-                }
-            }
-            return './';
+            return {...this.stats};
         }
 
         /**
          * Get version
          */
-        get version() {
+        version() {
             return VERSION;
         }
     }
 
-    /**
-     * WebGPU Miner Class
-     */
-    class WebGPUMiner {
-        constructor(device) {
-            this.device = device;
-            this.pipeline = null;
-            this.bindGroupLayout = null;
-        }
-
-        async init() {
-            // Load shader
-            const shaderCode = await this.loadShader();
-            
-            const shaderModule = this.device.createShaderModule({
-                code: shaderCode
-            });
-
-            this.bindGroupLayout = this.device.createBindGroupLayout({
-                entries: [
-                    { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-                    { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                    { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }
-                ]
-            });
-
-            this.pipeline = this.device.createComputePipeline({
-                layout: this.device.createPipelineLayout({
-                    bindGroupLayouts: [this.bindGroupLayout]
-                }),
-                compute: {
-                    module: shaderModule,
-                    entryPoint: 'main'
-                }
-            });
-        }
-
-        async loadShader() {
-            try {
-                const response = await fetch(this.getBaseUrl() + 'sha256.wgsl');
-                return await response.text();
-            } catch (error) {
-                console.warn('Could not load WebGPU shader');
-                throw error;
-            }
-        }
-
-        getBaseUrl() {
-            const scripts = document.getElementsByTagName('script');
-            for (let script of scripts) {
-                if (script.src && script.src.includes('miner.js')) {
-                    return script.src.replace('miner.js', '');
-                }
-            }
-            return './';
-        }
-
-        async mine(work) {
-            // GPU mining implementation
-            // This is a placeholder - full implementation requires
-            // proper buffer management and result retrieval
-            return { found: false };
-        }
-    }
-
-    // Export to global scope
+    // Create singleton instance
     global.RedTeamMiner = new RedTeamMinerClass();
-    
-})(typeof window !== 'undefined' ? window : global);
+
+})(typeof window !== 'undefined' ? window : this);

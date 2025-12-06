@@ -1,106 +1,42 @@
 /**
  * RedTeamCoin Web Miner - Worker Script
- * Handles mining computations in a separate thread
+ * Handles mining computations in a separate thread using pure JavaScript
  */
 
-// Import the WASM module
-let wasmReady = false;
-let wasmModule = null;
-
-// Initialize WASM
-async function initWasm() {
-    try {
-        const go = new Go();
-        const result = await WebAssembly.instantiateStreaming(
-            fetch('miner.wasm'),
-            go.importObject
-        );
-        go.run(result.instance);
-        wasmReady = true;
-        postMessage({ type: 'ready' });
-    } catch (error) {
-        postMessage({ type: 'error', error: 'Failed to load WASM: ' + error.message });
-    }
-}
+let isRunning = false;
 
 // Handle messages from main thread
-self.onmessage = async function(e) {
+self.onmessage = function(e) {
     const { type, data } = e.data;
 
     switch (type) {
         case 'init':
-            await initWasm();
+            postMessage({ type: 'ready' });
             break;
 
         case 'mine':
-            if (!wasmReady) {
-                postMessage({ type: 'error', error: 'WASM not ready' });
-                return;
-            }
+            isRunning = true;
             mineRange(data);
             break;
 
         case 'stop':
-            // Worker will be terminated by main thread
+            isRunning = false;
             break;
     }
 };
 
-// Mine a nonce range
-function mineRange(work) {
-    const { blockIndex, timestamp, data, previousHash, difficulty, startNonce, endNonce, workerId } = work;
-    
-    try {
-        // Use WASM mining function
-        const result = RedTeamMiner.mine(
-            blockIndex,
-            timestamp,
-            data,
-            previousHash,
-            difficulty,
-            startNonce,
-            endNonce
-        );
-
-        if (result.found) {
-            postMessage({
-                type: 'found',
-                workerId,
-                nonce: result.nonce,
-                hash: result.hash,
-                hashes: result.hashes,
-                hashRate: result.hashRate
-            });
-        } else {
-            postMessage({
-                type: 'progress',
-                workerId,
-                hashes: result.hashes,
-                hashRate: result.hashRate,
-                startNonce,
-                endNonce
-            });
-        }
-    } catch (error) {
-        postMessage({
-            type: 'error',
-            workerId,
-            error: error.message
-        });
-    }
-}
-
-// Fallback JavaScript mining (if WASM fails)
-function mineRangeJS(work) {
+// Mine a nonce range using pure JavaScript
+async function mineRange(work) {
     const { blockIndex, timestamp, data, previousHash, difficulty, startNonce, endNonce, workerId } = work;
     
     const prefix = '0'.repeat(difficulty);
     let hashCount = 0;
     const startTime = performance.now();
+    const reportInterval = 5000; // Report every 5000 hashes
     
-    for (let nonce = startNonce; nonce < endNonce; nonce++) {
+    for (let nonce = startNonce; nonce < endNonce && isRunning; nonce++) {
         const record = `${blockIndex}${timestamp}${data}${previousHash}${nonce}`;
-        const hash = sha256(record);
+        const hash = await sha256(record);
         hashCount++;
         
         if (hash.startsWith(prefix)) {
@@ -111,34 +47,36 @@ function mineRangeJS(work) {
                 nonce,
                 hash,
                 hashes: hashCount,
-                hashRate: Math.floor(hashCount / elapsed)
+                hashRate: elapsed > 0 ? Math.floor(hashCount / elapsed) : 0
             });
             return;
         }
         
-        // Report progress every 10000 hashes
-        if (hashCount % 10000 === 0) {
+        // Report progress periodically
+        if (hashCount % reportInterval === 0) {
             const elapsed = (performance.now() - startTime) / 1000;
             postMessage({
                 type: 'progress',
                 workerId,
                 hashes: hashCount,
-                hashRate: Math.floor(hashCount / elapsed)
+                hashRate: elapsed > 0 ? Math.floor(hashCount / elapsed) : 0,
+                currentNonce: nonce
             });
         }
     }
     
+    // Report final progress
     const elapsed = (performance.now() - startTime) / 1000;
     postMessage({
         type: 'progress',
         workerId,
         hashes: hashCount,
-        hashRate: Math.floor(hashCount / elapsed),
+        hashRate: elapsed > 0 ? Math.floor(hashCount / elapsed) : 0,
         complete: true
     });
 }
 
-// Simple SHA256 implementation for fallback
+// SHA256 using Web Crypto API
 async function sha256(message) {
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);

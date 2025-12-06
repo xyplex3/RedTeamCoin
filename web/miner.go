@@ -1,378 +1,374 @@
-package web
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	}		}			m.mu.Unlock()			}				m.onStats.Invoke(string(statsJSON))				statsJSON, _ := json.Marshal(stats)				}					CurrentNonce: m.currentNonce,					ElapsedTime:  int64(time.Since(m.startTime).Seconds()),					Throttle:     m.throttle,					Threads:      m.threads,					IsRunning:    m.running,					BlocksFound:  m.blocksFound,					TotalHashes:  m.totalHashes,					HashRate:     m.hashRate,				stats := MinerStats{			if !m.onStats.IsUndefined() {			m.mu.Lock()		case <-ticker.C:			m.mu.Unlock()			}				m.onResult.Invoke(string(resultJSON))				resultJSON, _ := json.Marshal(result)			if !m.onResult.IsUndefined() {			m.mu.Lock()		case result := <-m.resultChan:			return		case <-m.stopChan:		select {	for {	defer ticker.Stop()	ticker := time.NewTicker(1 * time.Second)func (m *WebMiner) handleResults() {// handleResults processes mining results and calls JavaScript callbacks}	return hex.EncodeToString(h.Sum(nil))	h.Write([]byte(input))	h := sha256.New()	input := args[0].String()	}		return ""	if len(args) < 1 {func sha256Hash(this js.Value, args []js.Value) interface{} {// sha256Hash computes SHA256 hash of input}	}		"hashRate": hashRate,		"hashes":   hashCount,		"found":    false,	return map[string]interface{}{	}		hashRate = int64(float64(hashCount) / elapsed)	if elapsed > 0 {	hashRate := int64(0)	elapsed := time.Since(startTime).Seconds()	}		}			}				"hashRate":  hashRate,				"hashes":    hashCount,				"hash":      hashStr,				"nonce":     nonce,				"found":     true,			return map[string]interface{}{			}				hashRate = int64(float64(hashCount) / elapsed)			if elapsed > 0 {			hashRate := int64(0)			elapsed := time.Since(startTime).Seconds()		if len(hashStr) >= difficulty && hashStr[:difficulty] == prefix {		// Check if meets difficulty		hashCount++		hashStr := hex.EncodeToString(hashed)		hashed := h.Sum(nil)		h.Write([]byte(record))		h := sha256.New()		// Compute SHA256			strconv.FormatInt(nonce, 10)			previousHash +			data +			strconv.FormatInt(timestamp, 10) +		record := strconv.FormatInt(blockIndex, 10) +		// Build block string	for nonce := startNonce; nonce < endNonce; nonce++ {	startTime := time.Now()	hashCount := int64(0)	}		prefix += "0"	for i := 0; i < difficulty; i++ {	prefix := ""	// Create difficulty prefix	}		endNonce = int64(args[6].Int())	if len(args) > 6 {	}		startNonce = int64(args[5].Int())	if len(args) > 5 {	endNonce := int64(1000000)	startNonce := int64(0)	difficulty := args[4].Int()	previousHash := args[3].String()	data := args[2].String()	timestamp := int64(args[1].Int())	blockIndex := int64(args[0].Int())	}		}			"error": "Required: blockIndex, timestamp, data, previousHash, difficulty, startNonce, endNonce",			"found": false,		return map[string]interface{}{	if len(args) < 5 {func mineNonceRange(this js.Value, args []js.Value) interface{} {// mineNonceRange mines a specific nonce range (for Web Workers)}	return true	miner.mu.Unlock()	miner.onStats = args[0]	miner.mu.Lock()	}		return false	if len(args) < 1 || args[0].Type() != js.TypeFunction {func onStats(this js.Value, args []js.Value) interface{} {// onStats registers a callback for stats updates}	return true	miner.mu.Unlock()	miner.onResult = args[0]	miner.mu.Lock()	}		return false	if len(args) < 1 || args[0].Type() != js.TypeFunction {func onResult(this js.Value, args []js.Value) interface{} {// onResult registers a callback for mining results}	return true	miner.mu.Unlock()	miner.throttle = args[0].Float()	miner.mu.Lock()	}		return false	if len(args) < 1 {func setThrottle(this js.Value, args []js.Value) interface{} {// setThrottle sets CPU throttle (0.0 - 1.0)}	return true	miner.mu.Unlock()	miner.threads = args[0].Int()	miner.mu.Lock()	}		return false	if len(args) < 1 {func setThreads(this js.Value, args []js.Value) interface{} {// setThreads sets the number of mining threads}	}		"currentNonce": miner.currentNonce,		"elapsedTime":  elapsed,		"throttle":     miner.throttle,		"threads":      miner.threads,		"isRunning":    miner.running,		"blocksFound":  miner.blocksFound,		"totalHashes":  miner.totalHashes,		"hashRate":     miner.hashRate,	return map[string]interface{}{	}		elapsed = int64(time.Since(miner.startTime).Seconds())	if miner.running {	elapsed := int64(0)	defer miner.mu.RUnlock()	miner.mu.RLock()func getStats(this js.Value, args []js.Value) interface{} {// getStats returns current mining statistics}	}		"message": "Work set",		"success": true,	return map[string]interface{}{	miner.mu.Unlock()	miner.currentNonce = 0	miner.currentWork = work	miner.mu.Lock()	}		Timestamp:    int64(workObj.Get("timestamp").Int()),		Difficulty:   workObj.Get("difficulty").Int(),		Data:         workObj.Get("data").String(),		PreviousHash: workObj.Get("previousHash").String(),		BlockIndex:   int64(workObj.Get("blockIndex").Int()),	work := &MiningWork{	workObj := args[0]	}		}			"error":   "Work object required",			"success": false,		return map[string]interface{}{	if len(args) < 1 {func setWork(this js.Value, args []js.Value) interface{} {// setWork sets the current mining work}	}		"blocksFound": miner.blocksFound,		"totalHashes": miner.totalHashes,		"message":     "Miner stopped",		"success":     true,	return map[string]interface{}{	close(miner.stopChan)	miner.running = false	}		}			"error":   "Miner not running",			"success": false,		return map[string]interface{}{	if !miner.running {	defer miner.mu.Unlock()	miner.mu.Lock()func stop(this js.Value, args []js.Value) interface{} {// stop halts mining}	}		"message": "Miner started",		"success": true,	return map[string]interface{}{	go miner.handleResults()	// Start result handler	miner.resultChan = make(chan MiningResult, 10)	miner.stopChan = make(chan struct{})	miner.startTime = time.Now()	miner.running = true	}		}			miner.throttle = throttle.Float()		if throttle := config.Get("throttle"); !throttle.IsUndefined() {		}			miner.threads = threads.Int()		if threads := config.Get("threads"); !threads.IsUndefined() {		config := args[0]	if len(args) > 0 && args[0].Type() == js.TypeObject {	// Parse configuration if provided	}		}			"error":   "Miner already running",			"success": false,		return map[string]interface{}{	if miner.running {	defer miner.mu.Unlock()	miner.mu.Lock()func start(this js.Value, args []js.Value) interface{} {// start begins mining with the given configuration}	return "RedTeamMiner WASM v1.0.0"func version(this js.Value, args []js.Value) interface{} {// version returns the miner version}	select {}	// Keep the Go program running	}))		"version":     js.FuncOf(version),		"sha256":      js.FuncOf(sha256Hash),		"mine":        js.FuncOf(mineNonceRange),		"onStats":     js.FuncOf(onStats),		"onResult":    js.FuncOf(onResult),		"setThrottle": js.FuncOf(setThrottle),		"setThreads":  js.FuncOf(setThreads),		"getStats":    js.FuncOf(getStats),		"setWork":     js.FuncOf(setWork),		"stop":        js.FuncOf(stop),		"start":       js.FuncOf(start),	js.Global().Set("RedTeamMiner", js.ValueOf(map[string]interface{}{	// Register JavaScript functions	}		throttle: 0.8,		threads:  4,	miner = &WebMiner{func main() {var miner *WebMiner}	currentNonce  int64	onStats       js.Value // JavaScript callback for stats updates	onResult      js.Value // JavaScript callback for results	resultChan    chan MiningResult	stopChan      chan struct{}	currentWork   *MiningWork	startTime     time.Time	blocksFound   int64	totalHashes   int64	hashRate      int64	throttle      float64 // 0.0 - 1.0, percentage of CPU to use	threads       int	running       bool	mu            sync.RWMutextype WebMiner struct {// WebMiner handles mining in the browser}	CurrentNonce  int64   `json:"currentNonce"`	ElapsedTime   int64   `json:"elapsedTime"`	Throttle      float64 `json:"throttle"`	Threads       int     `json:"threads"`	IsRunning     bool    `json:"isRunning"`	BlocksFound   int64   `json:"blocksFound"`	TotalHashes   int64   `json:"totalHashes"`	HashRate      int64   `json:"hashRate"`type MinerStats struct {// MinerStats holds current mining statistics}	HashRate   int64  `json:"hashRate"`	Hash       string `json:"hash"`	Nonce      int64  `json:"nonce"`	BlockIndex int64  `json:"blockIndex"`type MiningResult struct {// MiningResult represents a found solution}	Timestamp    int64  `json:"timestamp"`	Difficulty   int    `json:"difficulty"`	Data         string `json:"data"`	PreviousHash string `json:"previousHash"`	BlockIndex   int64  `json:"blockIndex"`type MiningWork struct {// MiningWork represents work from the pool)	"time"	"syscall/js"	"sync"	"strconv"	"encoding/json"	"encoding/hex"	"crypto/sha256"import (package main// +build js,wasm//go:build js && wasm
+//go:build js && wasm
+// +build js,wasm
+
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"strconv"
+	"sync"
+	"syscall/js"
+	"time"
+)
+
+// MiningWork represents work from the pool
+type MiningWork struct {
+	BlockIndex   int64  `json:"blockIndex"`
+	PreviousHash string `json:"previousHash"`
+	Data         string `json:"data"`
+	Difficulty   int    `json:"difficulty"`
+	Timestamp    int64  `json:"timestamp"`
+}
+
+// MinerStats holds current mining statistics
+type MinerStats struct {
+	HashRate     int64   `json:"hashRate"`
+	TotalHashes  int64   `json:"totalHashes"`
+	BlocksFound  int64   `json:"blocksFound"`
+	IsRunning    bool    `json:"isRunning"`
+	Threads      int     `json:"threads"`
+	Throttle     float64 `json:"throttle"`
+	ElapsedTime  int64   `json:"elapsedTime"`
+	CurrentNonce int64   `json:"currentNonce"`
+}
+
+// WebMiner handles mining in the browser
+type WebMiner struct {
+	mu           sync.RWMutex
+	running      bool
+	threads      int
+	throttle     float64
+	hashRate     int64
+	totalHashes  int64
+	blocksFound  int64
+	startTime    time.Time
+	currentWork  *MiningWork
+	stopChan     chan struct{}
+	onResult     js.Value
+	onStats      js.Value
+	currentNonce int64
+}
+
+var miner *WebMiner
+
+func main() {
+	miner = &WebMiner{
+		threads:  4,
+		throttle: 0.8,
+	}
+
+	// Register JavaScript functions
+	js.Global().Set("RedTeamMiner", js.ValueOf(map[string]interface{}{
+		"start":       js.FuncOf(start),
+		"stop":        js.FuncOf(stop),
+		"setWork":     js.FuncOf(setWork),
+		"getStats":    js.FuncOf(getStats),
+		"setThreads":  js.FuncOf(setThreads),
+		"setThrottle": js.FuncOf(setThrottle),
+		"onResult":    js.FuncOf(onResult),
+		"onStats":     js.FuncOf(onStats),
+		"mine":        js.FuncOf(mineNonceRange),
+		"sha256":      js.FuncOf(sha256Hash),
+		"version":     js.FuncOf(version),
+	}))
+
+	// Keep the Go program running
+	select {}
+}
+
+// version returns the miner version
+func version(this js.Value, args []js.Value) interface{} {
+	return "RedTeamMiner WASM v1.0.0"
+}
+
+// start begins mining with the given configuration
+func start(this js.Value, args []js.Value) interface{} {
+	miner.mu.Lock()
+	defer miner.mu.Unlock()
+
+	if miner.running {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "Miner already running",
+		}
+	}
+
+	// Parse configuration if provided
+	if len(args) > 0 && args[0].Type() == js.TypeObject {
+		config := args[0]
+		if threads := config.Get("threads"); !threads.IsUndefined() {
+			miner.threads = threads.Int()
+		}
+		if throttle := config.Get("throttle"); !throttle.IsUndefined() {
+			miner.throttle = throttle.Float()
+		}
+	}
+
+	miner.running = true
+	miner.startTime = time.Now()
+	miner.stopChan = make(chan struct{})
+
+	// Start stats reporter
+	go miner.reportStats()
+
+	return map[string]interface{}{
+		"success": true,
+		"message": "Miner started",
+	}
+}
+
+// stop halts mining
+func stop(this js.Value, args []js.Value) interface{} {
+	miner.mu.Lock()
+	defer miner.mu.Unlock()
+
+	if !miner.running {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "Miner not running",
+		}
+	}
+
+	miner.running = false
+	close(miner.stopChan)
+
+	return map[string]interface{}{
+		"success":     true,
+		"message":     "Miner stopped",
+		"totalHashes": miner.totalHashes,
+		"blocksFound": miner.blocksFound,
+	}
+}
+
+// setWork sets the current mining work
+func setWork(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "Work object required",
+		}
+	}
+
+	workObj := args[0]
+	work := &MiningWork{
+		BlockIndex:   int64(workObj.Get("blockIndex").Int()),
+		PreviousHash: workObj.Get("previousHash").String(),
+		Data:         workObj.Get("data").String(),
+		Difficulty:   workObj.Get("difficulty").Int(),
+		Timestamp:    int64(workObj.Get("timestamp").Int()),
+	}
+
+	miner.mu.Lock()
+	miner.currentWork = work
+	miner.currentNonce = 0
+	miner.mu.Unlock()
+
+	return map[string]interface{}{
+		"success": true,
+		"message": "Work set",
+	}
+}
+
+// getStats returns current mining statistics
+func getStats(this js.Value, args []js.Value) interface{} {
+	miner.mu.RLock()
+	defer miner.mu.RUnlock()
+
+	elapsed := int64(0)
+	if miner.running {
+		elapsed = int64(time.Since(miner.startTime).Seconds())
+	}
+
+	return map[string]interface{}{
+		"hashRate":     miner.hashRate,
+		"totalHashes":  miner.totalHashes,
+		"blocksFound":  miner.blocksFound,
+		"isRunning":    miner.running,
+		"threads":      miner.threads,
+		"throttle":     miner.throttle,
+		"elapsedTime":  elapsed,
+		"currentNonce": miner.currentNonce,
+	}
+}
+
+// setThreads sets the number of mining threads
+func setThreads(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return false
+	}
+	miner.mu.Lock()
+	miner.threads = args[0].Int()
+	miner.mu.Unlock()
+	return true
+}
+
+// setThrottle sets CPU throttle (0.0 - 1.0)
+func setThrottle(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return false
+	}
+	miner.mu.Lock()
+	miner.throttle = args[0].Float()
+	miner.mu.Unlock()
+	return true
+}
+
+// onResult registers a callback for mining results
+func onResult(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 || args[0].Type() != js.TypeFunction {
+		return false
+	}
+	miner.mu.Lock()
+	miner.onResult = args[0]
+	miner.mu.Unlock()
+	return true
+}
+
+// onStats registers a callback for stats updates
+func onStats(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 || args[0].Type() != js.TypeFunction {
+		return false
+	}
+	miner.mu.Lock()
+	miner.onStats = args[0]
+	miner.mu.Unlock()
+	return true
+}
+
+// mineNonceRange mines a specific nonce range (called from Web Workers)
+func mineNonceRange(this js.Value, args []js.Value) interface{} {
+	if len(args) < 5 {
+		return map[string]interface{}{
+			"found": false,
+			"error": "Required: blockIndex, timestamp, data, previousHash, difficulty",
+		}
+	}
+
+	blockIndex := int64(args[0].Int())
+	timestamp := int64(args[1].Int())
+	data := args[2].String()
+	previousHash := args[3].String()
+	difficulty := args[4].Int()
+	startNonce := int64(0)
+	endNonce := int64(1000000)
+
+	if len(args) > 5 {
+		startNonce = int64(args[5].Int())
+	}
+	if len(args) > 6 {
+		endNonce = int64(args[6].Int())
+	}
+
+	// Create difficulty prefix
+	prefix := ""
+	for i := 0; i < difficulty; i++ {
+		prefix += "0"
+	}
+
+	hashCount := int64(0)
+	startTime := time.Now()
+
+	for nonce := startNonce; nonce < endNonce; nonce++ {
+		// Build block string
+		record := strconv.FormatInt(blockIndex, 10) +
+			strconv.FormatInt(timestamp, 10) +
+			data +
+			previousHash +
+			strconv.FormatInt(nonce, 10)
+
+		// Compute SHA256
+		h := sha256.New()
+		h.Write([]byte(record))
+		hashed := h.Sum(nil)
+		hashStr := hex.EncodeToString(hashed)
+
+		hashCount++
+
+		// Update miner stats
+		miner.mu.Lock()
+		miner.totalHashes++
+		miner.currentNonce = nonce
+		miner.mu.Unlock()
+
+		// Check if meets difficulty
+		if len(hashStr) >= difficulty && hashStr[:difficulty] == prefix {
+			elapsed := time.Since(startTime).Seconds()
+			hashRate := int64(0)
+			if elapsed > 0 {
+				hashRate = int64(float64(hashCount) / elapsed)
+			}
+
+			miner.mu.Lock()
+			miner.blocksFound++
+			miner.hashRate = hashRate
+			miner.mu.Unlock()
+
+			return map[string]interface{}{
+				"found":    true,
+				"nonce":    nonce,
+				"hash":     hashStr,
+				"hashes":   hashCount,
+				"hashRate": hashRate,
+			}
+		}
+	}
+
+	elapsed := time.Since(startTime).Seconds()
+	hashRate := int64(0)
+	if elapsed > 0 {
+		hashRate = int64(float64(hashCount) / elapsed)
+	}
+
+	miner.mu.Lock()
+	miner.hashRate = hashRate
+	miner.mu.Unlock()
+
+	return map[string]interface{}{
+		"found":    false,
+		"hashes":   hashCount,
+		"hashRate": hashRate,
+	}
+}
+
+// sha256Hash computes SHA256 hash of input
+func sha256Hash(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return ""
+	}
+	input := args[0].String()
+	h := sha256.New()
+	h.Write([]byte(input))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// reportStats periodically reports stats to JavaScript callback
+func (m *WebMiner) reportStats() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.stopChan:
+			return
+		case <-ticker.C:
+			m.mu.RLock()
+			if !m.onStats.IsUndefined() && m.onStats.Type() == js.TypeFunction {
+				stats := MinerStats{
+					HashRate:     m.hashRate,
+					TotalHashes:  m.totalHashes,
+					BlocksFound:  m.blocksFound,
+					IsRunning:    m.running,
+					Threads:      m.threads,
+					Throttle:     m.throttle,
+					ElapsedTime:  int64(time.Since(m.startTime).Seconds()),
+					CurrentNonce: m.currentNonce,
+				}
+				statsJSON, _ := json.Marshal(stats)
+				m.onStats.Invoke(string(statsJSON))
+			}
+			m.mu.RUnlock()
+		}
+	}
+}

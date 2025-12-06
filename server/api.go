@@ -16,10 +16,14 @@ type APIServer struct {
 	useTLS     bool
 	certFile   string
 	keyFile    string
+	wsHub      *WebSocketHub
 }
 
 // NewAPIServer creates a new API server
 func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
+	wsHub := NewWebSocketHub(pool)
+	go wsHub.Run()
+
 	return &APIServer{
 		pool:       pool,
 		blockchain: blockchain,
@@ -27,6 +31,7 @@ func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, us
 		useTLS:     useTLS,
 		certFile:   certFile,
 		keyFile:    keyFile,
+		wsHub:      wsHub,
 	}
 }
 
@@ -111,6 +116,9 @@ func (api *APIServer) Start(port int, httpPort int) error {
 	mux.HandleFunc("/api/miner/resume", api.authMiddleware(api.handleResumeMiner))
 	mux.HandleFunc("/api/miner/delete", api.authMiddleware(api.handleDeleteMiner))
 	mux.HandleFunc("/api/miner/throttle", api.authMiddleware(api.handleThrottleMiner))
+
+	// WebSocket endpoint for web miners (no auth required)
+	mux.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
 	// Public endpoint - no authentication required
 	mux.HandleFunc("/", api.handleIndex)

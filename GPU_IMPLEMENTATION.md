@@ -2,8 +2,9 @@
 
 ## Overview
 
-This project now includes complete GPU mining support for NVIDIA CUDA and OpenCL-compatible devices
-(AMD, Intel, etc.). The implementation includes:
+This project includes complete GPU mining support for NVIDIA CUDA and OpenCL-compatible devices (AMD, Intel, etc.). 
+
+The implementation includes:
 
 - **CUDA Kernel** (`client/mine.cu`) - Full SHA256 implementation on NVIDIA GPUs
 - **OpenCL Kernel** (`client/mine.cl`) - Cross-platform GPU support

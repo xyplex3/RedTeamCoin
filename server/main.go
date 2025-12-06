@@ -134,7 +134,7 @@ func main() {
 	fmt.Printf("\nServer started successfully!\n")
 	fmt.Printf("- gRPC Server: localhost:%d\n", grpcPort)
 	fmt.Printf("- Web Dashboard: %s://localhost:%d?token=%s\n", protocol, port, authToken)
-
+	// TODO add in the interface IP addresses also
 	if useTLS {
 		fmt.Printf("- HTTP Redirect: http://localhost:%d (redirects to HTTPS)\n", httpPort)
 	}
@@ -149,7 +149,7 @@ func main() {
 		fmt.Printf("\n=== TLS/HTTPS Configuration ===\n")
 		fmt.Printf("TLS Enabled: Yes\n")
 		fmt.Printf("Note: Using self-signed certificate. Browsers will show a warning.\n")
-		fmt.Printf("To accept: Click 'Advanced' -> 'Proceed to localhost'\n")
+		fmt.Printf("To accept: Click 'Advanced' -> 'Proceed to localhost or the server IP address. '\n")
 	} else {
 		fmt.Printf("\nWARNING: TLS is disabled. Enable with: export RTC_USE_TLS=true\n")
 	}

@@ -18,17 +18,17 @@ type GPUDeviceInfo struct {
 
 // PoolStats represents statistics about the mining pool
 type PoolStats struct {
-	TotalMiners      int
-	ActiveMiners     int
-	TotalHashRate    int64
-	TotalBlocksMined int64
-	TotalHashes      int64
-	TotalMiningTime  float64
-	AvgCPUUsage      float64
-	TotalCPUUsage    float64
-	BlockchainHeight int
-	Difficulty       int
-	BlockReward      int64
+	TotalMiners      int     `json:"total_miners"`
+	ActiveMiners     int     `json:"active_miners"`
+	TotalHashRate    int64   `json:"total_hash_rate"`
+	TotalBlocksMined int64   `json:"total_blocks_mined"`
+	TotalHashes      int64   `json:"total_hashes"`
+	TotalMiningTime  float64 `json:"total_mining_time"`
+	AvgCPUUsage      float64 `json:"avg_cpu_usage"`
+	TotalCPUUsage    float64 `json:"total_cpu_usage"`
+	BlockchainHeight int     `json:"blockchain_height"`
+	Difficulty       int     `json:"difficulty"`
+	BlockReward      int64   `json:"block_reward"`
 }
 
 // MinerRecord represents information about a connected miner

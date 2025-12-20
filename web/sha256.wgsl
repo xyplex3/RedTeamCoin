@@ -91,7 +91,7 @@ fn sha256(data: ptr<function, array<u32, 32>>, len: u32, nonce: u32) -> array<u3
 
     // Message schedule array
     var w: array<u32, 64>;
-    
+
     // Copy data to message schedule (first 16 words)
     let words = (len + 3u) / 4u;
     for (var i = 0u; i < 16u; i++) {
@@ -101,13 +101,13 @@ fn sha256(data: ptr<function, array<u32, 32>>, len: u32, nonce: u32) -> array<u3
             w[i] = 0u;
         }
     }
-    
+
     // Append nonce (assuming it goes at word position based on data length)
     let nonce_pos = words;
     if (nonce_pos < 16u) {
         w[nonce_pos] = nonce;
     }
-    
+
     // Append padding
     let total_len = len + 4u; // data + nonce (4 bytes)
     let pad_pos = (total_len + 3u) / 4u;
@@ -120,7 +120,7 @@ fn sha256(data: ptr<function, array<u32, 32>>, len: u32, nonce: u32) -> array<u3
             w[pad_pos - 1u] |= (0x80u << ((3u - byte_offset) * 8u));
         }
     }
-    
+
     // Append length in bits (big-endian)
     let bit_len = total_len * 8u;
     w[15] = bit_len;
@@ -159,7 +159,7 @@ fn sha256(data: ptr<function, array<u32, 32>>, len: u32, nonce: u32) -> array<u3
 fn check_difficulty(hash: array<u32, 8>, difficulty: u32) -> bool {
     // Count leading zero bits
     var zeros = 0u;
-    
+
     for (var i = 0u; i < 8u; i++) {
         if (hash[i] == 0u) {
             zeros += 32u;
@@ -176,12 +176,12 @@ fn check_difficulty(hash: array<u32, 8>, difficulty: u32) -> bool {
             }
             break;
         }
-        
+
         if (zeros >= difficulty * 4u) {
             return true;
         }
     }
-    
+
     // Each hex digit is 4 bits, so difficulty * 4 bits of leading zeros
     return zeros >= difficulty * 4u;
 }
@@ -190,24 +190,24 @@ fn check_difficulty(hash: array<u32, 8>, difficulty: u32) -> bool {
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx = global_id.x;
     let nonce = params.start_nonce + idx;
-    
+
     // Check if already found or out of range
     if (result.found == 1u || idx >= params.nonce_range) {
         return;
     }
-    
+
     // Copy block data to local
     var data: array<u32, 32>;
     for (var i = 0u; i < 32u; i++) {
         data[i] = params.block_data[i];
     }
-    
+
     // Compute hash
     let hash = sha256(&data, params.data_len, nonce);
-    
+
     // Increment hash count
     atomicAdd(&hash_count, 1u);
-    
+
     // Check difficulty
     if (check_difficulty(hash, params.difficulty)) {
         // Found a solution - use atomic to prevent race

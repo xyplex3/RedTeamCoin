@@ -67,7 +67,7 @@
                 try {
                     this.log(`Connecting to ${poolUrl}...`);
                     this.ws = new WebSocket(poolUrl);
-                    
+
                     this.ws.onopen = () => {
                         this.log('Connected to pool', 'success');
                         this.stats.connected = true;
@@ -142,7 +142,7 @@
          */
         handlePoolMessage(message) {
             this.log(`Pool message: ${message.type}`);
-            
+
             switch (message.type) {
                 case 'registered':
                     this.log('Registered with pool, requesting work...');
@@ -220,7 +220,7 @@
          */
         stop() {
             this.stats.isRunning = false;
-            
+
             // Stop workers
             this.workers.forEach(worker => {
                 worker.postMessage({ type: 'stop' });
@@ -243,7 +243,7 @@
         createWorkers() {
             this.workers = [];
             this.pendingWorkers = this.config.threads;
-            
+
             // Get base URL for worker script
             const scripts = document.getElementsByTagName('script');
             let baseUrl = '';
@@ -261,15 +261,15 @@
                 try {
                     const worker = new Worker(baseUrl + 'worker.js');
                     worker.workerId = i;
-                    
+
                     worker.onmessage = (e) => this.handleWorkerMessage(e.data, i);
                     worker.onerror = (e) => {
                         this.log(`Worker ${i} error: ${e.message}`, 'error');
                     };
-                    
+
                     // Initialize worker
                     worker.postMessage({ type: 'init' });
-                    
+
                     this.workers.push(worker);
                 } catch (e) {
                     this.log(`Failed to create worker ${i}: ${e.message}`, 'error');
@@ -320,7 +320,7 @@
                 this.log('No work available');
                 return;
             }
-            
+
             this.currentNonce = 0;
             this.log(`Starting mining on block ${this.currentWork.blockIndex}...`);
             this.workers.forEach((_, i) => this.assignWork(i));
@@ -370,7 +370,7 @@
                     this.callbacks.onFound(result);
                 }
             }
-            
+
             // Request new work
             if (this.stats.connected) {
                 this.requestWork();
@@ -387,7 +387,7 @@
                 totalHashRate += this.workerHashRates[id];
             }
             this.stats.hashRate = totalHashRate;
-            
+
             // Calculate uptime
             if (this.startTime) {
                 this.stats.uptime = Math.floor((Date.now() - this.startTime) / 1000);

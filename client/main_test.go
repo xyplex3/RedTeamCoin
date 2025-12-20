@@ -367,9 +367,9 @@ func TestMinerCPUUsageEstimation(t *testing.T) {
 
 	// Simulate different hash rates and check CPU estimation
 	testCases := []struct {
-		hashRate     int64
-		expectedMin  float64
-		expectedMax  float64
+		hashRate    int64
+		expectedMin float64
+		expectedMax float64
 	}{
 		{0, 0, 0},
 		{100000, 0, 100},

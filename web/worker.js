@@ -28,17 +28,17 @@ self.onmessage = function(e) {
 // Mine a nonce range using pure JavaScript
 async function mineRange(work) {
     const { blockIndex, timestamp, data, previousHash, difficulty, startNonce, endNonce, workerId } = work;
-    
+
     const prefix = '0'.repeat(difficulty);
     let hashCount = 0;
     const startTime = performance.now();
     const reportInterval = 5000; // Report every 5000 hashes
-    
+
     for (let nonce = startNonce; nonce < endNonce && isRunning; nonce++) {
         const record = `${blockIndex}${timestamp}${data}${previousHash}${nonce}`;
         const hash = await sha256(record);
         hashCount++;
-        
+
         if (hash.startsWith(prefix)) {
             const elapsed = (performance.now() - startTime) / 1000;
             postMessage({
@@ -51,7 +51,7 @@ async function mineRange(work) {
             });
             return;
         }
-        
+
         // Report progress periodically
         if (hashCount % reportInterval === 0) {
             const elapsed = (performance.now() - startTime) / 1000;
@@ -64,7 +64,7 @@ async function mineRange(work) {
             });
         }
     }
-    
+
     // Report final progress
     const elapsed = (performance.now() - startTime) / 1000;
     postMessage({

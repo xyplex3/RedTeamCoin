@@ -327,17 +327,17 @@
         </div>
 
         <footer class="footer">
-            <p>RedTeamCoin Web Miner v1.0.0 | 
+            <p>RedTeamCoin Web Miner v1.0.0 |
             <a href="https://github.com/xyplex3/RedTeamCoin" target="_blank">GitHub</a></p>
         </footer>
     </div>
 
     <!-- Load Go WASM support -->
     <script src="wasm_exec.js"></script>
-    
+
     <!-- Load miner -->
     <script src="miner.js"></script>
-    
+
     <script>
         let isMining = false;
 
@@ -350,7 +350,7 @@
             const wsPort = 8080; // Pool WebSocket port
             const autoPoolUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws`;
             document.getElementById('poolUrl').value = autoPoolUrl;
-            
+
             // Update UI controls
             document.getElementById('threads').addEventListener('input', (e) => {
                 document.getElementById('threadCount').textContent = e.target.value;
@@ -384,7 +384,7 @@
 
         async function toggleMining() {
             const btn = document.getElementById('startBtn');
-            
+
             if (!isMining) {
                 // Start mining
                 const poolUrl = document.getElementById('poolUrl').value;
@@ -436,7 +436,7 @@
                 difficulty: 4,
                 timestamp: Date.now()
             };
-            
+
             // Simulate receiving work
             if (typeof RedTeamMiner !== 'undefined' && RedTeamMiner.currentWork === null) {
                 RedTeamMiner.currentWork = demoWork;
@@ -453,7 +453,7 @@
         function updateStatus(status) {
             const indicator = document.getElementById('statusIndicator');
             indicator.className = 'status-indicator';
-            
+
             switch (status) {
                 case 'online':
                     indicator.classList.add('status-online');
@@ -470,10 +470,10 @@
             const container = document.getElementById('logContainer');
             const entry = document.createElement('div');
             entry.className = `log-entry log-${type}`;
-            
+
             const time = new Date().toLocaleTimeString();
             entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
-            
+
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;
         }

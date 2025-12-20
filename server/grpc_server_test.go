@@ -257,15 +257,15 @@ func TestHeartbeat(t *testing.T) {
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
 
 	req := &pb.MinerStatus{
-		MinerId:            minerID,
-		HashRate:           1000000,
-		CpuUsagePercent:    75.5,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         []*pb.GPUDevice{},
-		GpuHashRate:        0,
-		GpuEnabled:         false,
-		HybridMode:         false,
+		MinerId:           minerID,
+		HashRate:          1000000,
+		CpuUsagePercent:   75.5,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        []*pb.GPUDevice{},
+		GpuHashRate:       0,
+		GpuEnabled:        false,
+		HybridMode:        false,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)
@@ -306,15 +306,15 @@ func TestHeartbeatWithGPU(t *testing.T) {
 	}
 
 	req := &pb.MinerStatus{
-		MinerId:            minerID,
-		HashRate:           1000000,
-		CpuUsagePercent:    50.0,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         gpuDevices,
-		GpuHashRate:        5000000,
-		GpuEnabled:         true,
-		HybridMode:         true,
+		MinerId:           minerID,
+		HashRate:          1000000,
+		CpuUsagePercent:   50.0,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        gpuDevices,
+		GpuHashRate:       5000000,
+		GpuEnabled:        true,
+		HybridMode:        true,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)
@@ -350,15 +350,15 @@ func TestHeartbeatUnregisteredMiner(t *testing.T) {
 	server := NewMiningPoolServer(pool)
 
 	req := &pb.MinerStatus{
-		MinerId:            "unregistered-miner",
-		HashRate:           1000000,
-		CpuUsagePercent:    75.5,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         []*pb.GPUDevice{},
-		GpuHashRate:        0,
-		GpuEnabled:         false,
-		HybridMode:         false,
+		MinerId:           "unregistered-miner",
+		HashRate:          1000000,
+		CpuUsagePercent:   75.5,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        []*pb.GPUDevice{},
+		GpuHashRate:       0,
+		GpuEnabled:        false,
+		HybridMode:        false,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)
@@ -385,15 +385,15 @@ func TestHeartbeatPausedMiner(t *testing.T) {
 	pool.PauseMiner(minerID)
 
 	req := &pb.MinerStatus{
-		MinerId:            minerID,
-		HashRate:           1000000,
-		CpuUsagePercent:    75.5,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         []*pb.GPUDevice{},
-		GpuHashRate:        0,
-		GpuEnabled:         false,
-		HybridMode:         false,
+		MinerId:           minerID,
+		HashRate:          1000000,
+		CpuUsagePercent:   75.5,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        []*pb.GPUDevice{},
+		GpuHashRate:       0,
+		GpuEnabled:        false,
+		HybridMode:        false,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)
@@ -420,15 +420,15 @@ func TestHeartbeatThrottledMiner(t *testing.T) {
 	pool.SetCPUThrottle(minerID, 50)
 
 	req := &pb.MinerStatus{
-		MinerId:            minerID,
-		HashRate:           1000000,
-		CpuUsagePercent:    75.5,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         []*pb.GPUDevice{},
-		GpuHashRate:        0,
-		GpuEnabled:         false,
-		HybridMode:         false,
+		MinerId:           minerID,
+		HashRate:          1000000,
+		CpuUsagePercent:   75.5,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        []*pb.GPUDevice{},
+		GpuHashRate:       0,
+		GpuEnabled:        false,
+		HybridMode:        false,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)
@@ -451,15 +451,15 @@ func TestHeartbeatDeletedMiner(t *testing.T) {
 	pool.DeleteMiner(minerID)
 
 	req := &pb.MinerStatus{
-		MinerId:            minerID,
-		HashRate:           1000000,
-		CpuUsagePercent:    75.5,
-		TotalHashes:        5000000,
-		MiningTimeSeconds:  30,
-		GpuDevices:         []*pb.GPUDevice{},
-		GpuHashRate:        0,
-		GpuEnabled:         false,
-		HybridMode:         false,
+		MinerId:           minerID,
+		HashRate:          1000000,
+		CpuUsagePercent:   75.5,
+		TotalHashes:       5000000,
+		MiningTimeSeconds: 30,
+		GpuDevices:        []*pb.GPUDevice{},
+		GpuHashRate:       0,
+		GpuEnabled:        false,
+		HybridMode:        false,
 	}
 
 	resp, err := server.Heartbeat(context.Background(), req)

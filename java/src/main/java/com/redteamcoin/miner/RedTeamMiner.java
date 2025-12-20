@@ -17,10 +17,10 @@ import java.awt.event.*;
  * Can be run as a JAR file or embedded in applications
  */
 public class RedTeamMiner {
-    
+
     private static final String VERSION = "1.0.0";
     private static final int DEFAULT_THREADS = Runtime.getRuntime().availableProcessors();
-    
+
     private String poolUrl;
     private int threads;
     private double throttle;
@@ -35,7 +35,7 @@ public class RedTeamMiner {
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
-    
+
     public RedTeamMiner() {
         this.threads = DEFAULT_THREADS;
         this.throttle = 0.8;
@@ -43,7 +43,7 @@ public class RedTeamMiner {
         this.totalHashes = new AtomicLong(0);
         this.blocksFound = new AtomicLong(0);
     }
-    
+
     /**
      * Set the pool URL (format: host:port)
      */
@@ -51,7 +51,7 @@ public class RedTeamMiner {
         this.poolUrl = url;
         return this;
     }
-    
+
     /**
      * Set number of mining threads
      */
@@ -59,7 +59,7 @@ public class RedTeamMiner {
         this.threads = Math.max(1, Math.min(threads, 64));
         return this;
     }
-    
+
     /**
      * Set CPU throttle (0.0 - 1.0)
      */
@@ -67,7 +67,7 @@ public class RedTeamMiner {
         this.throttle = Math.max(0.1, Math.min(throttle, 1.0));
         return this;
     }
-    
+
     /**
      * Set callback for mining events
      */
@@ -75,7 +75,7 @@ public class RedTeamMiner {
         this.callback = callback;
         return this;
     }
-    
+
     /**
      * Connect to the mining pool
      */
@@ -83,44 +83,44 @@ public class RedTeamMiner {
         if (poolUrl == null || poolUrl.isEmpty()) {
             throw new IllegalStateException("Pool URL not set");
         }
-        
+
         String[] parts = poolUrl.replace("ws://", "").replace("wss://", "").split(":");
         String host = parts[0];
         int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 50051;
-        
+
         socket = new Socket(host, port);
         out = new PrintWriter(socket.getOutputStream(), true);
         in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        
+
         // Register with pool
         sendMessage("{\"type\":\"register\",\"minerId\":\"java-" + System.currentTimeMillis() + "\",\"threads\":" + threads + "}");
-        
+
         // Start listening for messages
         new Thread(this::listenForMessages).start();
-        
+
         log("Connected to pool: " + poolUrl);
         return true;
     }
-    
+
     /**
      * Start mining
      */
     public void start() {
         if (running) return;
-        
+
         running = true;
         startTime = System.currentTimeMillis();
         executor = Executors.newFixedThreadPool(threads);
-        
+
         log("Mining started with " + threads + " threads");
-        
+
         // Request work
         requestWork();
-        
+
         // Start hash rate calculator
         new Thread(this::calculateHashRate).start();
     }
-    
+
     /**
      * Stop mining
      */
@@ -131,13 +131,13 @@ public class RedTeamMiner {
         }
         log("Mining stopped. Total hashes: " + totalHashes.get());
     }
-    
+
     /**
      * Main mining loop for each thread
      */
     private void mineWork(long startNonce, long nonceRange) {
         if (currentWork == null) return;
-        
+
         String prefix = "0".repeat(currentWork.difficulty);
         MessageDigest digest;
         try {
@@ -146,10 +146,10 @@ public class RedTeamMiner {
             log("SHA-256 not available!");
             return;
         }
-        
+
         long localHashes = 0;
         long endNonce = startNonce + nonceRange;
-        
+
         for (long nonce = startNonce; nonce < endNonce && running; nonce++) {
             // Apply throttle
             if (throttle < 1.0 && localHashes % 1000 == 0) {
@@ -159,49 +159,49 @@ public class RedTeamMiner {
                     break;
                 }
             }
-            
-            String record = currentWork.blockIndex + "" + 
-                           currentWork.timestamp + 
-                           currentWork.data + 
-                           currentWork.previousHash + 
+
+            String record = currentWork.blockIndex + "" +
+                           currentWork.timestamp +
+                           currentWork.data +
+                           currentWork.previousHash +
                            nonce;
-            
+
             byte[] hash = digest.digest(record.getBytes(StandardCharsets.UTF_8));
             String hashStr = bytesToHex(hash);
-            
+
             localHashes++;
             totalHashes.incrementAndGet();
-            
+
             if (hashStr.startsWith(prefix)) {
                 // Found a valid hash!
                 blocksFound.incrementAndGet();
                 submitWork(nonce, hashStr);
                 log("Block found! Nonce: " + nonce + ", Hash: " + hashStr);
-                
+
                 if (callback != null) {
                     callback.onBlockFound(nonce, hashStr);
                 }
-                
+
                 requestWork();
                 return;
             }
-            
+
             digest.reset();
         }
-        
+
         // Request more work when done with range
         if (running) {
             requestWork();
         }
     }
-    
+
     /**
      * Request new work from pool
      */
     private void requestWork() {
         sendMessage("{\"type\":\"getwork\"}");
     }
-    
+
     /**
      * Submit found work to pool
      */
@@ -212,7 +212,7 @@ public class RedTeamMiner {
         );
         sendMessage(msg);
     }
-    
+
     /**
      * Send message to pool
      */
@@ -221,7 +221,7 @@ public class RedTeamMiner {
             out.println(msg);
         }
     }
-    
+
     /**
      * Listen for messages from pool
      */
@@ -235,7 +235,7 @@ public class RedTeamMiner {
             log("Connection error: " + e.getMessage());
         }
     }
-    
+
     /**
      * Handle incoming message from pool
      */
@@ -246,7 +246,7 @@ public class RedTeamMiner {
             try {
                 currentWork = parseWork(message);
                 log("Received new work: block " + currentWork.blockIndex);
-                
+
                 // Distribute work across threads
                 long noncePerThread = 1000000;
                 for (int i = 0; i < threads; i++) {
@@ -263,7 +263,7 @@ public class RedTeamMiner {
             }
         }
     }
-    
+
     /**
      * Parse work from JSON message
      */
@@ -277,20 +277,20 @@ public class RedTeamMiner {
         work.timestamp = extractLong(json, "timestamp");
         return work;
     }
-    
+
     private long extractLong(String json, String key) {
         int start = json.indexOf("\"" + key + "\":") + key.length() + 3;
         int end = json.indexOf(",", start);
         if (end == -1) end = json.indexOf("}", start);
         return Long.parseLong(json.substring(start, end).trim());
     }
-    
+
     private String extractString(String json, String key) {
         int start = json.indexOf("\"" + key + "\":\"") + key.length() + 4;
         int end = json.indexOf("\"", start);
         return json.substring(start, end);
     }
-    
+
     /**
      * Calculate and update hash rate
      */
@@ -302,17 +302,17 @@ public class RedTeamMiner {
             } catch (InterruptedException e) {
                 break;
             }
-            
+
             long currentHashes = totalHashes.get();
             hashRate.set(currentHashes - lastHashes);
             lastHashes = currentHashes;
-            
+
             if (callback != null) {
                 callback.onStatsUpdate(getStats());
             }
         }
     }
-    
+
     /**
      * Get current mining stats
      */
@@ -326,7 +326,7 @@ public class RedTeamMiner {
         stats.isRunning = running;
         return stats;
     }
-    
+
     /**
      * Convert bytes to hex string
      */
@@ -337,7 +337,7 @@ public class RedTeamMiner {
         }
         return sb.toString();
     }
-    
+
     /**
      * Log message
      */
@@ -347,21 +347,21 @@ public class RedTeamMiner {
             callback.onLog(message);
         }
     }
-    
+
     /**
      * Main entry point
      */
     public static void main(String[] args) {
         // Check for GUI mode
         boolean guiMode = args.length == 0 || contains(args, "--gui");
-        
+
         if (guiMode) {
             SwingUtilities.invokeLater(() -> new MinerGUI().setVisible(true));
         } else {
             // CLI mode
             String pool = getArg(args, "--pool", "localhost:50051");
             int threads = Integer.parseInt(getArg(args, "--threads", String.valueOf(DEFAULT_THREADS)));
-            
+
             RedTeamMiner miner = new RedTeamMiner()
                 .setPool(pool)
                 .setThreads(threads)
@@ -370,28 +370,28 @@ public class RedTeamMiner {
                     public void onBlockFound(long nonce, String hash) {
                         System.out.println("BLOCK FOUND! Nonce: " + nonce);
                     }
-                    
+
                     @Override
                     public void onBlockAccepted() {
                         System.out.println("Block accepted!");
                     }
-                    
+
                     @Override
                     public void onStatsUpdate(MinerStats stats) {
                         System.out.printf("Hash Rate: %d H/s | Total: %d | Blocks: %d%n",
                             stats.hashRate, stats.totalHashes, stats.blocksFound);
                     }
-                    
+
                     @Override
                     public void onLog(String message) {
                         // Already printed
                     }
                 });
-            
+
             try {
                 miner.connect();
                 miner.start();
-                
+
                 // Keep running
                 Runtime.getRuntime().addShutdownHook(new Thread(miner::stop));
                 Thread.currentThread().join();
@@ -401,14 +401,14 @@ public class RedTeamMiner {
             }
         }
     }
-    
+
     private static boolean contains(String[] args, String key) {
         for (String arg : args) {
             if (arg.equals(key)) return true;
         }
         return false;
     }
-    
+
     private static String getArg(String[] args, String key, String defaultValue) {
         for (int i = 0; i < args.length - 1; i++) {
             if (args[i].equals(key)) {
@@ -417,9 +417,9 @@ public class RedTeamMiner {
         }
         return defaultValue;
     }
-    
+
     // Inner classes
-    
+
     public static class MiningWork {
         public long blockIndex;
         public String previousHash;
@@ -427,7 +427,7 @@ public class RedTeamMiner {
         public int difficulty;
         public long timestamp;
     }
-    
+
     public static class MinerStats {
         public long hashRate;
         public long totalHashes;
@@ -436,7 +436,7 @@ public class RedTeamMiner {
         public int threads;
         public boolean isRunning;
     }
-    
+
     public interface MinerCallback {
         void onBlockFound(long nonce, String hash);
         void onBlockAccepted();
@@ -457,60 +457,60 @@ class MinerGUI extends JFrame {
     private JLabel totalHashesLabel;
     private JLabel blocksLabel;
     private JTextArea logArea;
-    
+
     public MinerGUI() {
         setTitle("RedTeamCoin Miner v1.0.0");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(600, 500);
         setLocationRelativeTo(null);
-        
+
         miner = new RedTeamMiner();
-        
+
         initUI();
     }
-    
+
     private void initUI() {
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        
+
         // Config panel
         JPanel configPanel = new JPanel(new GridLayout(3, 2, 5, 5));
         configPanel.setBorder(BorderFactory.createTitledBorder("Configuration"));
-        
+
         configPanel.add(new JLabel("Pool Server:"));
         poolField = new JTextField("localhost:50051");
         configPanel.add(poolField);
-        
+
         configPanel.add(new JLabel("Threads:"));
         threadsSpinner = new JSpinner(new SpinnerNumberModel(
             Runtime.getRuntime().availableProcessors(), 1, 64, 1));
         configPanel.add(threadsSpinner);
-        
+
         configPanel.add(new JLabel(""));
         startButton = new JButton("Start Mining");
         startButton.addActionListener(e -> toggleMining());
         configPanel.add(startButton);
-        
+
         mainPanel.add(configPanel, BorderLayout.NORTH);
-        
+
         // Stats panel
         JPanel statsPanel = new JPanel(new GridLayout(1, 3, 10, 0));
         statsPanel.setBorder(BorderFactory.createTitledBorder("Statistics"));
-        
+
         hashRateLabel = new JLabel("0 H/s", SwingConstants.CENTER);
         hashRateLabel.setFont(new Font("Arial", Font.BOLD, 18));
         statsPanel.add(createStatPanel("Hash Rate", hashRateLabel));
-        
+
         totalHashesLabel = new JLabel("0", SwingConstants.CENTER);
         totalHashesLabel.setFont(new Font("Arial", Font.BOLD, 18));
         statsPanel.add(createStatPanel("Total Hashes", totalHashesLabel));
-        
+
         blocksLabel = new JLabel("0", SwingConstants.CENTER);
         blocksLabel.setFont(new Font("Arial", Font.BOLD, 18));
         statsPanel.add(createStatPanel("Blocks Found", blocksLabel));
-        
+
         mainPanel.add(statsPanel, BorderLayout.CENTER);
-        
+
         // Log panel
         logArea = new JTextArea();
         logArea.setEditable(false);
@@ -518,19 +518,19 @@ class MinerGUI extends JFrame {
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setBorder(BorderFactory.createTitledBorder("Log"));
         scrollPane.setPreferredSize(new Dimension(0, 150));
-        
+
         mainPanel.add(scrollPane, BorderLayout.SOUTH);
-        
+
         add(mainPanel);
     }
-    
+
     private JPanel createStatPanel(String title, JLabel valueLabel) {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(new JLabel(title, SwingConstants.CENTER), BorderLayout.NORTH);
         panel.add(valueLabel, BorderLayout.CENTER);
         return panel;
     }
-    
+
     private void toggleMining() {
         if (!miner.getStats().isRunning) {
             // Start mining
@@ -543,14 +543,14 @@ class MinerGUI extends JFrame {
                              logArea.append("BLOCK FOUND! Nonce: " + nonce + "\n");
                          });
                      }
-                     
+
                      @Override
                      public void onBlockAccepted() {
                          SwingUtilities.invokeLater(() -> {
                              logArea.append("Block accepted by pool!\n");
                          });
                      }
-                     
+
                      @Override
                      public void onStatsUpdate(RedTeamMiner.MinerStats stats) {
                          SwingUtilities.invokeLater(() -> {
@@ -559,7 +559,7 @@ class MinerGUI extends JFrame {
                              blocksLabel.setText(String.valueOf(stats.blocksFound));
                          });
                      }
-                     
+
                      @Override
                      public void onLog(String message) {
                          SwingUtilities.invokeLater(() -> {
@@ -568,7 +568,7 @@ class MinerGUI extends JFrame {
                          });
                      }
                  });
-            
+
             try {
                 miner.connect();
                 miner.start();
@@ -587,14 +587,14 @@ class MinerGUI extends JFrame {
             threadsSpinner.setEnabled(true);
         }
     }
-    
+
     private String formatHashRate(long rate) {
         if (rate >= 1_000_000_000) return String.format("%.2f GH/s", rate / 1_000_000_000.0);
         if (rate >= 1_000_000) return String.format("%.2f MH/s", rate / 1_000_000.0);
         if (rate >= 1_000) return String.format("%.2f KH/s", rate / 1_000.0);
         return rate + " H/s";
     }
-    
+
     private String formatNumber(long num) {
         if (num >= 1_000_000_000) return String.format("%.2fB", num / 1_000_000_000.0);
         if (num >= 1_000_000) return String.format("%.2fM", num / 1_000_000.0);

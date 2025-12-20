@@ -121,11 +121,27 @@ jobs:
         shell: bash
         run: |
           echo "Starting server on port ${{ env.SERVER_PORT }}..."
-          Start-Process -FilePath "bin/server.exe" -WindowStyle Hidden
+          ./bin/server.exe > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
 
-          # Wait for server to start
+          # Wait for server to start by checking if the process is running
           echo "Waiting for server to start..."
-          timeout 30 bash -c 'until nc -z localhost ${{ env.SERVER_PORT }} 2>/dev/null; do sleep 1; done' || true
+          for i in {1..30}; do
+            if ps -p $SERVER_PID > /dev/null 2>&1; then
+              echo "Server process is running..."
+              sleep 1
+            else
+              echo "❌ Server process died"
+              cat server.log
+              exit 1
+            fi
+            # Check if port is listening (using PowerShell's Test-NetConnection)
+            if powershell -Command "Test-NetConnection -ComputerName localhost -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet" 2>/dev/null | grep -q "True"; then
+              echo "✓ Server is listening on port ${{ env.SERVER_PORT }}"
+              break
+            fi
+          done
 
           # Give it a bit more time to fully initialize
           sleep 5

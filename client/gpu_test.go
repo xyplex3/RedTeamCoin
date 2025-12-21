@@ -168,16 +168,22 @@ func TestGPUMinerGetStats(t *testing.T) {
 	}
 
 	// Verify types
-	if _, ok := stats["devices"].(int); !ok {
+	if devices, ok := stats["devices"].(int); !ok {
 		t.Error("'devices' should be an int")
+	} else if devices < 0 {
+		t.Errorf("'devices' should be non-negative, got %d", devices)
 	}
 
-	if _, ok := stats["running"].(bool); !ok {
+	if running, ok := stats["running"].(bool); !ok {
 		t.Error("'running' should be a bool")
+	} else {
+		_ = running // value checked, just verifying type
 	}
 
-	if _, ok := stats["total_hashes"].(int64); !ok {
+	if totalHashes, ok := stats["total_hashes"].(int64); !ok {
 		t.Error("'total_hashes' should be an int64")
+	} else if totalHashes < 0 {
+		t.Errorf("'total_hashes' should be non-negative, got %d", totalHashes)
 	}
 
 	t.Logf("GPU Stats: %+v", stats)

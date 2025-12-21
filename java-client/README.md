@@ -20,17 +20,20 @@ A cross-platform Java client miner for RedTeamCoin mining pool. Packaged as a si
 ### Installing Java
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt update
 sudo apt install openjdk-11-jdk maven
 ```
 
 **macOS:**
+
 ```bash
 brew install openjdk@11 maven
 ```
 
 **Windows:**
+
 - Download JDK from: https://adoptium.net/
 - Download Maven from: https://maven.apache.org/download.cgi
 
@@ -118,6 +121,7 @@ MinerClient.java (main class)
 ### Build Errors
 
 **Problem:** Maven not found
+
 ```bash
 # Install Maven
 sudo apt install maven  # Linux
@@ -125,6 +129,7 @@ brew install maven      # macOS
 ```
 
 **Problem:** Java version too old
+
 ```bash
 # Check version
 java -version
@@ -135,11 +140,13 @@ java -version
 ### Runtime Errors
 
 **Problem:** Connection refused
+
 - Verify server is running
 - Check server address and port
 - Ensure firewall allows port 50051
 
 **Problem:** OutOfMemoryError
+
 ```bash
 # Increase heap size
 java -Xmx2G -jar target/redteamcoin-miner.jar
@@ -187,6 +194,7 @@ Edit `pom.xml` and add to `<dependencies>` section, then rebuild.
 ## Security Note
 
 This is a demonstration/educational project. The Java client:
+
 - Connects to mining pools via insecure channels (no TLS by default)
 - Can self-delete when instructed by server
 - Is intended for authorized testing environments only

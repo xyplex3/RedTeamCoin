@@ -9,6 +9,7 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 ### Source Code
 
 **1. MinerClient.java** (`java-client/src/main/java/com/redteamcoin/miner/MinerClient.java`)
+
 - Complete Java implementation of the miner client (480+ lines)
 - Multi-threaded CPU mining using all available cores
 - gRPC communication with server
@@ -22,6 +23,7 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 ### Build Configuration
 
 **2. pom.xml** (`java-client/pom.xml`)
+
 - Maven project configuration
 - gRPC and Protocol Buffers dependencies
 - Automatic protobuf compilation
@@ -29,6 +31,7 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 - Targets Java 11+
 
 **3. build.sh** (`java-client/build.sh`)
+
 - Automated build script
 - Checks for Java and Maven
 - Validates Java version (11+)
@@ -37,12 +40,14 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 ### Protocol Buffers
 
 **4. mining.proto** (`java-client/src/main/proto/mining.proto`)
+
 - Copy of the main protobuf definition
 - Used to generate Java gRPC client code
 
 ### Documentation
 
 **5. README.md** (`java-client/README.md`)
+
 - Complete usage guide
 - Installation instructions
 - Building and running
@@ -51,12 +56,14 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 - Performance comparison with Go client
 
 **6. BUILD_INSTRUCTIONS.md** (`java-client/BUILD_INSTRUCTIONS.md`)
+
 - Detailed build instructions
 - Prerequisites installation
 - Maven setup
 - Alternative build methods
 
 **7. QUICKSTART.md** (`java-client/QUICKSTART.md`)
+
 - Quick reference guide
 - Common usage examples
 - Deployment scenarios
@@ -66,6 +73,7 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 ### Main README Updates
 
 **8. Updated README.md** (root)
+
 - Added Java client information to Features section
 - Added Java client usage to "Running a Miner" section
 - Added link to Java client documentation
@@ -84,6 +92,7 @@ A complete Java-based cryptocurrency miner client has been implemented for RedTe
 ## Building the JAR
 
 ### Prerequisites
+
 ```bash
 # Install Java and Maven
 sudo apt update
@@ -91,12 +100,14 @@ sudo apt install openjdk-11-jdk maven
 ```
 
 ### Build
+
 ```bash
 cd java-client
 mvn clean package
 ```
 
 ### Result
+
 - Output: `java-client/target/redteamcoin-miner.jar`
 - Size: ~15 MB (includes all dependencies)
 - Requires: Java 11+ to run
@@ -104,6 +115,7 @@ mvn clean package
 ## Running the JAR
 
 ### Basic Usage
+
 ```bash
 # Local server
 java -jar java-client/target/redteamcoin-miner.jar
@@ -113,9 +125,11 @@ java -jar java-client/target/redteamcoin-miner.jar -server 192.168.1.100:50051
 ```
 
 ### Command-Line Options
+
 - `-server <address>` or `-s <address>`: Server address (host:port)
 
 ### Environment Variables
+
 - `POOL_SERVER`: Server address (overridden by command-line flag)
 
 ## Architecture
@@ -166,12 +180,14 @@ The Java client implements the full gRPC protocol defined in `mining.proto`:
 - ✅ `StopMining` - Graceful shutdown
 
 All message types are supported:
+
 - `MinerInfo`, `MinerStatus`, `WorkRequest`, `WorkResponse`, `WorkSubmission`
 - `RegistrationResponse`, `SubmissionResponse`, `HeartbeatResponse`, `StopResponse`
 
 ## Deployment Scenarios
 
 ### 1. Single System Deployment
+
 ```bash
 # Copy JAR to target
 scp java-client/target/redteamcoin-miner.jar user@target:/opt/
@@ -182,6 +198,7 @@ java -jar /opt/redteamcoin-miner.jar -server pool:50051
 ```
 
 ### 2. Mass Deployment
+
 ```bash
 # Copy to multiple systems
 for host in server1 server2 server3; do
@@ -195,6 +212,7 @@ done
 ```
 
 ### 3. Windows Service
+
 ```powershell
 # Install as Windows service using NSSM
 nssm install RedTeamCoinMiner "C:\Program Files\Java\jdk-11\bin\java.exe"
@@ -252,6 +270,7 @@ java-client/
 ## When to Use Java Client
 
 **Advantages:**
+
 - Target systems already have Java installed
 - Easy deployment (single JAR file)
 - No need to compile for different platforms
@@ -259,6 +278,7 @@ java-client/
 - CPU-only mining is sufficient
 
 **Disadvantages:**
+
 - Requires Java Runtime Environment
 - No GPU mining support
 - Slightly larger file size
@@ -267,12 +287,14 @@ java-client/
 ## When to Use Go Client
 
 **Advantages:**
+
 - No runtime dependencies
 - GPU mining support (CUDA/OpenCL)
 - Slightly smaller binary
 - Maximum performance (GPU)
 
 **Disadvantages:**
+
 - Need to compile for each platform
 - GPU builds require specific toolchains
 - More complex build process for GPU
@@ -282,18 +304,21 @@ java-client/
 To test the Java client:
 
 1. **Build the JAR**
+
    ```bash
    cd java-client
    mvn clean package
    ```
 
 2. **Start the Go server** (in another terminal)
+
    ```bash
    cd ..
    ./bin/server
    ```
 
 3. **Run the Java client**
+
    ```bash
    java -jar target/redteamcoin-miner.jar
    ```
@@ -314,17 +339,20 @@ To test the Java client:
 ## Next Steps
 
 1. **Install Maven** (if not already installed):
+
    ```bash
    sudo apt install maven
    ```
 
 2. **Build the JAR**:
+
    ```bash
    cd java-client
    mvn clean package
    ```
 
 3. **Test with server**:
+
    ```bash
    java -jar target/redteamcoin-miner.jar
    ```
@@ -337,6 +365,7 @@ To test the Java client:
 ## Future Enhancements (Optional)
 
 If needed in the future:
+
 - Add JNI bindings for GPU mining (JOCL for OpenCL)
 - Implement connection pooling
 - Add metrics/monitoring endpoints

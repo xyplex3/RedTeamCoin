@@ -464,14 +464,6 @@ func TestHashDifficultyValidation(t *testing.T) {
 	}
 }
 
-// Integration test helpers
-func setupTestGRPCServer(t *testing.T) (*grpc.Server, string) {
-	// This would require setting up a test gRPC server
-	// For now, we'll skip this in unit tests
-	t.Skip("Integration test - requires test server")
-	return nil, ""
-}
-
 func TestMinerConnectIntegration(t *testing.T) {
 	// Skip if not running integration tests
 	if testing.Short() {

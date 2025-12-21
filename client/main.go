@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -628,138 +629,140 @@ func (m *Miner) mineBlockGPU(index, timestamp int64, data, previousHash string, 
 	return 0, "", totalHashes
 }
 
-// mineBlockHybrid mines a block using both CPU and GPU simultaneously
-func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
-	type result struct {
-		nonce  int64
-		hash   string
-		hashes int64
-		found  bool
-		source string // "CPU" or "GPU"
+// miningResult represents the result from a mining operation
+type miningResult struct {
+	nonce  int64
+	hash   string
+	hashes int64
+	found  bool
+	source string // "CPU" or "GPU"
+}
+
+// runGPUMiner runs GPU mining in a goroutine
+func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
+	const gpuNonceRange = 1000000000
+	gpuStartNonce := int64(0)
+	gpuHashes := int64(0)
+
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			nonce, hash, hashes, found := m.gpuMiner.MineBlock(
+				index, timestamp, data, previousHash, difficulty,
+				gpuStartNonce, gpuNonceRange,
+			)
+			gpuHashes += hashes
+
+			if found {
+				resultChan <- miningResult{nonce, hash, gpuHashes, true, "GPU"}
+				return
+			}
+
+			gpuStartNonce += gpuNonceRange
+		}
+	}
+}
+
+// runCPUWorker runs a single CPU mining worker
+func (m *Miner) runCPUWorker(index, timestamp int64, data, previousHash, prefix string, difficulty, workerID, numWorkers int, done, cpuDone <-chan struct{}, resultChan chan<- miningResult) {
+	localNonce := int64(5000000000 + workerID)
+	localHashes := int64(0)
+	hashCounter := int64(0)
+
+	for {
+		select {
+		case <-done:
+			resultChan <- miningResult{nonce: 0, hash: "", hashes: localHashes, found: false, source: "CPU"}
+			return
+		case <-cpuDone:
+			resultChan <- miningResult{nonce: 0, hash: "", hashes: localHashes, found: false, source: "CPU"}
+			return
+		default:
+			hash := m.calculateHash(index, timestamp, data, previousHash, localNonce)
+			localHashes++
+			hashCounter++
+
+			if len(hash) >= difficulty && hash[:difficulty] == prefix {
+				resultChan <- miningResult{nonce: localNonce, hash: hash, hashes: localHashes, found: true, source: "CPU"}
+				return
+			}
+
+			m.applyCPUThrottling(hashCounter)
+			localNonce += int64(numWorkers)
+			m.updateHashRateDisplay(workerID, index, localHashes, numWorkers)
+		}
+	}
+}
+
+// applyCPUThrottling applies CPU throttling if configured
+func (m *Miner) applyCPUThrottling(hashCounter int64) {
+	if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
+		sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
+		time.Sleep(sleepMs)
+	}
+}
+
+// updateHashRateDisplay updates the mining hash rate display
+func (m *Miner) updateHashRateDisplay(workerID int, index, localHashes int64, numWorkers int) {
+	if workerID == 0 && localHashes%50000 == 0 {
+		elapsed := time.Since(m.startTime).Seconds()
+		if elapsed > 0 {
+			m.hashRate = int64(float64(localHashes*int64(numWorkers)+m.gpuMiner.GetHashCount()) / elapsed)
+		}
+		fmt.Printf("Mining block %d (Hybrid: %d CPU workers + GPU)... Hash rate: %d H/s\r",
+			index, numWorkers, m.hashRate)
+	}
+}
+
+// runCPUMiningCoordinator coordinates multiple CPU mining workers
+func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
+	numWorkers := runtime.NumCPU()
+	prefix := strings.Repeat("0", difficulty)
+
+	cpuResultChan := make(chan miningResult, numWorkers)
+	cpuDone := make(chan struct{})
+
+	// Start CPU worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		go m.runCPUWorker(index, timestamp, data, previousHash, prefix, difficulty, i, numWorkers, done, cpuDone, cpuResultChan)
 	}
 
-	resultChan := make(chan result, 2)
+	// Collect results from CPU workers
+	cpuTotalHashes := int64(0)
+	workersReporting := 0
+
+	for workersReporting < numWorkers {
+		res := <-cpuResultChan
+		cpuTotalHashes += res.hashes
+
+		if res.found {
+			resultChan <- miningResult{res.nonce, res.hash, cpuTotalHashes, true, "CPU"}
+			close(cpuDone)
+			return
+		}
+		workersReporting++
+	}
+}
+
+// mineBlockHybrid mines a block using both CPU and GPU simultaneously
+func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	resultChan := make(chan miningResult, 2)
 	done := make(chan struct{})
 	defer close(done)
 
-	totalHashes := int64(0)
+	go m.runGPUMiner(index, timestamp, data, previousHash, difficulty, done, resultChan)
+	go m.runCPUMiningCoordinator(index, timestamp, data, previousHash, difficulty, done, resultChan)
 
-	// GPU mining goroutine
-	go func() {
-		const gpuNonceRange = 1000000000 // GPU processes large ranges
-		gpuStartNonce := int64(0)
-		gpuHashes := int64(0)
-
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				nonce, hash, hashes, found := m.gpuMiner.MineBlock(
-					index, timestamp, data, previousHash, difficulty,
-					gpuStartNonce, gpuNonceRange,
-				)
-				gpuHashes += hashes
-
-				if found {
-					resultChan <- result{nonce, hash, gpuHashes, true, "GPU"}
-					return
-				}
-
-				gpuStartNonce += gpuNonceRange
-			}
-		}
-	}()
-
-	// CPU mining with multiple workers
-	go func() {
-		numWorkers := runtime.NumCPU()
-		prefix := ""
-		for i := 0; i < difficulty; i++ {
-			prefix += "0"
-		}
-
-		cpuResultChan := make(chan result, numWorkers)
-		cpuDone := make(chan struct{})
-
-		// Start CPU worker goroutines
-		for i := 0; i < numWorkers; i++ {
-			go func(workerID int) {
-				// Start from high nonce range to avoid GPU overlap
-				// Each worker gets offset within that range
-				localNonce := int64(5000000000 + workerID)
-				localHashes := int64(0)
-				hashCounter := int64(0)
-
-				for {
-					select {
-					case <-done:
-						cpuResultChan <- result{nonce: 0, hash: "", hashes: localHashes, found: false, source: "CPU"}
-						return
-					case <-cpuDone:
-						cpuResultChan <- result{nonce: 0, hash: "", hashes: localHashes, found: false, source: "CPU"}
-						return
-					default:
-						hash := m.calculateHash(index, timestamp, data, previousHash, localNonce)
-						localHashes++
-						hashCounter++
-
-						if len(hash) >= difficulty && hash[:difficulty] == prefix {
-							cpuResultChan <- result{nonce: localNonce, hash: hash, hashes: localHashes, found: true, source: "CPU"}
-							return
-						}
-
-						// Apply CPU throttling if set
-						if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
-							sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
-							time.Sleep(sleepMs)
-						}
-
-						// Increment by number of workers to avoid overlap
-						localNonce += int64(numWorkers)
-
-						// Update display every 50,000 hashes (only worker 0)
-						if workerID == 0 && localHashes%50000 == 0 {
-							elapsed := time.Since(m.startTime).Seconds()
-							if elapsed > 0 {
-								m.hashRate = int64(float64(localHashes*int64(numWorkers)+m.gpuMiner.GetHashCount()) / elapsed)
-							}
-							fmt.Printf("Mining block %d (Hybrid: %d CPU workers + GPU)... Hash rate: %d H/s\r",
-								index, numWorkers, m.hashRate)
-						}
-					}
-				}
-			}(i)
-		}
-
-		// Collect results from CPU workers
-		cpuTotalHashes := int64(0)
-		workersReporting := 0
-
-		for workersReporting < numWorkers {
-			res := <-cpuResultChan
-			cpuTotalHashes += res.hashes
-
-			if res.found {
-				// Found on CPU! Report to main result channel
-				resultChan <- result{res.nonce, res.hash, cpuTotalHashes, true, "CPU"}
-				close(cpuDone)
-				return
-			}
-			workersReporting++
-		}
-	}()
-
-	// Wait for first successful result from either CPU or GPU
 	res := <-resultChan
-	totalHashes = res.hashes
 
 	if res.found {
 		fmt.Printf("\n✓ Block found by %s!\n", res.source)
-		return res.nonce, res.hash, totalHashes
+		return res.nonce, res.hash, res.hashes
 	}
 
-	return 0, "", totalHashes
+	return 0, "", res.hashes
 }
 
 func main() {

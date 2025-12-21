@@ -42,6 +42,7 @@ mvn clean package
 ```
 
 This will:
+
 1. Download all dependencies (gRPC, protobuf, etc.)
 2. Generate Java classes from `mining.proto`
 3. Compile the Java source code
@@ -99,6 +100,7 @@ mvn clean package
 ## Alternative: Download Pre-built JAR
 
 If you cannot build locally, you can:
+
 1. Build on another system with Maven
 2. Transfer the JAR file (`target/redteamcoin-miner.jar`)
 3. Run with just Java (no Maven needed for execution)

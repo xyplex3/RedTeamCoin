@@ -104,7 +104,7 @@ The Java miner supports all server-side controls:
 
 ## Architecture
 
-```
+```text
 MinerClient.java (main class)
 ├── Connection (gRPC)
 ├── Registration (sends IP, hostname)
@@ -169,7 +169,7 @@ java -Xmx2G -jar target/redteamcoin-miner.jar
 
 ### Project Structure
 
-```
+```text
 java-client/
 ├── pom.xml                           # Maven build configuration
 ├── src/main/

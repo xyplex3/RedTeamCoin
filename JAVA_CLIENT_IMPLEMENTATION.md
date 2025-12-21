@@ -2,7 +2,8 @@
 
 ## Summary
 
-A complete Java-based cryptocurrency miner client has been implemented for RedTeamCoin. The client is packaged as a single executable JAR file and is fully compatible with the existing Go server.
+A complete Java-based cryptocurrency miner client has been implemented for RedTeamCoin. The client is packaged as a
+single executable JAR file and is fully compatible with the existing Go server.
 
 ## What Was Created
 
@@ -134,7 +135,7 @@ java -jar java-client/target/redteamcoin-miner.jar -server 192.168.1.100:50051
 
 ## Architecture
 
-```
+```text
 MinerClient (main class)
 ├── Connection Management
 │   ├── gRPC channel setup
@@ -222,7 +223,7 @@ nssm start RedTeamCoinMiner
 
 ## File Structure
 
-```
+```text
 java-client/
 ├── pom.xml                              # Maven build config
 ├── build.sh                             # Build script

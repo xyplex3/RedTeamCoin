@@ -52,7 +52,8 @@ nohup java -jar target/redteamcoin-miner.jar > miner.log 2>&1 &
 
 ```powershell
 # Using NSSM (Non-Sucking Service Manager)
-nssm install RedTeamCoinMiner "C:\Program Files\Java\jdk-11\bin\java.exe" "-jar C:\path\to\redteamcoin-miner.jar -server server:50051"
+nssm install RedTeamCoinMiner "C:\Program Files\Java\jdk-11\bin\java.exe" `
+  "-jar C:\path\to\redteamcoin-miner.jar -server server:50051"
 nssm start RedTeamCoinMiner
 ```
 

@@ -160,10 +160,10 @@ jobs:
 
             Write-Host "Server process is running..."
 
-            # Check if port is listening
-            $connection = Test-NetConnection -ComputerName localhost -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
+            # Check if port is listening on IPv4 (127.0.0.1)
+            $connection = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
             if ($connection) {
-              Write-Host "✓ Server is listening on port ${{ env.SERVER_PORT }}"
+              Write-Host "✓ Server is listening on port ${{ env.SERVER_PORT }} (IPv4)"
               $started = $true
               break
             }
@@ -184,6 +184,11 @@ jobs:
           Start-Sleep -Seconds 5
 
           Write-Host "✓ Server started"
+          Write-Host ""
+          Write-Host "=== Server startup logs ==="
+          Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -First 50
+          Write-Host "==========================="
+          Write-Host ""
 
       - name: Run miner test
         shell: pwsh
@@ -193,14 +198,17 @@ jobs:
           Write-Host "Running Windows CPU Miner Test"
           Write-Host "=================================================="
           Write-Host ""
-          Write-Host "Pool address: localhost:${{ env.SERVER_PORT }}"
+          Write-Host "Pool address: 127.0.0.1:${{ env.SERVER_PORT }}"
           Write-Host ""
 
           # Run miner for 30 seconds to test functionality
           Write-Host "Starting miner for 30 seconds..."
 
-          # Start the miner process
-          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--server", "localhost:${{ env.SERVER_PORT }}" -PassThru -NoNewWindow
+          # Start the miner process (use 127.0.0.1 to force IPv4)
+          $proc = Start-Process -FilePath ".\bin\client.exe" `
+            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput "out.log" -RedirectStandardError "err.log"
           Write-Host "Miner PID: $($proc.Id)"
 
           # Wait for 30 seconds
@@ -212,6 +220,13 @@ jobs:
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
           }
+
+          # Show miner output
+          Write-Host ""
+          Write-Host "=== Miner Output ==="
+          Get-Content out.log -ErrorAction SilentlyContinue | Select-Object -Last 20
+          Write-Host "===================="
+          Write-Host ""
 
           # Check exit code
           if ($proc.HasExited) {
@@ -227,6 +242,15 @@ jobs:
             } else {
               Write-Host ""
               Write-Host "❌ FAILED: Miner exited with unexpected code $exitCode"
+              Write-Host ""
+              Write-Host "=== Full Miner Output ==="
+              Get-Content out.log -ErrorAction SilentlyContinue
+              Write-Host ""
+              Write-Host "=== Miner Errors ==="
+              Get-Content err.log -ErrorAction SilentlyContinue
+              Write-Host ""
+              Write-Host "=== Server Output ==="
+              Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 50
               exit 1
             }
           } else {

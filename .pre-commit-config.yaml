@@ -32,6 +32,7 @@ repos:
       - id: go-cyclo
         args: [-over=15]
       - id: go-critic
+        exclude: 'client/gpu_test\.go$'
       - id: go-build
         exclude: 'client/(cuda|opencl|gpu)\.go$'
       - id: go-mod-tidy

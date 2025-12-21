@@ -86,6 +86,7 @@ builds:
       - cuda
     env:
       - CGO_ENABLED=1
+      - CGO_LDFLAGS=-L/usr/local/cuda/lib64/stubs
     goos:
       - linux
     goarch:

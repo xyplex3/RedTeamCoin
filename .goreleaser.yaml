@@ -155,7 +155,7 @@ archives:
       - TLS_SETUP.md
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
   algorithm: sha256
 
 changelog:

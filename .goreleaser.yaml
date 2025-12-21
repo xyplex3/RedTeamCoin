@@ -93,7 +93,7 @@ builds:
     hooks:
       pre:
         - make proto
-        - sh -c "if command -v nvcc > /dev/null; then nvcc -c -m64 -O3 client/mine.cu -o bin/mine_cuda.o; fi"
+        - sh -c "nvcc -c -m64 -O3 client/mine.cu -o client/mine_cuda.o"
 
   # Client - macOS with OpenCL (built on macOS runner)
   - id: "client-macos-opencl"

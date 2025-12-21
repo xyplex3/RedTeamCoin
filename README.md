@@ -10,6 +10,7 @@ RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation desi
 This tool enables security teams to safely and legally demonstrate cryptomining attack scenarios on corporate systems, generate comprehensive impact reports, and validate security controls—all within a controlled environment using an isolated, non-public blockchain.
 
 **Created by:**
+
 - Peter Greko, Luciano Krigun, Jayson Grace (@l50), and TKTK
 
 ## Table of Contents
@@ -129,6 +130,7 @@ Navigate to the URL displayed in the server console or:
 ```text
 http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
 ```
+
 **NOTE: This will run on all interfaces of the server and can be used in place of localhost.**
 
 ## How It Works
@@ -187,11 +189,13 @@ certificates. Click "Advanced" → "Proceed to localhost".
 Open additional terminals and run `./bin/client` in each.
 
 #### Java Client (JAR File)
+
 The Java client option creates a JAR file that can be deployed on Java based systems.
 
 Note: this only does CPU mining.
 
 **Prerequisites:**
+
 - Java 11 or later
 - Maven (for building only)
 
@@ -213,6 +217,7 @@ java -jar java-client/target/redteamcoin-miner.jar -server 192.168.1.100:50051
 ```
 
 **Benefits of Java Client:**
+
 - Single JAR file, easy to distribute
 - Cross-platform (Windows, Linux, macOS)
 - No compilation needed on target systems
@@ -738,6 +743,7 @@ cd client && go test -cover
 **CI/CD Testing:**
 
 All tests run automatically on:
+
 - Pull requests
 - Commits to main branch
 - Release builds

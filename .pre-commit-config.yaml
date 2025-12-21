@@ -37,11 +37,6 @@ repos:
         exclude: 'client/(cuda|opencl|gpu)\.go$'
       - id: go-mod-tidy
 
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v1.63.4
-    hooks:
-      - id: golangci-lint
-        args: [--timeout=5m]
 
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
     rev: 3.0.0
@@ -62,6 +57,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        description: Fast linters runner for Go
+        entry: golangci-lint run --timeout=5m --fix
+        types: [go]
+        language: system
+        pass_filenames: false
+
       - id: go-no-replacement
         name: Avoid committing a go module replacement
         entry: .hooks/go-no-replacement.sh

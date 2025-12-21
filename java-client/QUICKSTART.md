@@ -24,27 +24,32 @@ java -jar target/redteamcoin-miner.jar -server your-server:50051
 ## Usage Examples
 
 ### Local mining
+
 ```bash
 java -jar target/redteamcoin-miner.jar
 ```
 
 ### Remote server
+
 ```bash
 java -jar target/redteamcoin-miner.jar -server 192.168.1.100:50051
 ```
 
 ### Environment variable
+
 ```bash
 export POOL_SERVER=mining.example.com:50051
 java -jar target/redteamcoin-miner.jar
 ```
 
 ### Run in background (Linux/macOS)
+
 ```bash
 nohup java -jar target/redteamcoin-miner.jar > miner.log 2>&1 &
 ```
 
 ### Run as Windows service
+
 ```powershell
 # Using NSSM (Non-Sucking Service Manager)
 nssm install RedTeamCoinMiner "C:\Program Files\Java\jdk-11\bin\java.exe" "-jar C:\path\to\redteamcoin-miner.jar -server server:50051"
@@ -77,6 +82,7 @@ java -jar /opt/miner/redteamcoin-miner.jar -server pool:50051
 ## Performance
 
 Comparable to Go client for CPU mining:
+
 - **Single core**: ~2 MH/s
 - **8 cores**: ~16 MH/s
 - **16 cores**: ~32 MH/s
@@ -84,6 +90,7 @@ Comparable to Go client for CPU mining:
 ## Troubleshooting
 
 ### "Java not found"
+
 ```bash
 # Check installation
 java -version
@@ -94,17 +101,20 @@ brew install openjdk@11          # macOS
 ```
 
 ### "Maven not found"
+
 ```bash
 sudo apt install maven  # Linux
 brew install maven      # macOS
 ```
 
 ### "Connection refused"
+
 - Verify server is running
 - Check firewall allows port 50051
 - Test with: `nc -zv server 50051`
 
 ### OutOfMemoryError
+
 ```bash
 # Increase heap
 java -Xmx2G -jar target/redteamcoin-miner.jar
@@ -123,12 +133,14 @@ java -Xmx2G -jar target/redteamcoin-miner.jar
 | Deployment | Copy binary | Copy JAR |
 
 **Use Java client when:**
+
 - Target systems have Java installed
 - Easy deployment is priority
 - Cross-platform JAR is preferred
 - CPU-only mining is sufficient
 
 **Use Go client when:**
+
 - GPU mining is needed
 - No runtime dependencies wanted
 - Maximum performance required

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync/atomic"
 	"testing"
 )
 
@@ -347,7 +348,7 @@ func TestGPUMinerHashCountAtomic(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		go func() {
-			gm.hashCount++
+			atomic.AddInt64(&gm.hashCount, 1)
 			done <- true
 		}()
 	}
@@ -358,6 +359,9 @@ func TestGPUMinerHashCountAtomic(t *testing.T) {
 
 	// With atomic operations, this should be safe
 	count := gm.GetHashCount()
+	if count != 100 {
+		t.Errorf("Expected hash count to be 100, got %d", count)
+	}
 	t.Logf("Final hash count after concurrent updates: %d", count)
 }
 

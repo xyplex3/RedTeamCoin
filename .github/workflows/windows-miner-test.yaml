@@ -89,7 +89,7 @@ jobs:
           Write-Host "Testing server executable..."
 
           # Test that server shows help or version info using PowerShell
-          $proc = Start-Process -FilePath ".\bin\server.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc = Start-Process -FilePath ".\bin\server.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
           $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
           if ($proc.HasExited) {
@@ -113,7 +113,7 @@ jobs:
           Write-Host "Testing miner executable..."
 
           # Test that client shows help or version info using PowerShell
-          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
           $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
           if ($proc.HasExited) {
@@ -391,7 +391,7 @@ jobs:
           Get-ChildItem bin/
 
           Write-Host "Testing cross-compiled CPU miner..."
-          $proc = Start-Process -FilePath ".\bin\client-cross.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc = Start-Process -FilePath ".\bin\client-cross.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
           $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
           if ($proc.HasExited) {
@@ -409,7 +409,7 @@ jobs:
 
           Write-Host ""
           Write-Host "Testing cross-compiled OpenCL miner..."
-          $proc = Start-Process -FilePath ".\bin\client-windows-opencl.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc = Start-Process -FilePath ".\bin\client-windows-opencl.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
           $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
           if ($proc.HasExited) {

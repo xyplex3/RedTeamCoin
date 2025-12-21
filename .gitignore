@@ -44,8 +44,13 @@ CLAUDE.md
 
 # Releases
 dist/
+dist-*/
 
 # Local test files
 test-goreleaser-docker.sh
 *.deb
+*.deb.*
 *.tar.gz
+*.tar.gz.*
+*.zip
+*.rpm

@@ -384,9 +384,9 @@ jobs:
           ls -lh cross-compiled/
 
           # Count successful builds
-          LINUX_BUILDS=$(ls cross-compiled/*linux* 2>/dev/null | wc -l)
-          WINDOWS_BUILDS=$(ls cross-compiled/*windows* 2>/dev/null | wc -l)
-          DARWIN_BUILDS=$(ls cross-compiled/*darwin* 2>/dev/null | wc -l)
+          LINUX_BUILDS=$(find cross-compiled/ -name '*linux*' -type f 2>/dev/null | wc -l)
+          WINDOWS_BUILDS=$(find cross-compiled/ -name '*windows*' -type f 2>/dev/null | wc -l)
+          DARWIN_BUILDS=$(find cross-compiled/ -name '*darwin*' -type f 2>/dev/null | wc -l)
 
           echo ""
           echo "Build Summary:"

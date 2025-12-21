@@ -37,7 +37,6 @@ repos:
         exclude: 'client/(cuda|opencl|gpu)\.go$'
       - id: go-mod-tidy
 
-
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
     rev: 3.0.0
     hooks:
@@ -54,6 +53,13 @@ repos:
       - id: markdownlint
         args: ['--fix', '--config', '.hooks/linters/markdownlint.json']
         stages: [pre-commit, manual]
+
+  # Github actions
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.9
+    hooks:
+      - id: actionlint
+        name: Check Github Actions
 
   - repo: local
     hooks:
@@ -99,6 +105,13 @@ repos:
         entry: .hooks/prettier.sh
         language: script
         types: [json, yaml]
+
+      - id: goreleaser-check
+        name: Check GoReleaser config
+        entry: goreleaser check
+        language: system
+        files: '\.goreleaser\.ya?ml$'
+        pass_filenames: false
 
       - id: govulncheck-scan
         name: govulncheck vulnerability scan

@@ -16,20 +16,47 @@ on:
         type: string
 
 env:
-  GO_VERSION: 1.25.5
+  GO_VERSION: '1.24.11'
 
 jobs:
-  goreleaser:
-    name: Run GoReleaser
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
+  # Build binaries on each platform
+  build:
+    name: Build ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - name: Linux
+            os: ubuntu-latest
+            build_ids:
+              - server-linux
+              - client-linux
+              - client-linux-opencl
+              - client-linux-cuda
+            setup_cuda: true
+            setup_opencl: true
+          - name: macOS
+            os: macos-latest
+            build_ids:
+              - server-darwin
+              - client-darwin
+              - client-darwin-opencl
+            setup_cuda: false
+            setup_opencl: false  # macOS has OpenCL built-in
+          - name: Windows
+            os: windows-latest
+            build_ids:
+              - server-windows
+              - client-windows
+              - client-windows-opencl
+            setup_cuda: false
+            setup_opencl: true
+
     steps:
       - name: Set up git repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          fetch-depth: 0 # Ensure all tags are fetched
+          fetch-depth: 0
 
       - name: Fetch all tags
         run: git fetch --force --tags
@@ -40,32 +67,107 @@ jobs:
           go-version: "${{ env.GO_VERSION }}"
           cache-dependency-path: "**/*.sum"
 
-      - name: Install protobuf compiler
+      # Linux-specific dependencies
+      - name: Install protobuf compiler (Linux)
+        if: matrix.config.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
 
-      - name: Install Go tools
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-      - name: Fix GOPATH
-        run: echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
-
-      - name: Install CUDA toolkit
+      - name: Install CUDA toolkit (Linux)
+        if: matrix.config.setup_cuda
         run: |
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
           sudo dpkg -i cuda-keyring_1.1-1_all.deb
           rm cuda-keyring_1.1-1_all.deb
           sudo apt-get update
           sudo apt-get install -y cuda-toolkit-12-6
-          echo "PATH=/usr/local/cuda/bin:$PATH" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PATH=/usr/local/cuda/bin:$PATH" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
 
-      - name: Install OpenCL headers
+      - name: Install OpenCL headers (Linux)
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.setup_opencl
         run: |
           sudo apt-get install -y opencl-headers ocl-icd-opencl-dev
+
+      # macOS-specific dependencies
+      - name: Install protobuf compiler (macOS)
+        if: matrix.config.os == 'macos-latest'
+        run: brew install protobuf
+
+      # Windows-specific dependencies
+      - name: Install protobuf compiler (Windows)
+        if: matrix.config.os == 'windows-latest'
+        run: choco install protoc
+
+      - name: Install OpenCL SDK (Windows)
+        if: matrix.config.os == 'windows-latest' && matrix.config.setup_opencl
+        run: |
+          choco install opencl-intel-cpu-runtime
+          # Note: Full OpenCL SDK would be needed for development, but headers might be in the Go code already
+
+      # Common Go tools setup
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Fix GOPATH (Unix)
+        if: matrix.config.os != 'windows-latest'
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Fix GOPATH (Windows)
+        if: matrix.config.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $gopath = go env GOPATH
+          "$gopath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # Install GoReleaser
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          distribution: goreleaser
+          version: latest
+          install-only: true
+
+      # Build binaries with platform-specific IDs
+      - name: Build with GoReleaser
+        shell: bash
+        run: |
+          ARGS=(build --snapshot --clean)
+          IDS='${{ toJSON(matrix.config.build_ids) }}'
+          for id in $(echo "$IDS" | jq -r '.[]'); do
+            ARGS+=(--id "$id")
+          done
+          goreleaser "${ARGS[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload binaries as artifacts
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.config.name }}
+          path: dist/*
+          retention-days: 1
+
+  # Create unified release with all binaries
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Set up git repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all tags
+        run: git fetch --force --tags
 
       - name: Create and push tag (manual workflow)
         if: github.event_name == 'workflow_dispatch'
@@ -75,29 +177,86 @@ jobs:
           git tag -a "${{ inputs.tag }}" -m "Release ${{ inputs.tag }}"
           git push origin "${{ inputs.tag }}"
 
-      - name: Create custom release notes file
-        if: github.event_name == 'workflow_dispatch' && inputs.release_notes != ''
+      # Download all platform binaries
+      - name: Download Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-Linux
+          path: dist-linux
+
+      - name: Download macOS binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-macOS
+          path: dist-macos
+
+      - name: Download Windows binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-Windows
+          path: dist-windows
+
+      # Merge all binaries into single dist directory
+      - name: Merge binaries
         run: |
-          cat > /tmp/release_notes.md << 'EOF'
-          ${{ inputs.release_notes }}
-          EOF
+          mkdir -p dist
+          cp -r dist-linux/* dist/ || true
+          cp -r dist-macos/* dist/ || true
+          cp -r dist-windows/* dist/ || true
+          ls -la dist/
 
-      - name: Run GoReleaser (with custom notes)
-        if: github.event_name == 'workflow_dispatch' && inputs.release_notes != ''
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean --release-notes=/tmp/release_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Create archives for each binary
+      - name: Create archives
+        run: |
+          cd dist
+          # Find all binaries and create tar.gz/zip archives
+          for file in ./*; do
+            if [ -f "$file" ] && [ -x "$file" ]; then
+              filename="${file#./}"
+              echo "Creating archive for $filename"
+              case "$filename" in
+                *.exe)
+                  # Windows binary - create zip
+                  zip "${filename%.exe}.zip" "$filename"
+                  ;;
+                *)
+                  # Unix binary - create tar.gz
+                  tar czf "${filename}.tar.gz" "$filename"
+                  ;;
+              esac
+            fi
+          done
+          ls -la
 
-      - name: Run GoReleaser (default)
-        if: github.event_name != 'workflow_dispatch' || inputs.release_notes == ''
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+      # Generate checksums
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum ./*.tar.gz ./*.zip > checksums.txt 2>/dev/null || true
+          cat checksums.txt
+
+      # Determine release tag
+      - name: Determine release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Create GitHub release with all artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          body: ${{ inputs.release_notes }}
+          generate_release_notes: ${{ inputs.release_notes == '' }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

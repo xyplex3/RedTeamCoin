@@ -145,7 +145,7 @@ jobs:
           sha256sum redteamcoin-gpu-linux-amd64.tar.gz > checksums-gpu.txt
 
       - name: Upload to latest release (if exists)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             redteamcoin-gpu-linux-amd64.tar.gz

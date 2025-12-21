@@ -76,7 +76,7 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
 
           # Add Go bin directory to PATH
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install Node.js tools
         run: |

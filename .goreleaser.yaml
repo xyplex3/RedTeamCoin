@@ -1,18 +1,14 @@
 ---
 version: 2
 
-# Snapshot configuration for non-release builds
-# Use git describe format for version strings
 snapshot:
   version_template: "{{ .Version }}-next"
 
 builds:
-  # Server binary
-  - id: "server"
+  # Server binary - all platforms (CGO_ENABLED=0, can cross-compile)
+  - id: "server-linux"
     binary: server
     main: ./server
-    # Inject version info via ldflags
-    # Use {{.Summary}} to get git describe format (e.g., v1.0.0-1-gc1b0525)
     ldflags:
       - -s -w
       - -X main.version={{.Summary}}
@@ -22,7 +18,41 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "server-darwin"
+    binary: server
+    main: ./server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
       - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "server-windows"
+    binary: server
+    main: ./server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
       - windows
     goarch:
       - amd64
@@ -30,12 +60,10 @@ builds:
     hooks:
       pre: make proto
 
-  # Client binary - CPU only (all platforms)
-  - id: "client"
+  # Client binary - CPU only (CGO_ENABLED=0, can cross-compile)
+  - id: "client-linux"
     binary: client
     main: ./client
-    # Inject version info via ldflags
-    # Use {{.Summary}} to get git describe format (e.g., v1.0.0-1-gc1b0525)
     ldflags:
       - -s -w
       - -X main.version={{.Summary}}
@@ -45,7 +73,41 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "client-darwin"
+    binary: client
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
       - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "client-windows"
+    binary: client
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
       - windows
     goarch:
       - amd64
@@ -53,7 +115,7 @@ builds:
     hooks:
       pre: make proto
 
-  # Client - Linux with OpenCL (built on Linux runner)
+  # Client - Linux with OpenCL (CGO, native build only)
   - id: "client-linux-opencl"
     binary: client-opencl
     main: ./client
@@ -73,7 +135,7 @@ builds:
     hooks:
       pre: make proto
 
-  # Client - Linux with CUDA (built on Linux runner with CUDA)
+  # Client - Linux with CUDA (CGO, native build only)
   - id: "client-linux-cuda"
     binary: client-cuda
     main: ./client
@@ -96,8 +158,8 @@ builds:
         - make proto
         - sh -c "nvcc -c -m64 -O3 client/mine.cu -o client/mine_cuda.o"
 
-  # Client - macOS with OpenCL (built on macOS runner)
-  - id: "client-macos-opencl"
+  # Client - macOS with OpenCL (CGO, native build only)
+  - id: "client-darwin-opencl"
     binary: client-opencl
     main: ./client
     ldflags:
@@ -117,7 +179,7 @@ builds:
     hooks:
       pre: make proto
 
-  # Client - Windows with OpenCL (built on Windows runner)
+  # Client - Windows with OpenCL (CGO, native build only)
   - id: "client-windows-opencl"
     binary: client-opencl
     main: ./client
@@ -137,93 +199,20 @@ builds:
     hooks:
       pre: make proto
 
+# Don't create archives yet - this is a partial build
 archives:
   - id: default
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- .Version }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    files:
-      - README.md
-      - LICENSE
-      - WINDOWS_BUILD.md
-      - GPU_MINING.md
-      - REMOTE_SERVER_SETUP.md
-      - TLS_SETUP.md
+    formats:
+      - binary
 
+# Don't create checksums yet - this is a partial build
 checksum:
-  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
-  algorithm: sha256
+  disable: true
 
+# Don't create changelog yet - this is a partial build
 changelog:
-  sort: asc
-  use: github
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - '^ci:'
-      - 'typo'
-      - 'README'
-      - Merge pull request
-      - Merge branch
-  groups:
-    - title: 'New Features'
-      regexp: "^.*feat[(\\w)]*:+.*$"
-      order: 0
-    - title: 'Bug Fixes'
-      regexp: "^.*fix[(\\w)]*:+.*$"
-      order: 1
-    - title: 'Performance Improvements'
-      regexp: "^.*perf[(\\w)]*:+.*$"
-      order: 2
-    - title: 'GPU Support'
-      regexp: "^.*(cuda|opencl|gpu).*$"
-      order: 3
-    - title: 'Other Changes'
-      order: 999
+  disable: true
 
+# Partial build - don't create release
 release:
-  github:
-    owner: xyplex3
-    name: RedTeamCoin
-  draft: false
-  prerelease: auto
-  name_template: "RedTeamCoin {{.Version}}"
-  header: |
-    ## RedTeamCoin Release {{.Version}}
-
-    ### Download Options
-
-    **CPU-Only Binaries** (no GPU dependencies):
-    - Linux: `redteamcoin_{{.Version}}_Linux_x86_64.tar.gz`
-    - Windows: `redteamcoin_{{.Version}}_Windows_x86_64.zip`
-    - macOS: `redteamcoin_{{.Version}}_Darwin_x86_64.tar.gz`
-
-    **GPU-Enabled Binaries** (requires GPU drivers):
-    - Linux + OpenCL: `client-opencl` (AMD, Intel GPUs)
-    - Linux + CUDA: `client-cuda` (NVIDIA GPUs)
-    - Windows + OpenCL: `client-opencl.exe`
-    - macOS + OpenCL: `client-opencl`
-
-    ### Installation
-
-    1. Download the appropriate archive for your platform
-    2. Extract: `tar -xzf redteamcoin_*.tar.gz` (or unzip for Windows)
-    3. Run: `./server` or `./client`
-
-    For GPU mining, see [GPU_MINING.md](https://github.com/xyplex3/RedTeamCoin/blob/main/GPU_MINING.md)
-  footer: |
-    ---
-
-    **Full Changelog**: https://github.com/xyplex3/RedTeamCoin/compare/{{.PreviousTag}}...{{.Tag}}
-
-    ### Build Information
-    - Go Version: {{ .Env.GO_VERSION }}
-    - Commit: {{ .Commit }}
-    - Built: {{ .Date }}
+  disable: true

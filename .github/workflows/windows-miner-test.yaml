@@ -84,107 +84,162 @@ jobs:
           echo "✓ Both executables found"
 
       - name: Test server executable
-        shell: bash
+        shell: pwsh
         run: |
-          echo "Testing server executable..."
+          Write-Host "Testing server executable..."
 
-          # Test that server shows help or version info
-          timeout 5s ./bin/server.exe --help || EXIT_CODE=$?
+          # Test that server shows help or version info using PowerShell
+          $proc = Start-Process -FilePath ".\bin\server.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
-          # Exit code 124 means timeout (expected for server that doesn't support --help)
-          # Exit code 0 or 2 means it executed and showed help/error
-          if [ ${EXIT_CODE:-0} -eq 124 ] || [ ${EXIT_CODE:-0} -eq 0 ] || [ ${EXIT_CODE:-0} -eq 2 ]; then
-            echo "✓ Server executable runs"
-          else
-            echo "❌ Server executable failed with exit code ${EXIT_CODE}"
-            exit 1
-          fi
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 or 2 means it executed and showed help/error
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Server executable runs (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Server executable failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            # Still running after timeout - kill it and consider success
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Server executable runs (timed out, as expected)"
+          }
 
       - name: Test miner executable
-        shell: bash
+        shell: pwsh
         run: |
-          echo "Testing miner executable..."
+          Write-Host "Testing miner executable..."
 
-          # Test that client shows help or version info
-          timeout 5s ./bin/client.exe --help || EXIT_CODE=$?
+          # Test that client shows help or version info using PowerShell
+          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
-          # Exit code 124 means timeout (expected)
-          # Exit code 0 or 2 means it executed and showed help/error
-          if [ ${EXIT_CODE:-0} -eq 124 ] || [ ${EXIT_CODE:-0} -eq 0 ] || [ ${EXIT_CODE:-0} -eq 2 ]; then
-            echo "✓ Miner executable runs"
-          else
-            echo "❌ Miner executable failed with exit code ${EXIT_CODE}"
-            exit 1
-          fi
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 or 2 means it executed and showed help/error
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Miner executable runs (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Miner executable failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            # Still running after timeout - kill it and consider success
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Miner executable runs (timed out, as expected)"
+          }
 
       - name: Start server in background
-        shell: bash
+        shell: pwsh
         run: |
-          echo "Starting server on port ${{ env.SERVER_PORT }}..."
-          ./bin/server.exe > server.log 2>&1 &
-          SERVER_PID=$!
-          echo "Server PID: $SERVER_PID"
+          Write-Host "Starting server on port ${{ env.SERVER_PORT }}..."
 
-          # Wait for server to start by checking if the process is running
-          echo "Waiting for server to start..."
-          for i in {1..30}; do
-            if ps -p $SERVER_PID > /dev/null 2>&1; then
-              echo "Server process is running..."
-              sleep 1
-            else
-              echo "❌ Server process died"
-              cat server.log
+          # Start server in background
+          $proc = Start-Process -FilePath ".\bin\server.exe" -PassThru -NoNewWindow -RedirectStandardOutput "server.log" -RedirectStandardError "server.log"
+          $serverPid = $proc.Id
+          Write-Host "Server PID: $serverPid"
+
+          # Wait for server to start by checking if the process is running and port is listening
+          Write-Host "Waiting for server to start..."
+          $maxAttempts = 30
+          $started = $false
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            # Check if process is still running
+            $serverProc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
+            if (-not $serverProc) {
+              Write-Host "❌ Server process died"
+              Get-Content server.log
               exit 1
-            fi
-            # Check if port is listening (using PowerShell's Test-NetConnection)
-            if powershell -Command "Test-NetConnection -ComputerName localhost -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet" 2>/dev/null | grep -q "True"; then
-              echo "✓ Server is listening on port ${{ env.SERVER_PORT }}"
+            }
+
+            Write-Host "Server process is running..."
+
+            # Check if port is listening
+            $connection = Test-NetConnection -ComputerName localhost -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
+            if ($connection) {
+              Write-Host "✓ Server is listening on port ${{ env.SERVER_PORT }}"
+              $started = $true
               break
-            fi
-          done
+            }
+
+            Start-Sleep -Seconds 1
+          }
+
+          if (-not $started) {
+            Write-Host "❌ Server did not start listening within timeout"
+            Get-Content server.log
+            exit 1
+          }
 
           # Give it a bit more time to fully initialize
-          sleep 5
+          Start-Sleep -Seconds 5
 
-          echo "✓ Server started"
+          Write-Host "✓ Server started"
 
       - name: Run miner test
-        shell: bash
+        shell: pwsh
         timeout-minutes: 2
         run: |
-          echo "=================================================="
-          echo "Running Windows CPU Miner Test"
-          echo "=================================================="
-          echo ""
-          echo "Pool address: localhost:${{ env.SERVER_PORT }}"
-          echo ""
+          Write-Host "=================================================="
+          Write-Host "Running Windows CPU Miner Test"
+          Write-Host "=================================================="
+          Write-Host ""
+          Write-Host "Pool address: localhost:${{ env.SERVER_PORT }}"
+          Write-Host ""
 
           # Run miner for 30 seconds to test functionality
-          echo "Starting miner for 30 seconds..."
-          timeout 30s ./bin/client.exe --pool localhost:${{ env.SERVER_PORT }} --cpu 1 || EXIT_CODE=$?
+          Write-Host "Starting miner for 30 seconds..."
 
-          # Exit code 124 means timeout (expected, we stopped it)
-          # Exit code 0 means it completed successfully
-          if [ ${EXIT_CODE:-0} -eq 124 ] || [ ${EXIT_CODE:-0} -eq 0 ]; then
-            echo ""
-            echo "✓ SUCCESS: Windows CPU miner ran successfully!"
-            echo "✓ Miner was able to:"
-            echo "  - Execute on Windows"
-            echo "  - Connect to the server"
-            echo "  - Start mining operations"
-          else
-            echo ""
-            echo "❌ FAILED: Miner exited with unexpected code ${EXIT_CODE}"
-            exit 1
-          fi
+          # Start the miner process
+          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--server", "localhost:${{ env.SERVER_PORT }}" -PassThru -NoNewWindow
+          Write-Host "Miner PID: $($proc.Id)"
+
+          # Wait for 30 seconds
+          $timeout = $proc | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue -PassThru
+
+          # Check if process is still running
+          if (-not $proc.HasExited) {
+            Write-Host "Stopping miner after 30 seconds..."
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+          }
+
+          # Check exit code
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 means normal termination
+            if ($exitCode -eq 0) {
+              Write-Host ""
+              Write-Host "✓ SUCCESS: Windows CPU miner ran successfully!"
+              Write-Host "✓ Miner was able to:"
+              Write-Host "  - Execute on Windows"
+              Write-Host "  - Connect to the server"
+              Write-Host "  - Start mining operations"
+            } else {
+              Write-Host ""
+              Write-Host "❌ FAILED: Miner exited with unexpected code $exitCode"
+              exit 1
+            }
+          } else {
+            # Process was killed after timeout (expected)
+            Write-Host ""
+            Write-Host "✓ SUCCESS: Windows CPU miner ran successfully!"
+            Write-Host "✓ Miner was able to:"
+            Write-Host "  - Execute on Windows"
+            Write-Host "  - Connect to the server"
+            Write-Host "  - Start mining operations"
+          }
 
       - name: Stop server
         if: always()
-        shell: bash
+        shell: pwsh
         run: |
-          echo "Stopping server..."
-          taskkill //F //IM server.exe || true
-          echo "✓ Server stopped"
+          Write-Host "Stopping server..."
+          Stop-Process -Name "server" -Force -ErrorAction SilentlyContinue
+          Write-Host "✓ Server stopped"
 
       - name: Upload Windows binaries
         uses: actions/upload-artifact@v4
@@ -326,38 +381,52 @@ jobs:
           path: bin
 
       - name: Verify cross-compiled binary executes
-        shell: bash
+        shell: pwsh
         run: |
-          echo "=================================================="
-          echo "Testing Cross-Compiled Windows Binary"
-          echo "=================================================="
-          echo ""
+          Write-Host "=================================================="
+          Write-Host "Testing Cross-Compiled Windows Binary"
+          Write-Host "=================================================="
+          Write-Host ""
 
-          ls -lh bin/
+          Get-ChildItem bin/
 
-          echo "Testing cross-compiled CPU miner..."
-          timeout 5s ./bin/client-cross.exe --help || EXIT_CODE=$?
+          Write-Host "Testing cross-compiled CPU miner..."
+          $proc = Start-Process -FilePath ".\bin\client-cross.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
-          if [ ${EXIT_CODE:-0} -eq 124 ] || [ ${EXIT_CODE:-0} -eq 0 ] || [ ${EXIT_CODE:-0} -eq 2 ]; then
-            echo "✓ Cross-compiled CPU miner executes on Windows!"
-          else
-            echo "❌ Cross-compiled miner failed with exit code ${EXIT_CODE}"
-            exit 1
-          fi
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Cross-compiled CPU miner executes on Windows! (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Cross-compiled miner failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Cross-compiled CPU miner executes on Windows! (timed out, as expected)"
+          }
 
-          echo ""
-          echo "Testing cross-compiled OpenCL miner..."
-          timeout 5s ./bin/client-windows-opencl.exe --help || EXIT_CODE=$?
+          Write-Host ""
+          Write-Host "Testing cross-compiled OpenCL miner..."
+          $proc = Start-Process -FilePath ".\bin\client-windows-opencl.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "nul" -RedirectStandardError "nul"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
 
-          if [ ${EXIT_CODE:-0} -eq 124 ] || [ ${EXIT_CODE:-0} -eq 0 ] || [ ${EXIT_CODE:-0} -eq 2 ]; then
-            echo "✓ Cross-compiled OpenCL miner executes on Windows!"
-          else
-            echo "❌ Cross-compiled OpenCL miner failed with exit code ${EXIT_CODE}"
-            exit 1
-          fi
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Cross-compiled OpenCL miner executes on Windows! (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Cross-compiled OpenCL miner failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Cross-compiled OpenCL miner executes on Windows! (timed out, as expected)"
+          }
 
-          echo ""
-          echo "✓ SUCCESS: Cross-compiled binaries work on Windows!"
+          Write-Host ""
+          Write-Host "✓ SUCCESS: Cross-compiled binaries work on Windows!"
 
   # Summary job
   windows-test-summary:

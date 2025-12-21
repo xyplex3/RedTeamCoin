@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Custom release notes (markdown supported)'
+        required: false
+        type: string
 
 env:
   GO_VERSION: 1.25.5
@@ -40,7 +50,33 @@ jobs:
       - name: Fix GOPATH
         run: echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Run GoReleaser
+      - name: Create and push tag (manual workflow)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ inputs.tag }}" -m "Release ${{ inputs.tag }}"
+          git push origin "${{ inputs.tag }}"
+
+      - name: Create custom release notes file
+        if: github.event_name == 'workflow_dispatch' && inputs.release_notes != ''
+        run: |
+          cat > /tmp/release_notes.md << 'EOF'
+          ${{ inputs.release_notes }}
+          EOF
+
+      - name: Run GoReleaser (with custom notes)
+        if: github.event_name == 'workflow_dispatch' && inputs.release_notes != ''
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --release-notes=/tmp/release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser (default)
+        if: github.event_name != 'workflow_dispatch' || inputs.release_notes == ''
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser

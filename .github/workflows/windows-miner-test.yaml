@@ -137,7 +137,7 @@ jobs:
           Write-Host "Starting server on port ${{ env.SERVER_PORT }}..."
 
           # Start server in background
-          $proc = Start-Process -FilePath ".\bin\server.exe" -PassThru -NoNewWindow -RedirectStandardOutput "server.log" -RedirectStandardError "server.log"
+          $proc = Start-Process -FilePath ".\bin\server.exe" -PassThru -NoNewWindow -RedirectStandardOutput "server-stdout.log" -RedirectStandardError "server-stderr.log"
           $serverPid = $proc.Id
           Write-Host "Server PID: $serverPid"
 
@@ -151,7 +151,10 @@ jobs:
             $serverProc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
             if (-not $serverProc) {
               Write-Host "❌ Server process died"
-              Get-Content server.log
+              Write-Host "=== STDOUT ==="
+              Get-Content server-stdout.log -ErrorAction SilentlyContinue
+              Write-Host "=== STDERR ==="
+              Get-Content server-stderr.log -ErrorAction SilentlyContinue
               exit 1
             }
 
@@ -170,7 +173,10 @@ jobs:
 
           if (-not $started) {
             Write-Host "❌ Server did not start listening within timeout"
-            Get-Content server.log
+            Write-Host "=== STDOUT ==="
+            Get-Content server-stdout.log -ErrorAction SilentlyContinue
+            Write-Host "=== STDERR ==="
+            Get-Content server-stderr.log -ErrorAction SilentlyContinue
             exit 1
           }
 

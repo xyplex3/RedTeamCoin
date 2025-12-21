@@ -4,6 +4,7 @@ bin/
 *.dll
 *.so
 *.dylib
+*.o
 
 # Test binary, built with `go test -c`
 *.test
@@ -43,3 +44,8 @@ CLAUDE.md
 
 # Releases
 dist/
+
+# Local test files
+test-goreleaser-docker.sh
+*.deb
+*.tar.gz

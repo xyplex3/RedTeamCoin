@@ -1,4 +1,4 @@
-.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools build-wasm build-java serve-web clean install-gpu-deps
+.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools build-wasm build-java serve-web clean install-gpu-deps release
 
 # Ensure Go bin is in PATH
 export PATH := $(PATH):$(HOME)/go/bin
@@ -205,7 +205,50 @@ serve-web: build-wasm
 init: install-tools deps proto
 	@echo "✓ Project initialized"
 
-# Help message
+release:
+	@command -v gh >/dev/null 2>&1 || (echo "Error: GitHub CLI (gh) not found. Install from: https://cli.github.com" && exit 1)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required"; \
+		echo "Usage: make release VERSION=v1.0.1 [NOTES_FILE=path/to/notes.md]"; \
+		echo "       make release VERSION=v1.0.1 AUTO=1  (auto-generate notes)"; \
+		exit 1; \
+	fi
+	@echo "Creating release $(VERSION)..."
+	@echo ""
+	@if [ -n "$(NOTES_FILE)" ]; then \
+		if [ ! -f "$(NOTES_FILE)" ]; then \
+			echo "Error: Notes file not found: $(NOTES_FILE)"; \
+			exit 1; \
+		fi; \
+		echo "Using release notes from: $(NOTES_FILE)"; \
+		NOTES=$$(cat "$(NOTES_FILE)"); \
+	elif [ "$(AUTO)" = "1" ]; then \
+		echo "Auto-generating release notes..."; \
+		NOTES=""; \
+	else \
+		TMPFILE=$$(mktemp /tmp/release-notes.XXXXXX.md); \
+		echo "# Release $(VERSION)" > $$TMPFILE; \
+		echo "" >> $$TMPFILE; \
+		echo "## What's Changed" >> $$TMPFILE; \
+		echo "" >> $$TMPFILE; \
+		echo "- " >> $$TMPFILE; \
+		echo "" >> $$TMPFILE; \
+		echo "## Full Changelog" >> $$TMPFILE; \
+		echo "" >> $$TMPFILE; \
+		echo "https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/compare/$$(git describe --tags --abbrev=0 2>/dev/null || echo 'v1.0.0')...$(VERSION)" >> $$TMPFILE; \
+		$${EDITOR:-vim} $$TMPFILE; \
+		NOTES=$$(cat $$TMPFILE); \
+		rm -f $$TMPFILE; \
+	fi; \
+	echo ""; \
+	echo "Triggering release workflow..."; \
+	gh workflow run goreleaser.yaml -f tag=$(VERSION) -f release_notes="$$NOTES"; \
+	echo ""; \
+	echo "✓ Release workflow triggered for $(VERSION)"; \
+	echo ""; \
+	echo "Monitor the workflow at:"; \
+	gh workflow view goreleaser.yaml --web || echo "  https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions"
+
 help:
 	@echo "RedTeamCoin Makefile targets:"
 	@echo ""
@@ -225,6 +268,7 @@ help:
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"
 	@echo "  make run-server         - Start the mining pool server"
 	@echo "  make run-client         - Start the mining client"
+	@echo "  make release VERSION=vX.Y.Z [NOTES_FILE=file.md] - Create release (editor/file/auto)"
 	@echo "  make clean              - Remove build artifacts"
 	@echo "  make deps               - Download Go dependencies"
 	@echo "  make proto              - Generate protobuf code"

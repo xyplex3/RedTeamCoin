@@ -200,16 +200,15 @@ func main() {
 	networkIPs := getNetworkIPs()
 
 	fmt.Printf("\nServer started successfully!\n")
-	fmt.Printf("- gRPC Server: Binding to localhost (127.0.0.1:%d)\n", grpcPort)
+	fmt.Printf("- gRPC Server: Binding to 0.0.0.0:%d (all network interfaces)\n", grpcPort)
 	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
 	if len(networkIPs) > 0 {
-		fmt.Printf("  Note: For network access from other machines, you may need to bind to 0.0.0.0\n")
-		fmt.Printf("        Available network interfaces: ")
+		fmt.Printf("  Network access from: ")
 		for i, ip := range networkIPs {
 			if i > 0 {
 				fmt.Printf(", ")
 			}
-			fmt.Printf("%s", ip)
+			fmt.Printf("%s:%d", ip, grpcPort)
 		}
 		fmt.Printf("\n")
 	}
@@ -248,23 +247,16 @@ func main() {
 }
 
 // startGRPCServer starts the gRPC server for miner connections.
-// It attempts to bind to 127.0.0.1 first for local connections, falling back
-// to 0.0.0.0 if that fails. This function blocks until the server stops or
-// encounters a fatal error.
+// It binds to 0.0.0.0 to accept connections from all network interfaces,
+// allowing both local and remote miner connections. This function blocks
+// until the server stops or encounters a fatal error.
 func startGRPCServer(pool *MiningPool) {
-	// Explicitly bind to 127.0.0.1 for local connections and 0.0.0.0 for network
-	// Windows has issues with :port binding, so we start with 127.0.0.1 first
-	listenAddr := fmt.Sprintf("127.0.0.1:%d", grpcPort)
+	// Bind to 0.0.0.0 to accept connections from all network interfaces
+	listenAddr := fmt.Sprintf("0.0.0.0:%d", grpcPort)
 
 	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		// If binding to 127.0.0.1 fails, try 0.0.0.0
-		log.Printf("Warning: Failed to bind to 127.0.0.1:%d, trying 0.0.0.0: %v", grpcPort, err)
-		listenAddr = fmt.Sprintf("0.0.0.0:%d", grpcPort)
-		lis, err = net.Listen("tcp", listenAddr)
-		if err != nil {
-			log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
-		}
+		log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
 	}
 
 	// Get the actual address we're listening on

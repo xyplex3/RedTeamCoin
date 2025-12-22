@@ -139,8 +139,12 @@ jobs:
       - name: Create GPU builds archive
         run: |
           mkdir -p gpu-builds
-          [ -d cuda ] && cp cuda/* gpu-builds/ || true
-          [ -d opencl ] && cp opencl/* gpu-builds/ || true
+          if [ -d cuda ]; then
+            cp cuda/* gpu-builds/
+          fi
+          if [ -d opencl ]; then
+            cp opencl/* gpu-builds/
+          fi
           tar -czf redteamcoin-gpu-linux-amd64.tar.gz -C gpu-builds .
           sha256sum redteamcoin-gpu-linux-amd64.tar.gz > checksums-gpu.txt
 

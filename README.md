@@ -3,7 +3,8 @@
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml)
-[![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml)
+[![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
+[![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
 
 RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed for authorized security testing
 and red team operations. Built in Go with Java client support, it simulates real-world cryptomining attacks to help

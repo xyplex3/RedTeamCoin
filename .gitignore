@@ -1,0 +1,56 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# log files
+pool_log.json
+
+# Generated protobuf files
+proto/*.pb.go
+
+# TLS certificates (keep private keys secure!)
+certs/
+*.crt
+*.key
+*.pem
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project-specific files
+CLAUDE.md
+.claude/
+
+# Releases
+dist/
+dist-*/
+
+# Local test files
+test-goreleaser-docker.sh
+*.deb
+*.deb.*
+*.tar.gz
+*.tar.gz.*
+*.zip
+*.rpm

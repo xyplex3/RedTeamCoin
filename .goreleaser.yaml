@@ -1,0 +1,218 @@
+---
+version: 2
+
+snapshot:
+  version_template: "{{ .Version }}-next"
+
+builds:
+  # Server binary - all platforms (CGO_ENABLED=0, can cross-compile)
+  - id: "server-linux"
+    binary: server
+    main: ./server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "server-darwin"
+    binary: server
+    main: ./server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "server-windows"
+    binary: server
+    main: ./server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  # Client binary - CPU only (CGO_ENABLED=0, can cross-compile)
+  - id: "client-linux"
+    binary: client
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "client-darwin"
+    binary: client
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  - id: "client-windows"
+    binary: client
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  # Client - Linux with OpenCL (CGO, native build only)
+  - id: "client-linux-opencl"
+    binary: client-opencl
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    tags:
+      - opencl
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+    hooks:
+      pre: make proto
+
+  # Client - Linux with CUDA (CGO, native build only)
+  - id: "client-linux-cuda"
+    binary: client-cuda
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    tags:
+      - cuda
+    env:
+      - CGO_ENABLED=1
+      - CGO_LDFLAGS=-L/usr/local/cuda/lib64/stubs
+    goos:
+      - linux
+    goarch:
+      - amd64
+    hooks:
+      pre:
+        - make proto
+        - sh -c "nvcc -c -m64 -O3 client/mine.cu -o client/mine_cuda.o"
+
+  # Client - macOS with OpenCL (CGO, native build only)
+  - id: "client-darwin-opencl"
+    binary: client-opencl
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    tags:
+      - opencl
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    hooks:
+      pre: make proto
+
+  # Client - Windows with OpenCL (CGO, native build only)
+  - id: "client-windows-opencl"
+    binary: client-opencl
+    main: ./client
+    ldflags:
+      - -s -w
+      - -X main.version={{.Summary}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    tags:
+      - opencl
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - windows
+    goarch:
+      - amd64
+    hooks:
+      pre: make proto
+
+# Don't create archives yet - this is a partial build
+archives:
+  - id: default
+    formats:
+      - binary
+
+# Don't create checksums yet - this is a partial build
+checksum:
+  disable: true
+
+# Don't create changelog yet - this is a partial build
+changelog:
+  disable: true
+
+# Partial build - don't create release
+release:
+  disable: true

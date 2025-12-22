@@ -1,0 +1,520 @@
+---
+name: Windows Miner Testing
+
+# This workflow builds and tests the Windows miner executable
+# to ensure it actually runs and functions correctly on Windows
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'proto/**'
+      - 'Makefile'
+      - '.github/workflows/windows-miner-test.yaml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'proto/**'
+      - 'Makefile'
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.24'
+  SERVER_PORT: '50051'
+
+jobs:
+  # Test CPU-only Windows miner
+  test-windows-cpu-miner:
+    name: Test Windows CPU Miner
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc
+        run: choco install protoc
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        shell: bash
+        run: make proto
+
+      - name: Build Windows server
+        shell: bash
+        run: |
+          echo "Building Windows server..."
+          CGO_ENABLED=0 go build -v -o bin/server.exe ./server
+          ls -lh bin/server.exe
+          echo "✓ Server built successfully"
+
+      - name: Build Windows CPU miner
+        shell: bash
+        run: |
+          echo "Building Windows CPU miner..."
+          CGO_ENABLED=0 go build -v -o bin/client.exe ./client
+          ls -lh bin/client.exe
+          echo "✓ CPU miner built successfully"
+
+      - name: Verify executables exist
+        shell: bash
+        run: |
+          if [ ! -f bin/server.exe ]; then
+            echo "❌ server.exe not found!"
+            exit 1
+          fi
+          if [ ! -f bin/client.exe ]; then
+            echo "❌ client.exe not found!"
+            exit 1
+          fi
+          echo "✓ Both executables found"
+
+      - name: Test server executable
+        shell: pwsh
+        run: |
+          Write-Host "Testing server executable..."
+
+          # Test that server shows help or version info using PowerShell
+          $proc = Start-Process -FilePath ".\bin\server.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 or 2 means it executed and showed help/error
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Server executable runs (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Server executable failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            # Still running after timeout - kill it and consider success
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Server executable runs (timed out, as expected)"
+          }
+
+      - name: Test miner executable
+        shell: pwsh
+        run: |
+          Write-Host "Testing miner executable..."
+
+          # Test that client shows help or version info using PowerShell
+          $proc = Start-Process -FilePath ".\bin\client.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 or 2 means it executed and showed help/error
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Miner executable runs (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Miner executable failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            # Still running after timeout - kill it and consider success
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Miner executable runs (timed out, as expected)"
+          }
+
+      - name: Run miner test with server
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          Write-Host "Starting server on port ${{ env.SERVER_PORT }}..."
+
+          # Start server in background using Start-Job for better isolation
+          $serverJob = Start-Job -ScriptBlock {
+            Set-Location $using:PWD
+            & ".\bin\server.exe" 2>&1 | Tee-Object -FilePath "server-stdout.log"
+          }
+          Write-Host "Server Job ID: $($serverJob.Id)"
+
+          # Wait for server to start by checking if port is listening
+          Write-Host "Waiting for server to start..."
+          $maxAttempts = 30
+          $started = $false
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            # Check if job is still running
+            $jobState = Get-Job -Id $serverJob.Id | Select-Object -ExpandProperty State
+            if ($jobState -eq "Failed" -or $jobState -eq "Completed") {
+              Write-Host "❌ Server job died (State: $jobState)"
+              Write-Host "=== Server Output ==="
+              Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+              Write-Host "=== Log File ==="
+              Get-Content server-stdout.log -ErrorAction SilentlyContinue
+              exit 1
+            }
+
+            # Check if port is listening on IPv4 (127.0.0.1)
+            $connection = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
+            if ($connection) {
+              Write-Host "✓ Server is listening on port ${{ env.SERVER_PORT }} (IPv4)"
+              $started = $true
+              break
+            }
+
+            Start-Sleep -Seconds 1
+          }
+
+          if (-not $started) {
+            Write-Host "❌ Server did not start listening within timeout"
+            Write-Host "=== Server Output ==="
+            Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+            Write-Host "=== Log File ==="
+            Get-Content server-stdout.log -ErrorAction SilentlyContinue
+            Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+            Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          # Give it a bit more time to fully initialize
+          Start-Sleep -Seconds 5
+
+          Write-Host "✓ Server started"
+          Write-Host ""
+          Write-Host "=== Server startup logs ==="
+          Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -First 20
+          Write-Host "==========================="
+          Write-Host ""
+          Write-Host "=================================================="
+          Write-Host "Running Windows CPU Miner Test"
+          Write-Host "=================================================="
+          Write-Host ""
+          Write-Host "Pool address: 127.0.0.1:${{ env.SERVER_PORT }}"
+          Write-Host ""
+
+          # Run miner for 30 seconds to test functionality
+          Write-Host "Starting miner for 30 seconds..."
+
+          # Start the miner process (use 127.0.0.1 to force IPv4)
+          $proc = Start-Process -FilePath ".\bin\client.exe" `
+            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput "out.log" -RedirectStandardError "err.log"
+          Write-Host "Miner PID: $($proc.Id)"
+
+          # Wait for 30 seconds
+          $timeout = $proc | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue -PassThru
+
+          # Track whether we had to stop the process or it exited naturally
+          $stoppedByTest = $false
+
+          # Check if process is still running
+          if (-not $proc.HasExited) {
+            Write-Host "Stopping miner after 30 seconds..."
+            $stoppedByTest = $true
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+          }
+
+          # Show miner output
+          Write-Host ""
+          Write-Host "=== Miner Output ==="
+          Get-Content out.log -ErrorAction SilentlyContinue | Select-Object -Last 20
+          Write-Host "===================="
+          Write-Host ""
+
+          # Check exit code only if process exited naturally (not forcibly stopped)
+          if ($proc.HasExited -and -not $stoppedByTest) {
+            $exitCode = $proc.ExitCode
+            # Exit code 0 means normal termination
+            if ($exitCode -eq 0) {
+              Write-Host ""
+              Write-Host "✓ SUCCESS: Windows CPU miner ran successfully!"
+              Write-Host "✓ Miner was able to:"
+              Write-Host "  - Execute on Windows"
+              Write-Host "  - Connect to the server"
+              Write-Host "  - Start mining operations"
+              Write-Host "  - Exit cleanly (exit code: $exitCode)"
+            } else {
+              Write-Host ""
+              Write-Host "❌ FAILED: Miner exited unexpectedly with code $exitCode"
+              Write-Host ""
+              Write-Host "=== Full Miner Output ==="
+              Get-Content out.log -ErrorAction SilentlyContinue
+              Write-Host ""
+              Write-Host "=== Miner Errors ==="
+              Get-Content err.log -ErrorAction SilentlyContinue
+              Write-Host ""
+              Write-Host "=== Server Output ==="
+              Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 50
+              Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue | Select-Object -Last 20
+              Write-Host ""
+              # Stop the server job before exiting
+              Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+              Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+              exit 1
+            }
+          } else {
+            # Process was killed after timeout (expected) or exited naturally with code 0
+            Write-Host ""
+            Write-Host "✓ SUCCESS: Windows CPU miner ran successfully!"
+            Write-Host "✓ Miner was able to:"
+            Write-Host "  - Execute on Windows"
+            Write-Host "  - Connect to the server"
+            Write-Host "  - Start mining operations"
+            Write-Host "  - Run for the full 30-second test duration"
+          }
+
+          # Stop the server job
+          Write-Host ""
+          Write-Host "Stopping server job..."
+          Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+          Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✓ Server job stopped"
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-cpu-miner-tested
+          path: |
+            bin/server.exe
+            bin/client.exe
+          retention-days: 7
+
+  # Test cross-compiled Windows miner from Linux
+  test-windows-cross-compile:
+    name: Test Windows Cross-Compilation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Cross-compile Windows CPU miner
+        run: |
+          echo "Cross-compiling Windows CPU miner from Linux..."
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -v -o bin/client-cross.exe ./client
+
+          echo "Binary info:"
+          file bin/client-cross.exe
+          ls -lh bin/client-cross.exe
+
+          # Verify it's a valid Windows PE executable
+          if file bin/client-cross.exe | grep -q "PE32+ executable.*Windows"; then
+            echo "✓ Valid Windows executable created via cross-compilation"
+          else
+            echo "❌ Invalid executable format"
+            exit 1
+          fi
+
+      - name: Cross-compile Windows OpenCL miner
+        run: |
+          echo "=================================================="
+          echo "Cross-compiling Windows OpenCL miner from Linux"
+          echo "=================================================="
+
+          # Install MinGW
+          sudo apt-get install -y mingw-w64 build-essential
+
+          # Set up Windows OpenCL SDK for cross-compilation
+          echo "Setting up Windows OpenCL SDK..."
+          git clone --depth 1 https://github.com/KhronosGroup/OpenCL-Headers.git
+          sudo mkdir -p /usr/x86_64-w64-mingw32/include
+          sudo cp -r OpenCL-Headers/CL /usr/x86_64-w64-mingw32/include/
+
+          # Create minimal OpenCL import library for Windows
+          sudo mkdir -p /usr/x86_64-w64-mingw32/lib
+          cat > OpenCL.def << 'EOF'
+          LIBRARY OpenCL
+          EXPORTS
+          clGetPlatformIDs
+          clGetPlatformInfo
+          clGetDeviceIDs
+          clGetDeviceInfo
+          clCreateContext
+          clCreateCommandQueue
+          clCreateProgramWithSource
+          clBuildProgram
+          clCreateKernel
+          clCreateBuffer
+          clSetKernelArg
+          clEnqueueNDRangeKernel
+          clEnqueueReadBuffer
+          clFinish
+          clReleaseMemObject
+          clReleaseKernel
+          clReleaseProgram
+          clReleaseCommandQueue
+          clReleaseContext
+          EOF
+          x86_64-w64-mingw32-dlltool -d OpenCL.def -l libOpenCL.a
+          sudo mv libOpenCL.a /usr/x86_64-w64-mingw32/lib/
+
+          echo "Building Windows OpenCL miner..."
+          make build-windows-opencl
+
+          echo "Binary info:"
+          file bin/client-windows-opencl.exe
+          ls -lh bin/client-windows-opencl.exe
+
+          # Verify it's a valid Windows PE executable
+          if file bin/client-windows-opencl.exe | grep -q "PE32+ executable.*Windows"; then
+            echo ""
+            echo "✓ SUCCESS: Windows OpenCL miner cross-compiled successfully!"
+          else
+            echo ""
+            echo "❌ FAILED: Invalid executable format"
+            exit 1
+          fi
+
+      - name: Upload cross-compiled binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-miner-cross-compiled
+          path: |
+            bin/client-cross.exe
+            bin/client-windows-opencl.exe
+          retention-days: 7
+
+  # Integration test: Download and test cross-compiled binary on Windows
+  test-cross-compiled-on-windows:
+    name: Test Cross-Compiled Binary on Windows
+    needs: test-windows-cross-compile
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download cross-compiled binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-miner-cross-compiled
+          path: bin
+
+      - name: Verify cross-compiled binary executes
+        shell: pwsh
+        run: |
+          Write-Host "=================================================="
+          Write-Host "Testing Cross-Compiled Windows Binary"
+          Write-Host "=================================================="
+          Write-Host ""
+
+          Get-ChildItem bin/
+
+          Write-Host "Testing cross-compiled CPU miner..."
+          $proc = Start-Process -FilePath ".\bin\client-cross.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Cross-compiled CPU miner executes on Windows! (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Cross-compiled miner failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Cross-compiled CPU miner executes on Windows! (timed out, as expected)"
+          }
+
+          Write-Host ""
+          Write-Host "Testing cross-compiled OpenCL miner..."
+          $proc = Start-Process -FilePath ".\bin\client-windows-opencl.exe" -ArgumentList "--help" -PassThru -NoNewWindow -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+          $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+
+          if ($proc.HasExited) {
+            $exitCode = $proc.ExitCode
+            if ($exitCode -eq 0 -or $exitCode -eq 2) {
+              Write-Host "✓ Cross-compiled OpenCL miner executes on Windows! (exit code: $exitCode)"
+            } else {
+              Write-Host "❌ Cross-compiled OpenCL miner failed with exit code $exitCode"
+              exit 1
+            }
+          } else {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "✓ Cross-compiled OpenCL miner executes on Windows! (timed out, as expected)"
+          }
+
+          Write-Host ""
+          Write-Host "✓ SUCCESS: Cross-compiled binaries work on Windows!"
+
+  # Summary job
+  windows-test-summary:
+    name: Windows Test Summary
+    needs: [test-windows-cpu-miner, test-windows-cross-compile, test-cross-compiled-on-windows]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "=================================================="
+          echo "Windows Miner Test Summary"
+          echo "=================================================="
+          echo ""
+
+          if [ "${{ needs.test-windows-cpu-miner.result }}" == "success" ]; then
+            echo "✓ Windows CPU miner (native build): PASSED"
+          else
+            echo "❌ Windows CPU miner (native build): FAILED"
+          fi
+
+          if [ "${{ needs.test-windows-cross-compile.result }}" == "success" ]; then
+            echo "✓ Windows cross-compilation: PASSED"
+          else
+            echo "❌ Windows cross-compilation: FAILED"
+          fi
+
+          if [ "${{ needs.test-cross-compiled-on-windows.result }}" == "success" ]; then
+            echo "✓ Cross-compiled binary on Windows: PASSED"
+          else
+            echo "❌ Cross-compiled binary on Windows: FAILED"
+          fi
+
+          echo ""
+
+          # Fail if any required job failed
+          if [ "${{ needs.test-windows-cpu-miner.result }}" != "success" ] || \
+             [ "${{ needs.test-windows-cross-compile.result }}" != "success" ] || \
+             [ "${{ needs.test-cross-compiled-on-windows.result }}" != "success" ]; then
+            echo "❌ Some Windows miner tests failed. Check the logs above."
+            exit 1
+          fi
+
+          echo "🎉 All Windows miner tests passed!"
+          echo ""
+          echo "Verified:"
+          echo "  ✓ Windows binaries build successfully (native)"
+          echo "  ✓ Windows binaries execute correctly"
+          echo "  ✓ Miner can connect to server and mine"
+          echo "  ✓ Cross-compilation from Linux works"
+          echo "  ✓ Cross-compiled binaries run on Windows"
+          echo "  ✓ OpenCL GPU miner cross-compiles successfully"

@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -8,7 +9,9 @@ import (
 	"time"
 )
 
-// LogEntry represents a single log entry
+// LogEntry represents a single event logged by the mining pool server.
+// Events are timestamped and categorized by type, with optional miner
+// association and additional details stored as key-value pairs.
 type LogEntry struct {
 	Timestamp time.Time              `json:"timestamp"`
 	EventType string                 `json:"event_type"`
@@ -17,7 +20,9 @@ type LogEntry struct {
 	Message   string                 `json:"message"`
 }
 
-// MinerLogInfo represents miner information in the log
+// MinerLogInfo represents detailed miner state captured in log snapshots.
+// This structure provides a complete view of a miner's configuration,
+// status, and performance metrics at the time of logging.
 type MinerLogInfo struct {
 	ID                 string    `json:"id"`
 	IPAddress          string    `json:"ip_address"`
@@ -38,7 +43,9 @@ type MinerLogInfo struct {
 	HybridMode         bool      `json:"hybrid_mode"`
 }
 
-// PoolSnapshot represents a snapshot of the pool state
+// PoolSnapshot represents a complete snapshot of the mining pool's state
+// at a specific point in time, including aggregate statistics and detailed
+// information about all registered miners.
 type PoolSnapshot struct {
 	Timestamp        time.Time      `json:"timestamp"`
 	TotalMiners      int            `json:"total_miners"`
@@ -50,7 +57,9 @@ type PoolSnapshot struct {
 	Miners           []MinerLogInfo `json:"miners"`
 }
 
-// LogFile represents the complete log file structure
+// LogFile represents the complete structure of a pool log file written
+// to disk. It contains server metadata, event history, and a current
+// snapshot of the pool state for comprehensive monitoring and analysis.
 type LogFile struct {
 	ServerStartTime time.Time    `json:"server_start_time"`
 	ServerUptime    float64      `json:"server_uptime_seconds"`
@@ -59,7 +68,10 @@ type LogFile struct {
 	CurrentSnapshot PoolSnapshot `json:"current_snapshot"`
 }
 
-// PoolLogger handles periodic logging of pool state to JSON file
+// PoolLogger handles periodic logging of mining pool state to a JSON file.
+// It maintains an in-memory event buffer and periodically writes complete
+// snapshots to disk for monitoring, debugging, and forensic analysis.
+// All methods are safe for concurrent use.
 type PoolLogger struct {
 	pool           *MiningPool
 	blockchain     *Blockchain
@@ -71,7 +83,9 @@ type PoolLogger struct {
 	maxEvents      int // Maximum number of events to keep in memory
 }
 
-// NewPoolLogger creates a new pool logger
+// NewPoolLogger creates a new pool logger that writes snapshots to the
+// specified log file at the given update interval. The logger maintains
+// up to 1000 recent events in memory to include in log output.
 func NewPoolLogger(pool *MiningPool, blockchain *Blockchain, logFile string, updateInterval time.Duration) *PoolLogger {
 	return &PoolLogger{
 		pool:           pool,
@@ -84,7 +98,9 @@ func NewPoolLogger(pool *MiningPool, blockchain *Blockchain, logFile string, upd
 	}
 }
 
-// LogEvent adds an event to the log
+// LogEvent records a new event in the logger's buffer with the current
+// timestamp. If the event buffer exceeds maxEvents (1000), the oldest
+// events are discarded. This method is safe for concurrent use.
 func (pl *PoolLogger) LogEvent(eventType, message string, minerID string, details map[string]interface{}) {
 	pl.mu.Lock()
 	defer pl.mu.Unlock()
@@ -105,7 +121,9 @@ func (pl *PoolLogger) LogEvent(eventType, message string, minerID string, detail
 	}
 }
 
-// GetPoolSnapshot creates a snapshot of the current pool state
+// GetPoolSnapshot creates a complete snapshot of the current mining pool
+// state including all miner information and aggregate statistics. The
+// snapshot reflects the pool's state at the moment this method is called.
 func (pl *PoolLogger) GetPoolSnapshot() PoolSnapshot {
 	miners := pl.pool.GetMiners()
 	stats := pl.pool.GetPoolStats()
@@ -145,7 +163,9 @@ func (pl *PoolLogger) GetPoolSnapshot() PoolSnapshot {
 	}
 }
 
-// WriteLog writes the current state to the log file
+// WriteLog writes the current pool state, event history, and metadata to
+// the log file. It uses atomic file writes (write to temp, then rename)
+// to prevent corruption. This method is safe for concurrent use.
 func (pl *PoolLogger) WriteLog() error {
 	pl.mu.RLock()
 	defer pl.mu.RUnlock()
@@ -176,7 +196,10 @@ func (pl *PoolLogger) WriteLog() error {
 	return nil
 }
 
-// Start begins the periodic logging
+// Start begins periodic logging to disk at the configured update interval.
+// It writes an initial snapshot immediately, then continues writing
+// snapshots on a regular schedule. This method spawns a goroutine and
+// returns immediately.
 func (pl *PoolLogger) Start() {
 	go func() {
 		// Write initial log

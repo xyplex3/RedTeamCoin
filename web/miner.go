@@ -1,13 +1,15 @@
 //go:build js && wasm
 // +build js,wasm
 
-// Package main implements a WebAssembly-based cryptocurrency miner for browsers.
+// Package main implements a WebAssembly-based cryptocurrency miner for
+// browsers.
 //
-// This package compiles to WASM and provides JavaScript bindings for browser-based
-// mining. It supports multi-threaded mining using Web Workers and provides
-// real-time statistics via callbacks.
+// This package compiles to WASM and provides JavaScript bindings for
+// browser-based mining. It supports multi-threaded mining using Web
+// Workers and provides real-time statistics via callbacks.
 //
-// The miner exposes a RedTeamMiner global object in JavaScript with methods for:
+// The miner exposes a RedTeamMiner global object in JavaScript with
+// methods for:
 //   - Starting and stopping mining
 //   - Setting work parameters
 //   - Configuring threads and throttling
@@ -30,8 +32,9 @@ import (
 	"time"
 )
 
-// MiningWork represents a mining work unit received from the pool server.
-// It contains all parameters needed to perform proof-of-work mining.
+// MiningWork represents a mining work unit received from the pool
+// server. It contains all parameters needed to perform proof-of-work
+// mining.
 type MiningWork struct {
 	BlockIndex   int64  `json:"blockIndex"`
 	PreviousHash string `json:"previousHash"`
@@ -52,12 +55,13 @@ type MinerStats struct {
 	CurrentNonce int64   `json:"currentNonce"`
 }
 
-// WebMiner manages cryptocurrency mining operations in a web browser using
-// WebAssembly. It coordinates mining across multiple threads, tracks statistics,
-// and provides JavaScript callbacks for results and status updates.
+// WebMiner manages cryptocurrency mining operations in a web browser
+// using WebAssembly. It coordinates mining across multiple threads,
+// tracks statistics, and provides JavaScript callbacks for results and
+// status updates.
 //
-// All operations are thread-safe for concurrent access from JavaScript and
-// Go goroutines.
+// All operations are thread-safe for concurrent access from JavaScript
+// and Go goroutines.
 type WebMiner struct {
 	mu           sync.RWMutex
 	running      bool

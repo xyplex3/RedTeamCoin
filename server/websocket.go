@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -11,7 +12,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocket upgrader
+// upgrader configures the WebSocket connection upgrader with permissive
+// CORS settings for development. In production, CheckOrigin should be
+// configured to validate allowed origins.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -20,7 +23,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// WebMiner represents a browser-based miner
+// WebMiner represents a browser-based cryptocurrency miner connected via
+// WebSocket. It tracks the miner's configuration, performance statistics,
+// and connection state. All fields are protected by an internal mutex
+// for thread-safe access.
 type WebMiner struct {
 	ID        string
 	Conn      *websocket.Conn
@@ -36,7 +42,10 @@ type WebMiner struct {
 	mu        sync.Mutex
 }
 
-// WebSocketHub manages all web miners
+// WebSocketHub manages all connected web-based miners and coordinates
+// message broadcasting. It maintains miner connections, handles miner
+// lifecycle events (registration/disconnection), and provides work
+// distribution for browser-based mining. All operations are thread-safe.
 type WebSocketHub struct {
 	miners    map[string]*WebMiner
 	broadcast chan []byte
@@ -46,7 +55,9 @@ type WebSocketHub struct {
 	mu        sync.RWMutex
 }
 
-// NewWebSocketHub creates a new WebSocket hub
+// NewWebSocketHub creates a new WebSocket hub that coordinates web-based
+// miners for the given mining pool. The hub must be started with Run
+// before it can process connections.
 func NewWebSocketHub(pool *MiningPool) *WebSocketHub {
 	return &WebSocketHub{
 		miners:    make(map[string]*WebMiner),
@@ -57,7 +68,9 @@ func NewWebSocketHub(pool *MiningPool) *WebSocketHub {
 	}
 }
 
-// Run starts the hub
+// Run starts the WebSocket hub's main event loop, processing miner
+// registrations, disconnections, and broadcast messages. This method
+// blocks and should be run in a goroutine.
 func (h *WebSocketHub) Run() {
 	for {
 		select {
@@ -91,12 +104,16 @@ func (h *WebSocketHub) Run() {
 	}
 }
 
-// WebSocket message types
+// WSMessage represents the base structure for all WebSocket messages
+// exchanged between the server and browser-based miners. The Type field
+// determines how to interpret the Data payload.
 type WSMessage struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data,omitempty"`
 }
 
+// WSRegister contains miner registration information sent by browser
+// clients when first connecting to the pool.
 type WSRegister struct {
 	MinerID   string `json:"minerId"`
 	UserAgent string `json:"userAgent"`
@@ -105,6 +122,8 @@ type WSRegister struct {
 	Version   string `json:"version"`
 }
 
+// WSWork represents a mining work unit sent from the server to browser
+// miners. It contains all parameters needed to perform proof-of-work.
 type WSWork struct {
 	BlockIndex   int64  `json:"blockIndex"`
 	PreviousHash string `json:"previousHash"`
@@ -113,6 +132,8 @@ type WSWork struct {
 	Timestamp    int64  `json:"timestamp"`
 }
 
+// WSSubmit represents a work submission from a browser miner containing
+// a potential solution (nonce and hash) for the assigned block.
 type WSSubmit struct {
 	MinerID    string `json:"minerId"`
 	BlockIndex int64  `json:"blockIndex"`
@@ -120,6 +141,8 @@ type WSSubmit struct {
 	Hash       string `json:"hash"`
 }
 
+// WSStats contains real-time mining statistics sent periodically from
+// browser miners to the server for monitoring and dashboard display.
 type WSStats struct {
 	MinerID     string `json:"minerId"`
 	HashRate    int64  `json:"hashRate"`
@@ -128,7 +151,9 @@ type WSStats struct {
 	Uptime      int64  `json:"uptime"`
 }
 
-// HandleWebSocket handles WebSocket connections for web miners
+// HandleWebSocket handles HTTP requests to upgrade to WebSocket
+// connections for browser-based miners. It upgrades the connection
+// and spawns a goroutine to handle miner messages.
 func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -305,7 +330,9 @@ func (h *WebSocketHub) sendToMiner(miner *WebMiner, msg interface{}) {
 	}
 }
 
-// GetWebMinersStats returns statistics for all web miners
+// GetWebMinersStats returns current statistics for all connected
+// web-based miners including hash rates, uptime, and block counts.
+// This method is safe for concurrent access.
 func (h *WebSocketHub) GetWebMinersStats() []map[string]interface{} {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -327,7 +354,9 @@ func (h *WebSocketHub) GetWebMinersStats() []map[string]interface{} {
 	return stats
 }
 
-// BroadcastWork sends new work to all connected web miners
+// BroadcastWork sends new mining work to all connected web-based miners
+// simultaneously. This is useful when the pool wants to reassign work
+// or notify miners of new opportunities.
 func (h *WebSocketHub) BroadcastWork(work *WSWork) {
 	msg, err := json.Marshal(map[string]interface{}{
 		"type": "work",
@@ -340,7 +369,8 @@ func (h *WebSocketHub) BroadcastWork(work *WSWork) {
 	h.broadcast <- msg
 }
 
-// Work represents mining work from the pool
+// Work represents a mining work unit from the pool containing all
+// parameters needed for miners to perform proof-of-work computation.
 type Work struct {
 	BlockIndex   int64
 	PreviousHash string

@@ -7,7 +7,7 @@ on:
       - main
 
 env:
-  GO_VERSION: 1.23.5
+  GO_VERSION: '1.24.11'
 
 jobs:
   # Test build binaries on each platform without creating release
@@ -19,17 +19,27 @@ jobs:
         config:
           - name: Linux
             os: ubuntu-latest
-            goreleaser_config: .goreleaser.linux.yaml
+            build_ids:
+              - server-linux
+              - client-linux
+              - client-linux-opencl
+              - client-linux-cuda
             setup_cuda: true
             setup_opencl: true
           - name: macOS
             os: macos-latest
-            goreleaser_config: .goreleaser.macos.yaml
+            build_ids:
+              - server-darwin
+              - client-darwin
+              - client-darwin-opencl
             setup_cuda: false
             setup_opencl: false  # macOS has OpenCL built-in
           - name: Windows
             os: windows-latest
-            goreleaser_config: .goreleaser.windows.yaml
+            build_ids:
+              - server-windows
+              - client-windows
+              - client-windows-opencl
             setup_cuda: false
             setup_opencl: true
 
@@ -83,9 +93,14 @@ jobs:
 
       - name: Install OpenCL SDK (Windows)
         if: matrix.config.os == 'windows-latest' && matrix.config.setup_opencl
+        shell: pwsh
         run: |
-          choco install opencl-intel-cpu-runtime
-          # Note: Full OpenCL SDK would be needed for development, but headers might be in the Go code already
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          C:\vcpkg\vcpkg.exe install opencl --triplet=x64-windows
+          "OPENCL_ROOT=C:\vcpkg\installed\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CGO_CFLAGS=-IC:\vcpkg\installed\x64-windows\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CGO_LDFLAGS=-LC:\vcpkg\installed\x64-windows\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # Common Go tools setup
       - name: Install Go tools
@@ -104,13 +119,24 @@ jobs:
           $gopath = go env GOPATH
           "$gopath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      # Build binaries with platform-specific config
-      - name: Build with GoReleaser
+      # Install GoReleaser
+      - name: Set up GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           version: latest
-          args: build --snapshot --clean --config ${{ matrix.config.goreleaser_config }}
+          install-only: true
+
+      # Build binaries with platform-specific IDs
+      - name: Build with GoReleaser
+        shell: bash
+        run: |
+          ARGS=(build --snapshot --clean)
+          IDS='${{ toJSON(matrix.config.build_ids) }}'
+          for id in $(echo "$IDS" | jq -r '.[]'); do
+            ARGS+=(--id "$id")
+          done
+          goreleaser "${ARGS[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

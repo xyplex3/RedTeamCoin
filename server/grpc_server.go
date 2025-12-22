@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -12,20 +13,27 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-// MiningPoolServer implements the gRPC mining pool service
+// MiningPoolServer implements the gRPC MiningPool service for miner
+// communication. It handles miner registration, work distribution, solution
+// submission, and heartbeats. The server extracts actual client IP addresses
+// from gRPC connections for accurate tracking.
 type MiningPoolServer struct {
-	pb.UnimplementedMiningPoolServer
-	pool *MiningPool
+	pb.UnimplementedMiningPoolServer             // Embedded for forward compatibility
+	pool                             *MiningPool // Mining pool to coordinate
 }
 
-// NewMiningPoolServer creates a new gRPC server
+// NewMiningPoolServer creates a new gRPC mining pool server that wraps
+// the given mining pool. The returned server implements the pb.MiningPoolServer
+// interface and can be registered with a gRPC server.
 func NewMiningPoolServer(pool *MiningPool) *MiningPoolServer {
 	return &MiningPoolServer{
 		pool: pool,
 	}
 }
 
-// getClientIP extracts the actual IP address from gRPC context
+// getClientIP extracts the actual client IP address from the gRPC context
+// by examining the peer information. It handles both IPv4 and IPv6 addresses
+// and returns "unknown" if the IP cannot be determined.
 func getClientIP(ctx context.Context) string {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
@@ -45,7 +53,9 @@ func getClientIP(ctx context.Context) string {
 	return host
 }
 
-// RegisterMiner handles miner registration
+// RegisterMiner handles miner registration requests from clients.
+// It extracts the actual client IP from the gRPC context and registers
+// the miner with the pool using both reported and actual IP addresses.
 func (s *MiningPoolServer) RegisterMiner(ctx context.Context, req *pb.MinerInfo) (*pb.RegistrationResponse, error) {
 	// Get actual IP from gRPC connection
 	actualIP := getClientIP(ctx)

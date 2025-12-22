@@ -40,6 +40,7 @@ Thumbs.db
 
 # Project-specific files
 CLAUDE.md
+system.md
 .claude/
 
 # Releases

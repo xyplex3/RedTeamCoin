@@ -1,3 +1,12 @@
+// Package main implements the RedTeamCoin mining pool server.
+//
+// The server coordinates cryptocurrency mining operations by distributing work
+// to connected miners, validating submitted blocks, and maintaining the
+// blockchain. It provides both gRPC and REST API interfaces, along with a
+// web dashboard for monitoring pool operations.
+//
+// The server supports TLS/HTTPS for secure communications and can be configured
+// via environment variables for production deployments.
 package main
 
 import (
@@ -16,15 +25,17 @@ import (
 )
 
 const (
-	grpcPort        = 50051
-	apiPort         = 8443 // HTTPS port (8080 for HTTP fallback)
-	httpPort        = 8080 // HTTP redirect port (when TLS is enabled)
-	difficulty      = 6
-	defaultCertFile = "certs/server.crt"
-	defaultKeyFile  = "certs/server.key"
+	grpcPort        = 50051              // Default port for gRPC mining protocol
+	apiPort         = 8443               // HTTPS port for web dashboard and REST API
+	httpPort        = 8080               // HTTP port for redirects when TLS enabled
+	difficulty      = 6                  // Mining difficulty (leading zeros required)
+	defaultCertFile = "certs/server.crt" // Default TLS certificate file path
+	defaultKeyFile  = "certs/server.key" // Default TLS private key file path
 )
 
-// generateAuthToken generates a secure random authentication token
+// generateAuthToken generates a cryptographically secure random 32-byte
+// authentication token encoded as a hexadecimal string. The function
+// terminates the program if random number generation fails.
 func generateAuthToken() string {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
@@ -33,7 +44,9 @@ func generateAuthToken() string {
 	return hex.EncodeToString(bytes)
 }
 
-// getAuthToken returns auth token from environment or generates a new one
+// getAuthToken returns the authentication token from the RTC_AUTH_TOKEN
+// environment variable, or generates a new cryptographically secure token
+// if the variable is not set.
 func getAuthToken() string {
 	// Check if token is provided via environment variable
 	token := os.Getenv("RTC_AUTH_TOKEN")
@@ -45,7 +58,10 @@ func getAuthToken() string {
 	return generateAuthToken()
 }
 
-// getTLSConfig returns TLS configuration from environment
+// getTLSConfig returns TLS configuration from environment variables.
+// It reads RTC_USE_TLS, RTC_CERT_FILE, and RTC_KEY_FILE, returning
+// whether TLS is enabled and the certificate/key file paths.
+// Default paths are used if environment variables are not set.
 func getTLSConfig() (bool, string, string) {
 	useTLS := os.Getenv("RTC_USE_TLS") == "true"
 	certFile := os.Getenv("RTC_CERT_FILE")
@@ -62,13 +78,17 @@ func getTLSConfig() (bool, string, string) {
 	return useTLS, certFile, keyFile
 }
 
-// fileExists checks if a file exists
+// fileExists reports whether the file at the given path exists and is
+// accessible. It returns false for directories or if any error occurs
+// during the stat operation.
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
-// getNetworkIPs returns a list of non-loopback IPv4 addresses
+// getNetworkIPs returns a list of non-loopback IPv4 addresses for all active
+// network interfaces on the system. This is useful for displaying connection
+// information to users on multi-homed systems.
 func getNetworkIPs() []string {
 	var ips []string
 
@@ -227,6 +247,10 @@ func main() {
 	}
 }
 
+// startGRPCServer starts the gRPC server for miner connections.
+// It attempts to bind to 127.0.0.1 first for local connections, falling back
+// to 0.0.0.0 if that fails. This function blocks until the server stops or
+// encounters a fatal error.
 func startGRPCServer(pool *MiningPool) {
 	// Explicitly bind to 127.0.0.1 for local connections and 0.0.0.0 for network
 	// Windows has issues with :port binding, so we start with 127.0.0.1 first

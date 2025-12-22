@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -6,17 +7,20 @@ import (
 	"time"
 )
 
-// GPUDeviceInfo represents information about a GPU device
+// GPUDeviceInfo contains hardware information about a GPU device available
+// for mining. Miners report their GPU capabilities during registration and
+// heartbeats.
 type GPUDeviceInfo struct {
-	ID           int
-	Name         string
-	Type         string // "CUDA" or "OpenCL"
-	Memory       uint64
-	ComputeUnits int
-	Available    bool
+	ID           int    // Unique device identifier
+	Name         string // Device name from hardware
+	Type         string // Device type: "CUDA" or "OpenCL"
+	Memory       uint64 // Total device memory in bytes
+	ComputeUnits int    // Number of compute units/SMs
+	Available    bool   // Whether device is currently available
 }
 
-// PoolStats represents statistics about the mining pool
+// PoolStats contains aggregated statistics about the mining pool's
+// performance and state. This data is exposed via the API for monitoring.
 type PoolStats struct {
 	TotalMiners      int     `json:"total_miners"`
 	ActiveMiners     int     `json:"active_miners"`
@@ -31,7 +35,11 @@ type PoolStats struct {
 	BlockReward      int64   `json:"block_reward"`
 }
 
-// MinerRecord represents information about a connected miner
+// MinerRecord tracks the state and statistics of a connected miner.
+// All fields are protected by the MiningPool's mutex for thread-safe access.
+//
+// The server can control miner behavior through ShouldMine and
+// CPUThrottlePercent fields, which are communicated during heartbeats.
 type MinerRecord struct {
 	ID                 string
 	IPAddress          string // Client-reported IP address
@@ -53,14 +61,21 @@ type MinerRecord struct {
 	HybridMode         bool            // Whether hybrid CPU+GPU mining is enabled
 }
 
-// PendingWork represents work assigned to a miner
+// PendingWork tracks a block assignment to a specific miner.
+// Work is considered stale if not submitted within 5 minutes.
 type PendingWork struct {
 	MinerID    string
 	Block      *Block
 	AssignedAt time.Time
 }
 
-// MiningPool manages the pool of miners and work distribution
+// MiningPool coordinates work distribution among connected miners and
+// validates submitted blocks. All methods are safe for concurrent use by
+// multiple goroutines.
+//
+// The pool automatically generates new work blocks and assigns them to miners
+// on demand. When a miner successfully mines a block, the pool validates and
+// adds it to the blockchain, then rewards the miner.
 type MiningPool struct {
 	blockchain  *Blockchain
 	miners      map[string]*MinerRecord
@@ -71,7 +86,9 @@ type MiningPool struct {
 	logger      *PoolLogger
 }
 
-// NewMiningPool creates a new mining pool
+// NewMiningPool creates a new mining pool that coordinates work distribution
+// for the given blockchain. The pool starts a background goroutine to
+// generate new work blocks every 30 seconds.
 func NewMiningPool(blockchain *Blockchain) *MiningPool {
 	pool := &MiningPool{
 		blockchain:  blockchain,
@@ -88,12 +105,16 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 	return pool
 }
 
-// SetLogger sets the logger for the pool
+// SetLogger assigns a logger to the mining pool for event tracking and
+// periodic statistics logging. This must be called before miners start
+// connecting to ensure events are properly logged.
 func (mp *MiningPool) SetLogger(logger *PoolLogger) {
 	mp.logger = logger
 }
 
-// RegisterMiner registers a new miner in the pool
+// RegisterMiner registers a new miner in the pool or reactivates an existing
+// one. It records both the client-reported IP address and the actual IP
+// detected by the server. This method is safe for concurrent use.
 func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -137,7 +158,10 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 	return nil
 }
 
-// GetWork assigns work to a miner
+// GetWork assigns a mining work unit to the specified miner.
+// It returns existing pending work if less than 5 minutes old, otherwise
+// assigns new work from the queue or generates it. This method is safe for
+// concurrent use.
 func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()

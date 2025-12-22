@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -8,18 +9,29 @@ import (
 	"time"
 )
 
-// APIServer provides HTTP API for administration
+// APIServer provides a REST API and web dashboard for pool administration.
+// It supports both HTTP and HTTPS with bearer token authentication.
+//
+// The server exposes endpoints for:
+//   - Pool statistics and miner information
+//   - Miner control (pause/resume, throttling, deletion)
+//   - Blockchain inspection
+//   - WebSocket updates for real-time monitoring
+//
+// All administrative endpoints require authentication via Bearer token.
 type APIServer struct {
-	pool       *MiningPool
-	blockchain *Blockchain
-	authToken  string
-	useTLS     bool
-	certFile   string
-	keyFile    string
-	wsHub      *WebSocketHub
+	pool       *MiningPool   // Mining pool to expose via API
+	blockchain *Blockchain   // Blockchain to query
+	authToken  string        // Bearer token for authentication
+	useTLS     bool          // Whether to enable HTTPS
+	certFile   string        // Path to TLS certificate
+	keyFile    string        // Path to TLS private key
+	wsHub      *WebSocketHub // WebSocket hub for real-time updates
 }
 
-// NewAPIServer creates a new API server
+// NewAPIServer creates a new API server with the specified configuration.
+// It initializes a WebSocket hub for real-time updates and starts it in
+// a background goroutine. The authToken is required for all API requests.
 func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
 	wsHub := NewWebSocketHub(pool)
 	go wsHub.Run()

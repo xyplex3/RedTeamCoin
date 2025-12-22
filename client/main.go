@@ -1,3 +1,18 @@
+// Package main implements the RedTeamCoin mining client.
+//
+// The client connects to a mining pool server via gRPC, requests work units,
+// performs proof-of-work mining using CPU and/or GPU resources, and submits
+// solutions back to the pool for validation and rewards.
+//
+// The client supports:
+//   - Multi-threaded CPU mining across all available cores
+//   - GPU mining via CUDA or OpenCL (if available)
+//   - Hybrid mode combining CPU and GPU mining simultaneously
+//   - Remote control by the pool server (pause/resume, CPU throttling)
+//   - Automatic reconnection with exponential backoff
+//   - Self-deletion on server command
+//
+// Configuration is done via command-line flags and environment variables.
 package main
 
 import (
@@ -24,41 +39,56 @@ import (
 )
 
 const (
-	defaultServerAddress = "localhost:50051"
-	heartbeatInterval    = 30 * time.Second
+	defaultServerAddress = "localhost:50051" // Default mining pool server address
+	heartbeatInterval    = 30 * time.Second  // Interval between heartbeat updates to server
 )
 
 var (
 	serverAddress string
 )
 
+// Miner represents a mining client that connects to a pool server and
+// performs proof-of-work mining. It manages the mining process, tracks
+// statistics, and handles communication with the pool server.
+//
+// The miner can operate in three modes:
+//   - CPU-only: Uses all available CPU cores for mining
+//   - GPU-only: Uses available CUDA or OpenCL GPUs for mining
+//   - Hybrid: Runs both CPU and GPU mining simultaneously
+//
+// All miner operations are coordinated through a context that can be
+// cancelled for graceful shutdown.
 type Miner struct {
-	id            string
-	ipAddress     string
-	hostname      string
-	serverAddress string
-	client        pb.MiningPoolClient
-	conn          *grpc.ClientConn
-	ctx           context.Context
-	cancel        context.CancelFunc
+	id            string              // Unique miner identifier
+	ipAddress     string              // Client's outbound IP address
+	hostname      string              // System hostname
+	serverAddress string              // Pool server address
+	client        pb.MiningPoolClient // gRPC client for pool communication
+	conn          *grpc.ClientConn    // gRPC connection
+	ctx           context.Context     // Cancellable context for shutdown
+	cancel        context.CancelFunc  // Context cancellation function
 
-	blocksMined        int64
-	hashRate           int64
-	running            bool
-	shouldMine         bool // Server control: whether to actively mine
-	cpuThrottlePercent int  // Server control: CPU usage limit (0-100), 0 = no limit
-	totalHashes        int64
-	startTime          time.Time
-	cpuUsagePercent    float64
-	deletedByServer    bool // Track if miner was deleted by server
+	blocksMined        int64     // Total blocks successfully mined
+	hashRate           int64     // Current hash rate (hashes per second)
+	running            bool      // Whether mining is currently active
+	shouldMine         bool      // Server control: whether to actively mine
+	cpuThrottlePercent int       // Server control: CPU usage limit (0-100), 0 = no limit
+	totalHashes        int64     // Cumulative hashes computed
+	startTime          time.Time // When mining started
+	cpuUsagePercent    float64   // Estimated CPU usage percentage
+	deletedByServer    bool      // Whether miner was deleted by server
 
-	// GPU mining
-	gpuMiner   *GPUMiner
-	hasGPU     bool
-	gpuEnabled bool
-	hybridMode bool // Run CPU and GPU mining together
+	// GPU mining configuration
+	gpuMiner   *GPUMiner // GPU mining implementation
+	hasGPU     bool      // Whether GPU hardware is detected
+	gpuEnabled bool      // Whether GPU mining is enabled
+	hybridMode bool      // Whether to run CPU and GPU mining together
 }
 
+// NewMiner creates a new mining client configured to connect to the specified
+// server address. It automatically detects available GPU hardware and
+// configures mining mode based on environment variables GPU_MINING and
+// HYBRID_MINING.
 func NewMiner(serverAddr string) (*Miner, error) {
 	// Get hostname
 	hostname, err := os.Hostname()
@@ -108,6 +138,9 @@ func NewMiner(serverAddr string) (*Miner, error) {
 	return miner, nil
 }
 
+// getOutboundIP determines the client's outbound IP address by establishing
+// a UDP connection to a public DNS server. It returns "unknown" if the
+// IP cannot be determined.
 func getOutboundIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
@@ -119,6 +152,9 @@ func getOutboundIP() string {
 	return localAddr.IP.String()
 }
 
+// Connect establishes a gRPC connection to the mining pool server and
+// registers the miner. It displays connection information including detected
+// GPU hardware. Returns an error if connection or registration fails.
 func (m *Miner) Connect() error {
 	fmt.Printf("Connecting to mining pool at %s...\n", m.serverAddress)
 
@@ -175,6 +211,9 @@ func (m *Miner) Connect() error {
 	return nil
 }
 
+// Start begins the mining process, initializing GPU miners if available
+// and starting background goroutines for heartbeats and CPU monitoring.
+// This method blocks until mining is stopped.
 func (m *Miner) Start() {
 	m.running = true
 	m.startTime = time.Now()
@@ -197,6 +236,9 @@ func (m *Miner) Start() {
 	m.mine()
 }
 
+// Stop gracefully shuts down the mining process, stopping GPU miners and
+// notifying the pool server unless the miner was deleted by the server.
+// It closes the gRPC connection and cancels the miner's context.
 func (m *Miner) Stop() {
 	if !m.running {
 		return

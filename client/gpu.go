@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining client.
 package main
 
 import (
@@ -7,27 +8,35 @@ import (
 	"sync/atomic"
 )
 
-// GPUDevice represents a detected GPU
+// GPUDevice represents a detected GPU device available for mining.
+// Devices can be either CUDA (NVIDIA) or OpenCL (AMD/Intel) compatible.
 type GPUDevice struct {
-	ID           int
-	Name         string
-	Type         string // "CUDA" or "OpenCL"
-	Memory       uint64 // Memory in bytes
-	ComputeUnits int
-	Available    bool
+	ID           int    // Unique device identifier
+	Name         string // Device name from hardware
+	Type         string // Device type: "CUDA" or "OpenCL"
+	Memory       uint64 // Total device memory in bytes
+	ComputeUnits int    // Number of compute units/SMs/CUs
+	Available    bool   // Whether device is currently available for use
 }
 
-// GPUMiner handles GPU-based mining
+// GPUMiner coordinates GPU-based cryptocurrency mining across multiple
+// devices. It supports both CUDA (NVIDIA) and OpenCL (AMD/Intel) devices
+// and can utilize all detected GPUs simultaneously.
+//
+// The miner automatically detects available devices during initialization
+// and manages their lifecycle. All operations are thread-safe.
 type GPUMiner struct {
-	devices     []GPUDevice
-	running     bool
-	mu          sync.Mutex
-	hashCount   int64
-	cudaMiner   *CUDAMiner
-	openCLMiner *OpenCLMiner
+	devices     []GPUDevice  // All detected GPU devices
+	running     bool         // Whether mining is active
+	mu          sync.Mutex   // Protects concurrent access
+	hashCount   int64        // Atomic hash counter
+	cudaMiner   *CUDAMiner   // CUDA mining implementation
+	openCLMiner *OpenCLMiner // OpenCL mining implementation
 }
 
-// NewGPUMiner creates a new GPU miner with device detection
+// NewGPUMiner creates a new GPU miner and automatically detects all available
+// CUDA and OpenCL devices. The miner is initialized in a stopped state and
+// must be started with Start before mining begins.
 func NewGPUMiner() *GPUMiner {
 	gm := &GPUMiner{
 		devices:   make([]GPUDevice, 0),

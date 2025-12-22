@@ -214,33 +214,51 @@ jobs:
       - name: Create archives
         run: |
           cd dist
-          # Find all binaries and create tar.gz/zip archives
-          for file in ./*; do
-            if [ -f "$file" ] && [ -x "$file" ]; then
-              filename="${file#./}"
-              echo "Creating archive for $filename"
-              case "$filename" in
-                *.exe)
-                  # Windows binary - create zip
-                  zip "${filename%.exe}.zip" "$filename"
-                  ;;
-                *)
-                  # Unix binary - create tar.gz
-                  tar czf "${filename}.tar.gz" "$filename"
-                  ;;
-              esac
-            fi
+          echo "=== Contents of dist directory ==="
+          ls -laR
+          echo "==================================="
+
+          # Find all binaries in subdirectories and create tar.gz/zip archives
+          find . -type f \( -name "server" -o -name "client*" -o -name "*.exe" \) | while read -r file; do
+            # Remove leading ./
+            filename="${file#./}"
+            # Get just the binary name without directory
+            basename=$(basename "$filename")
+            # Get the directory name for platform info
+            dirname=$(dirname "$filename" | sed 's|^\./||')
+
+            echo "Found binary: $filename"
+            echo "  Basename: $basename"
+            echo "  Directory: $dirname"
+
+            # Create archive name from directory (e.g., server_linux_amd64_v1 -> server_linux_amd64)
+            # shellcheck disable=SC2001
+            archive_base=$(echo "$dirname" | sed 's/_v[0-9]*$//')
+
+            case "$basename" in
+              *.exe)
+                # Windows binary - create zip
+                archive_name="${archive_base}.zip"
+                echo "Creating Windows archive: $archive_name"
+                (cd "$(dirname "$filename")" && zip "../${archive_name}" "$(basename "$filename")")
+                ;;
+              *)
+                # Unix binary - create tar.gz
+                archive_name="${archive_base}.tar.gz"
+                echo "Creating Unix archive: $archive_name"
+                (cd "$(dirname "$filename")" && tar czf "../${archive_name}" "$(basename "$filename")")
+                ;;
+            esac
+            echo "Created: $archive_name"
+            echo "---"
           done
-          ls -la
 
-      # Generate checksums
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum ./*.tar.gz ./*.zip > checksums.txt 2>/dev/null || true
-          cat checksums.txt
+          echo ""
+          echo "=== Created archives ==="
+          ls -lh ./*.tar.gz ./*.zip 2>/dev/null || echo "No archives found!"
+          echo "========================"
 
-      # Determine release tag
+      # Determine release tag (needed for checksums filename)
       - name: Determine release tag
         id: release_tag
         run: |
@@ -249,6 +267,51 @@ jobs:
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
+
+      # Generate checksums with proper GoReleaser naming convention
+      - name: Generate checksums
+        run: |
+          cd dist
+          echo "=== Generating checksums ==="
+          # Use GoReleaser standard naming: <project>_<version>_checksums.txt
+          CHECKSUM_FILE="redteamcoin_${{ steps.release_tag.outputs.tag }}_checksums.txt"
+          echo "Checksum filename: $CHECKSUM_FILE"
+          # Generate checksums for all archives
+          sha256sum ./*.tar.gz ./*.zip > "$CHECKSUM_FILE" 2>/dev/null || echo "No archives found for checksums" > "$CHECKSUM_FILE"
+          echo ""
+          echo "=== Checksums ==="
+          cat "$CHECKSUM_FILE"
+          echo "================="
+
+      # Validate archives were created
+      - name: Validate release artifacts
+        run: |
+          cd dist
+          echo "=== Validating release artifacts ==="
+          archive_count=$(find . -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" \) | wc -l)
+          echo "Found $archive_count archives"
+
+          if [ "$archive_count" -eq 0 ]; then
+            echo "❌ ERROR: No archives were created!"
+            echo "This likely means the binary discovery failed."
+            exit 1
+          fi
+
+          CHECKSUM_FILE="redteamcoin_${{ steps.release_tag.outputs.tag }}_checksums.txt"
+          if [ ! -f "$CHECKSUM_FILE" ]; then
+            echo "❌ ERROR: $CHECKSUM_FILE not found!"
+            exit 1
+          fi
+
+          checksum_size=$(stat -c%s "$CHECKSUM_FILE" 2>/dev/null || stat -f%z "$CHECKSUM_FILE")
+          if [ "$checksum_size" -eq 0 ]; then
+            echo "❌ ERROR: $CHECKSUM_FILE is empty!"
+            exit 1
+          fi
+
+          echo "✓ Validation passed: $archive_count archives ready for release"
+          echo "✓ Checksums file: $CHECKSUM_FILE"
+          echo "===================================="
 
       # Create GitHub release with all artifacts
       - name: Create Release
@@ -260,8 +323,9 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.zip
-            dist/checksums.txt
+            dist/redteamcoin_*_checksums.txt
           draft: false
           prerelease: false
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

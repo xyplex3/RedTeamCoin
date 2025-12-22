@@ -180,15 +180,16 @@ func main() {
 	networkIPs := getNetworkIPs()
 
 	fmt.Printf("\nServer started successfully!\n")
-	fmt.Printf("- gRPC Server: 0.0.0.0:%d\n", grpcPort)
-	fmt.Printf("  Local access:   localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
+	fmt.Printf("- gRPC Server: Binding to localhost (127.0.0.1:%d)\n", grpcPort)
+	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
 	if len(networkIPs) > 0 {
-		fmt.Printf("  Network access: ")
+		fmt.Printf("  Note: For network access from other machines, you may need to bind to 0.0.0.0\n")
+		fmt.Printf("        Available network interfaces: ")
 		for i, ip := range networkIPs {
 			if i > 0 {
 				fmt.Printf(", ")
 			}
-			fmt.Printf("%s:%d", ip, grpcPort)
+			fmt.Printf("%s", ip)
 		}
 		fmt.Printf("\n")
 	}
@@ -227,17 +228,28 @@ func main() {
 }
 
 func startGRPCServer(pool *MiningPool) {
-	// Bind to 0.0.0.0 to accept both IPv4 and IPv6 connections
-	// This is important for Windows compatibility where :port may only bind to IPv6
-	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", grpcPort))
+	// Explicitly bind to 127.0.0.1 for local connections and 0.0.0.0 for network
+	// Windows has issues with :port binding, so we start with 127.0.0.1 first
+	listenAddr := fmt.Sprintf("127.0.0.1:%d", grpcPort)
+
+	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
+		// If binding to 127.0.0.1 fails, try 0.0.0.0
+		log.Printf("Warning: Failed to bind to 127.0.0.1:%d, trying 0.0.0.0: %v", grpcPort, err)
+		listenAddr = fmt.Sprintf("0.0.0.0:%d", grpcPort)
+		lis, err = net.Listen("tcp", listenAddr)
+		if err != nil {
+			log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
+		}
 	}
+
+	// Get the actual address we're listening on
+	actualAddr := lis.Addr().String()
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterMiningPoolServer(grpcServer, NewMiningPoolServer(pool))
 
-	fmt.Printf("gRPC server listening on 0.0.0.0:%d\n", grpcPort)
+	fmt.Printf("gRPC server listening on %s\n", actualAddr)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve gRPC: %v", err)

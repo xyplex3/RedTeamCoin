@@ -131,34 +131,35 @@ jobs:
             Write-Host "✓ Miner executable runs (timed out, as expected)"
           }
 
-      - name: Start server in background
+      - name: Run miner test with server
         shell: pwsh
+        timeout-minutes: 2
         run: |
           Write-Host "Starting server on port ${{ env.SERVER_PORT }}..."
 
-          # Start server in background
-          $proc = Start-Process -FilePath ".\bin\server.exe" -PassThru -NoNewWindow -RedirectStandardOutput "server-stdout.log" -RedirectStandardError "server-stderr.log"
-          $serverPid = $proc.Id
-          Write-Host "Server PID: $serverPid"
+          # Start server in background using Start-Job for better isolation
+          $serverJob = Start-Job -ScriptBlock {
+            Set-Location $using:PWD
+            & ".\bin\server.exe" 2>&1 | Tee-Object -FilePath "server-stdout.log"
+          }
+          Write-Host "Server Job ID: $($serverJob.Id)"
 
-          # Wait for server to start by checking if the process is running and port is listening
+          # Wait for server to start by checking if port is listening
           Write-Host "Waiting for server to start..."
           $maxAttempts = 30
           $started = $false
 
           for ($i = 1; $i -le $maxAttempts; $i++) {
-            # Check if process is still running
-            $serverProc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
-            if (-not $serverProc) {
-              Write-Host "❌ Server process died"
-              Write-Host "=== STDOUT ==="
+            # Check if job is still running
+            $jobState = Get-Job -Id $serverJob.Id | Select-Object -ExpandProperty State
+            if ($jobState -eq "Failed" -or $jobState -eq "Completed") {
+              Write-Host "❌ Server job died (State: $jobState)"
+              Write-Host "=== Server Output ==="
+              Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+              Write-Host "=== Log File ==="
               Get-Content server-stdout.log -ErrorAction SilentlyContinue
-              Write-Host "=== STDERR ==="
-              Get-Content server-stderr.log -ErrorAction SilentlyContinue
               exit 1
             }
-
-            Write-Host "Server process is running..."
 
             # Check if port is listening on IPv4 (127.0.0.1)
             $connection = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
@@ -173,10 +174,12 @@ jobs:
 
           if (-not $started) {
             Write-Host "❌ Server did not start listening within timeout"
-            Write-Host "=== STDOUT ==="
+            Write-Host "=== Server Output ==="
+            Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+            Write-Host "=== Log File ==="
             Get-Content server-stdout.log -ErrorAction SilentlyContinue
-            Write-Host "=== STDERR ==="
-            Get-Content server-stderr.log -ErrorAction SilentlyContinue
+            Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+            Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
             exit 1
           }
 
@@ -186,14 +189,9 @@ jobs:
           Write-Host "✓ Server started"
           Write-Host ""
           Write-Host "=== Server startup logs ==="
-          Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -First 50
+          Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -First 20
           Write-Host "==========================="
           Write-Host ""
-
-      - name: Run miner test
-        shell: pwsh
-        timeout-minutes: 2
-        run: |
           Write-Host "=================================================="
           Write-Host "Running Windows CPU Miner Test"
           Write-Host "=================================================="
@@ -251,6 +249,11 @@ jobs:
               Write-Host ""
               Write-Host "=== Server Output ==="
               Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 50
+              Receive-Job -Id $serverJob.Id -ErrorAction SilentlyContinue | Select-Object -Last 20
+              Write-Host ""
+              # Stop the server job before exiting
+              Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+              Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
               exit 1
             }
           } else {
@@ -263,13 +266,12 @@ jobs:
             Write-Host "  - Start mining operations"
           }
 
-      - name: Stop server
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host "Stopping server..."
-          Stop-Process -Name "server" -Force -ErrorAction SilentlyContinue
-          Write-Host "✓ Server stopped"
+          # Stop the server job
+          Write-Host ""
+          Write-Host "Stopping server job..."
+          Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+          Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✓ Server job stopped"
 
       - name: Upload Windows binaries
         uses: actions/upload-artifact@v4

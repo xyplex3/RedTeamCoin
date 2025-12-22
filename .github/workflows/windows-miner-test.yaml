@@ -212,9 +212,13 @@ jobs:
           # Wait for 30 seconds
           $timeout = $proc | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue -PassThru
 
+          # Track whether we had to stop the process or it exited naturally
+          $stoppedByTest = $false
+
           # Check if process is still running
           if (-not $proc.HasExited) {
             Write-Host "Stopping miner after 30 seconds..."
+            $stoppedByTest = $true
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
           }
@@ -226,8 +230,8 @@ jobs:
           Write-Host "===================="
           Write-Host ""
 
-          # Check exit code
-          if ($proc.HasExited) {
+          # Check exit code only if process exited naturally (not forcibly stopped)
+          if ($proc.HasExited -and -not $stoppedByTest) {
             $exitCode = $proc.ExitCode
             # Exit code 0 means normal termination
             if ($exitCode -eq 0) {
@@ -237,9 +241,10 @@ jobs:
               Write-Host "  - Execute on Windows"
               Write-Host "  - Connect to the server"
               Write-Host "  - Start mining operations"
+              Write-Host "  - Exit cleanly (exit code: $exitCode)"
             } else {
               Write-Host ""
-              Write-Host "❌ FAILED: Miner exited with unexpected code $exitCode"
+              Write-Host "❌ FAILED: Miner exited unexpectedly with code $exitCode"
               Write-Host ""
               Write-Host "=== Full Miner Output ==="
               Get-Content out.log -ErrorAction SilentlyContinue
@@ -257,13 +262,14 @@ jobs:
               exit 1
             }
           } else {
-            # Process was killed after timeout (expected)
+            # Process was killed after timeout (expected) or exited naturally with code 0
             Write-Host ""
             Write-Host "✓ SUCCESS: Windows CPU miner ran successfully!"
             Write-Host "✓ Miner was able to:"
             Write-Host "  - Execute on Windows"
             Write-Host "  - Connect to the server"
             Write-Host "  - Start mining operations"
+            Write-Host "  - Run for the full 30-second test duration"
           }
 
           # Stop the server job

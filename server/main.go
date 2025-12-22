@@ -68,6 +68,51 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// getNetworkIPs returns a list of non-loopback IPv4 addresses
+func getNetworkIPs() []string {
+	var ips []string
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ips
+	}
+
+	for _, iface := range interfaces {
+		// Skip down or loopback interfaces
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// Only include IPv4 addresses
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+
+			ips = append(ips, ip.String())
+		}
+	}
+
+	return ips
+}
+
 func main() {
 	fmt.Println("=== RedTeamCoin Mining Pool Server ===")
 	fmt.Println()
@@ -131,10 +176,28 @@ func main() {
 		port = httpPort
 	}
 
+	// Get network interface IPs
+	networkIPs := getNetworkIPs()
+
 	fmt.Printf("\nServer started successfully!\n")
-	fmt.Printf("- gRPC Server: localhost:%d\n", grpcPort)
+	fmt.Printf("- gRPC Server: 0.0.0.0:%d\n", grpcPort)
+	fmt.Printf("  Local access:   localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
+	if len(networkIPs) > 0 {
+		fmt.Printf("  Network access: ")
+		for i, ip := range networkIPs {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			fmt.Printf("%s:%d", ip, grpcPort)
+		}
+		fmt.Printf("\n")
+	}
 	fmt.Printf("- Web Dashboard: %s://localhost:%d?token=%s\n", protocol, port, authToken)
-	// TODO add in the interface IP addresses also
+	if len(networkIPs) > 0 {
+		for _, ip := range networkIPs {
+			fmt.Printf("                 %s://%s:%d?token=%s\n", protocol, ip, port, authToken)
+		}
+	}
 	if useTLS {
 		fmt.Printf("- HTTP Redirect: http://localhost:%d (redirects to HTTPS)\n", httpPort)
 	}
@@ -164,7 +227,9 @@ func main() {
 }
 
 func startGRPCServer(pool *MiningPool) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	// Bind to 0.0.0.0 to accept both IPv4 and IPv6 connections
+	// This is important for Windows compatibility where :port may only bind to IPv6
+	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", grpcPort))
 	if err != nil {
 		log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
 	}
@@ -172,7 +237,7 @@ func startGRPCServer(pool *MiningPool) {
 	grpcServer := grpc.NewServer()
 	pb.RegisterMiningPoolServer(grpcServer, NewMiningPoolServer(pool))
 
-	fmt.Printf("gRPC server listening on :%d\n", grpcPort)
+	fmt.Printf("gRPC server listening on 0.0.0.0:%d\n", grpcPort)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve gRPC: %v", err)

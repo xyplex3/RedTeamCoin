@@ -2,7 +2,7 @@
 
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
-[![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/release.yaml)
+[![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/gorelease.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/gorelease.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/build-verification.yaml)
 
 RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed for authorized security testing

@@ -275,7 +275,7 @@ java -jar bin/redteamcoin-miner-standalone.jar --pool localhost:50051
 - Simple JSON/Socket protocol
 - Embedded in applications
 
-##### Build All Java Miners:
+##### Build All Java Miners
 
 ```bash
 make build-java-all

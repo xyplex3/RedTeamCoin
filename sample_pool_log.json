@@ -1,0 +1,142 @@
+{
+  "server_start_time": "2025-11-25T08:00:00Z",
+  "server_uptime_seconds": 172800,
+  "last_update": "2025-11-27T08:00:00Z",
+  "events": [
+    {
+      "timestamp": "2025-11-25T08:15:23Z",
+      "event_type": "miner_registered",
+      "miner_id": "miner-WORKSTATION-01-1732521323",
+      "message": "New miner registered",
+      "details": {
+        "ip_address": "192.168.1.105",
+        "ip_address_actual": "192.168.1.105",
+        "hostname": "WORKSTATION-01"
+      }
+    },
+    {
+      "timestamp": "2025-11-25T09:22:15Z",
+      "event_type": "miner_registered",
+      "miner_id": "miner-SERVER-DB-01-1732525335",
+      "message": "New miner registered",
+      "details": {
+        "ip_address": "10.0.5.12",
+        "ip_address_actual": "10.0.5.12",
+        "hostname": "SERVER-DB-01"
+      }
+    },
+    {
+      "timestamp": "2025-11-25T14:30:00Z",
+      "event_type": "block_mined",
+      "miner_id": "miner-WORKSTATION-01-1732521323",
+      "message": "Block successfully mined",
+      "details": {
+        "block_index": 42,
+        "hash": "0000a3f5d89e...",
+        "reward": 50
+      }
+    }
+  ],
+  "current_snapshot": {
+    "timestamp": "2025-11-27T08:00:00Z",
+    "total_miners": 5,
+    "active_miners": 4,
+    "total_hash_rate": 125000,
+    "total_blocks_mined": 187,
+    "blockchain_height": 200,
+    "difficulty": 4,
+    "miners": [
+      {
+        "id": "miner-WORKSTATION-01-1732521323",
+        "ip_address": "192.168.1.105",
+        "ip_address_actual": "192.168.1.105",
+        "hostname": "WORKSTATION-01",
+        "registered_at": "2025-11-25T08:15:23Z",
+        "last_heartbeat": "2025-11-27T07:58:30Z",
+        "active": true,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 45,
+        "hash_rate": 28000,
+        "cpu_usage_percent": 92.5,
+        "total_hashes": 4850000000,
+        "total_mining_time_seconds": 165600,
+        "gpu_enabled": false,
+        "hybrid_mode": false
+      },
+      {
+        "id": "miner-SERVER-DB-01-1732525335",
+        "ip_address": "10.0.5.12",
+        "ip_address_actual": "10.0.5.12",
+        "hostname": "SERVER-DB-01",
+        "registered_at": "2025-11-25T09:22:15Z",
+        "last_heartbeat": "2025-11-27T07:59:12Z",
+        "active": true,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 52,
+        "hash_rate": 35000,
+        "cpu_usage_percent": 95.8,
+        "total_hashes": 5920000000,
+        "total_mining_time_seconds": 162000,
+        "gpu_enabled": false,
+        "hybrid_mode": false
+      },
+      {
+        "id": "miner-LAPTOP-HR-05-1732530000",
+        "ip_address": "192.168.1.87",
+        "ip_address_actual": "192.168.1.87",
+        "hostname": "LAPTOP-HR-05",
+        "registered_at": "2025-11-25T10:40:00Z",
+        "last_heartbeat": "2025-11-27T07:57:45Z",
+        "active": true,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 38,
+        "hash_rate": 22000,
+        "cpu_usage_percent": 78.3,
+        "total_hashes": 3540000000,
+        "total_mining_time_seconds": 154800,
+        "gpu_enabled": false,
+        "hybrid_mode": false
+      },
+      {
+        "id": "miner-GAMING-PC-02-1732535000",
+        "ip_address": "192.168.1.145",
+        "ip_address_actual": "192.168.1.145",
+        "hostname": "GAMING-PC-02",
+        "registered_at": "2025-11-25T12:03:20Z",
+        "last_heartbeat": "2025-11-27T07:59:55Z",
+        "active": true,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 42,
+        "hash_rate": 32000,
+        "cpu_usage_percent": 65.2,
+        "total_hashes": 4320000000,
+        "total_mining_time_seconds": 144000,
+        "gpu_enabled": true,
+        "gpu_hash_rate": 85000,
+        "hybrid_mode": true
+      },
+      {
+        "id": "miner-FINANCE-WS-11-1732540000",
+        "ip_address": "10.0.8.23",
+        "ip_address_actual": "10.0.8.23",
+        "hostname": "FINANCE-WS-11",
+        "registered_at": "2025-11-25T13:26:40Z",
+        "last_heartbeat": "2025-11-27T07:56:20Z",
+        "active": true,
+        "should_mine": true,
+        "cpu_throttle_percent": 0,
+        "blocks_mined": 10,
+        "hash_rate": 8000,
+        "cpu_usage_percent": 52.1,
+        "total_hashes": 1050000000,
+        "total_mining_time_seconds": 136800,
+        "gpu_enabled": false,
+        "hybrid_mode": false
+      }
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -8,18 +9,33 @@ import (
 	"time"
 )
 
-// APIServer provides HTTP API for administration
+// APIServer provides a REST API and web dashboard for pool administration.
+// It supports both HTTP and HTTPS with bearer token authentication.
+//
+// The server exposes endpoints for:
+//   - Pool statistics and miner information
+//   - Miner control (pause/resume, throttling, deletion)
+//   - Blockchain inspection
+//   - WebSocket updates for real-time monitoring
+//
+// All administrative endpoints require authentication via Bearer token.
 type APIServer struct {
-	pool       *MiningPool
-	blockchain *Blockchain
-	authToken  string
-	useTLS     bool
-	certFile   string
-	keyFile    string
+	pool       *MiningPool   // Mining pool to expose via API
+	blockchain *Blockchain   // Blockchain to query
+	authToken  string        // Bearer token for authentication
+	useTLS     bool          // Whether to enable HTTPS
+	certFile   string        // Path to TLS certificate
+	keyFile    string        // Path to TLS private key
+	wsHub      *WebSocketHub // WebSocket hub for real-time updates
 }
 
-// NewAPIServer creates a new API server
+// NewAPIServer creates a new API server with the specified configuration.
+// It initializes a WebSocket hub for real-time updates and starts it in
+// a background goroutine. The authToken is required for all API requests.
 func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
+	wsHub := NewWebSocketHub(pool)
+	go wsHub.Run()
+
 	return &APIServer{
 		pool:       pool,
 		blockchain: blockchain,
@@ -27,10 +43,65 @@ func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, us
 		useTLS:     useTLS,
 		certFile:   certFile,
 		keyFile:    keyFile,
+		wsHub:      wsHub,
 	}
 }
 
-// authMiddleware checks for valid authentication token
+// sendGenericErrorPage sends a generic HTTP 503 error page that reveals no
+// information about the application. This is used for authentication
+// failures to prevent information disclosure about the service's true
+// purpose.
+func (api *APIServer) sendGenericErrorPage(w http.ResponseWriter) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Service Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .error-container {
+            text-align: center;
+            padding: 40px;
+            max-width: 500px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #666666;
+        }
+        p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #888888;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>Service Unavailable</h1>
+        <p>We apologize for the inconvenience. The service is not functioning correctly at this time.</p>
+        <p>Please try again later.</p>
+    </div>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	w.Write([]byte(html))
+}
+
+// authMiddleware validates the Bearer token in the Authorization header
+// before allowing access to protected endpoints. Invalid or missing tokens
+// result in a generic error page that reveals no application details. This
+// middleware wraps HTTP handler functions to enforce authentication.
 func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get token from Authorization header
@@ -38,11 +109,8 @@ func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		// Check if token matches
 		if token != "Bearer "+api.authToken {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Unauthorized - Invalid or missing authentication token",
-			})
+			// Send generic error page with no application details
+			api.sendGenericErrorPage(w)
 			return
 		}
 
@@ -51,7 +119,10 @@ func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// Start starts the API server
+// Start begins serving HTTP or HTTPS traffic on the specified port. If TLS
+// is enabled and httpPort is non-zero, also starts an HTTP redirect server.
+// This method blocks until the server encounters an error or is shut down.
+// All administrative endpoints require Bearer token authentication.
 func (api *APIServer) Start(port int, httpPort int) error {
 	mux := http.NewServeMux()
 
@@ -62,6 +133,13 @@ func (api *APIServer) Start(port int, httpPort int) error {
 	mux.HandleFunc("/api/blocks/", api.authMiddleware(api.handleBlock))
 	mux.HandleFunc("/api/validate", api.authMiddleware(api.handleValidate))
 	mux.HandleFunc("/api/cpu", api.authMiddleware(api.handleCPUStats))
+	mux.HandleFunc("/api/miner/pause", api.authMiddleware(api.handlePauseMiner))
+	mux.HandleFunc("/api/miner/resume", api.authMiddleware(api.handleResumeMiner))
+	mux.HandleFunc("/api/miner/delete", api.authMiddleware(api.handleDeleteMiner))
+	mux.HandleFunc("/api/miner/throttle", api.authMiddleware(api.handleThrottleMiner))
+
+	// WebSocket endpoint for web miners (no auth required)
+	mux.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
 	// Public endpoint - no authentication required
 	mux.HandleFunc("/", api.handleIndex)
@@ -92,7 +170,9 @@ func (api *APIServer) Start(port int, httpPort int) error {
 	return http.ListenAndServe(addr, mux)
 }
 
-// startHTTPRedirect starts an HTTP server that redirects to HTTPS
+// startHTTPRedirect starts an HTTP server that issues 301 permanent
+// redirects to the HTTPS equivalent URL. This runs in a goroutine and
+// handles port normalization for default HTTP (80) and HTTPS (443) ports.
 func (api *APIServer) startHTTPRedirect(httpPort, httpsPort int) {
 	redirect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpsURL := fmt.Sprintf("https://%s:%d%s", r.Host, httpsPort, r.RequestURI)
@@ -111,12 +191,32 @@ func (api *APIServer) startHTTPRedirect(httpPort, httpsPort int) {
 	}
 }
 
-// handleIndex provides a simple HTML dashboard
+// handleIndex serves the main web dashboard with real-time pool statistics,
+// miner management, and blockchain visualization. It accepts authentication
+// via Bearer token in the Authorization header or as a query parameter.
+// Unauthenticated requests receive a generic error page.
 func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// Check authentication - accept token from either header or query parameter
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		// Check for token in query parameter
+		queryToken := r.URL.Query().Get("token")
+		if queryToken != "" {
+			token = "Bearer " + queryToken
+		}
+	}
+
+	// If token doesn't match, show generic error page
+	if token != "Bearer "+api.authToken {
+		api.sendGenericErrorPage(w)
+		return
+	}
+
 	html := `
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>RedTeamCoin - Mining Pool Dashboard</title>
     <style>
         body {
@@ -177,6 +277,9 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
+            width: 90px;
+            margin-right: 2px;
+            margin-top: 2px;
         }
         button:hover { background-color: #45b8ac; }
     </style>
@@ -217,12 +320,97 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 '<div class="stat-item"><span class="stat-label">Block Reward:</span> <span class="stat-value">' + stats.block_reward + ' RTC</span></div>';
         }
 
+        async function controlMiner(action, minerID) {
+            try {
+                const headers = {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json'
+                };
+
+                const response = await fetch('/api/miner/' + action, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ miner_id: minerID })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    loadData(); // Refresh the data
+                } else {
+                    alert('Error: ' + (result.error || result.message));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function setThrottle(minerID) {
+            const throttleValue = prompt('Enter CPU throttle percentage (0-100):\n0 = No limit\n100 = Maximum throttle', '0');
+            if (throttleValue === null) return; // Cancelled
+
+            const throttle = parseInt(throttleValue);
+            if (isNaN(throttle) || throttle < 0 || throttle > 100) {
+                alert('Invalid throttle value. Must be between 0 and 100.');
+                return;
+            }
+
+            try {
+                const headers = {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json'
+                };
+
+                const response = await fetch('/api/miner/throttle', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        miner_id: minerID,
+                        throttle_percent: throttle
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    loadData(); // Refresh the data
+                } else {
+                    alert('Error: ' + (result.error || result.message));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function getMiningType(miner) {
+            if (!miner.GPUEnabled) {
+                return 'CPU';
+            }
+
+            // Check GPU devices to determine type
+            if (miner.GPUDevices && miner.GPUDevices.length > 0) {
+                const gpuTypes = miner.GPUDevices.map(gpu => gpu.Type).filter((v, i, a) => a.indexOf(v) === i);
+                const typeStr = gpuTypes.join('/');
+                return miner.HybridMode ? 'CPU+' + typeStr : typeStr;
+            }
+
+            return miner.HybridMode ? 'CPU+GPU' : 'GPU';
+        }
+
         function updateMiners(miners) {
-            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Status</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th></tr>';
+            let html = '<table><tr><th>Miner ID</th><th>IP Address</th><th>Hostname</th><th>Mining Type</th><th>Status</th><th>Mining</th><th>CPU Throttle</th><th>Blocks Mined</th><th>Hash Rate</th><th>Last Heartbeat</th><th>Actions</th></tr>';
             miners.forEach(miner => {
                 const status = miner.Active ? '<span class="active">Active</span>' : '<span class="inactive">Inactive</span>';
+                const miningStatus = miner.ShouldMine ? '<span class="active">Mining</span>' : '<span class="inactive">Paused</span>';
+                const miningType = getMiningType(miner);
+                const throttleDisplay = miner.CPUThrottlePercent === 0 ? 'None' : miner.CPUThrottlePercent + '%';
                 const lastSeen = new Date(miner.LastHeartbeat).toLocaleString();
-                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td>' + status + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td></tr>';
+                const pauseResumeBtn = miner.ShouldMine
+                    ? '<button onclick="controlMiner(\'pause\', \'' + miner.ID + '\')">Pause</button>'
+                    : '<button onclick="controlMiner(\'resume\', \'' + miner.ID + '\')">Resume</button>';
+                const throttleBtn = '<button onclick="setThrottle(\'' + miner.ID + '\')">Throttle</button>';
+                const deleteBtn = '<button onclick="if(confirm(\'Delete miner ' + miner.ID + '?\')) controlMiner(\'delete\', \'' + miner.ID + '\')">Delete</button>';
+                html += '<tr><td>' + miner.ID + '</td><td>' + miner.IPAddress + '</td><td>' + miner.Hostname + '</td><td><span class="stat-label">' + miningType + '</span></td><td>' + status + '</td><td>' + miningStatus + '</td><td>' + throttleDisplay + '</td><td>' + miner.BlocksMined + '</td><td>' + miner.HashRate + ' H/s</td><td>' + lastSeen + '</td><td>' + pauseResumeBtn + ' ' + throttleBtn + ' ' + deleteBtn + '</td></tr>';
             });
             html += '</table>';
             document.getElementById('miners').innerHTML = html;
@@ -268,41 +456,79 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 
-// handleStats returns pool statistics
+// handleStats returns JSON-encoded pool statistics including total and
+// active miner counts, hash rates, blocks mined, blockchain height,
+// difficulty, and block reward.
 func (api *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetPoolStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
 
-// handleMiners returns list of all miners
+// handleMiners returns a JSON array of all registered miners with their
+// status, performance metrics, IP addresses, GPU information, and server
+// control settings. Includes both active and inactive miners.
 func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 	miners := api.pool.GetMiners()
 
+	type GPUDeviceResponse struct {
+		ID           int    `json:"ID"`
+		Name         string `json:"Name"`
+		Type         string `json:"Type"`
+		Memory       uint64 `json:"Memory"`
+		ComputeUnits int    `json:"ComputeUnits"`
+		Available    bool   `json:"Available"`
+	}
+
 	type MinerResponse struct {
-		ID              string    `json:"ID"`
-		IPAddress       string    `json:"IPAddress"`
-		IPAddressActual string    `json:"IPAddressActual"`
-		Hostname        string    `json:"Hostname"`
-		RegisteredAt    time.Time `json:"RegisteredAt"`
-		LastHeartbeat   time.Time `json:"LastHeartbeat"`
-		Active          bool      `json:"Active"`
-		BlocksMined     int64     `json:"BlocksMined"`
-		HashRate        int64     `json:"HashRate"`
+		ID                 string              `json:"ID"`
+		IPAddress          string              `json:"IPAddress"`
+		IPAddressActual    string              `json:"IPAddressActual"`
+		Hostname           string              `json:"Hostname"`
+		RegisteredAt       time.Time           `json:"RegisteredAt"`
+		LastHeartbeat      time.Time           `json:"LastHeartbeat"`
+		Active             bool                `json:"Active"`
+		ShouldMine         bool                `json:"ShouldMine"`
+		CPUThrottlePercent int                 `json:"CPUThrottlePercent"`
+		BlocksMined        int64               `json:"BlocksMined"`
+		HashRate           int64               `json:"HashRate"`
+		GPUDevices         []GPUDeviceResponse `json:"GPUDevices,omitempty"`
+		GPUHashRate        int64               `json:"GPUHashRate,omitempty"`
+		GPUEnabled         bool                `json:"GPUEnabled"`
+		HybridMode         bool                `json:"HybridMode"`
 	}
 
 	response := make([]MinerResponse, len(miners))
 	for i, miner := range miners {
+		// Convert GPU devices
+		gpuDevices := make([]GPUDeviceResponse, len(miner.GPUDevices))
+		for j, gpu := range miner.GPUDevices {
+			gpuDevices[j] = GPUDeviceResponse{
+				ID:           gpu.ID,
+				Name:         gpu.Name,
+				Type:         gpu.Type,
+				Memory:       gpu.Memory,
+				ComputeUnits: gpu.ComputeUnits,
+				Available:    gpu.Available,
+			}
+		}
+
 		response[i] = MinerResponse{
-			ID:              miner.ID,
-			IPAddress:       miner.IPAddress,
-			IPAddressActual: miner.IPAddressActual,
-			Hostname:        miner.Hostname,
-			RegisteredAt:    miner.RegisteredAt,
-			LastHeartbeat:   miner.LastHeartbeat,
-			Active:          miner.Active,
-			BlocksMined:     miner.BlocksMined,
-			HashRate:        miner.HashRate,
+			ID:                 miner.ID,
+			IPAddress:          miner.IPAddress,
+			IPAddressActual:    miner.IPAddressActual,
+			Hostname:           miner.Hostname,
+			RegisteredAt:       miner.RegisteredAt,
+			LastHeartbeat:      miner.LastHeartbeat,
+			Active:             miner.Active,
+			ShouldMine:         miner.ShouldMine,
+			CPUThrottlePercent: miner.CPUThrottlePercent,
+			BlocksMined:        miner.BlocksMined,
+			HashRate:           miner.HashRate,
+			GPUDevices:         gpuDevices,
+			GPUHashRate:        miner.GPUHashRate,
+			GPUEnabled:         miner.GPUEnabled,
+			HybridMode:         miner.HybridMode,
 		}
 	}
 
@@ -310,14 +536,18 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleBlockchain returns the entire blockchain
+// handleBlockchain returns a JSON array containing all blocks in the
+// blockchain from genesis to the latest block, including full block
+// details (index, timestamp, data, hashes, nonce, and miner ID).
 func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 	blocks := api.blockchain.GetBlockchain()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(blocks)
 }
 
-// handleBlock returns a specific block
+// handleBlock returns JSON details for a single block specified by index
+// in the URL path (/api/blocks/{index}). Returns 404 if the block index
+// is out of range.
 func (api *APIServer) handleBlock(w http.ResponseWriter, r *http.Request) {
 	// Extract block index from URL
 	var index int
@@ -332,7 +562,9 @@ func (api *APIServer) handleBlock(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleValidate validates the blockchain
+// handleValidate performs a full blockchain validation check, verifying
+// all block linkages and proof-of-work requirements. Returns JSON with a
+// boolean "valid" field indicating whether the chain is valid.
 func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	valid := api.blockchain.ValidateChain()
 	response := map[string]interface{}{
@@ -342,9 +574,151 @@ func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleCPUStats returns CPU usage statistics for all miners
+// handleCPUStats returns detailed JSON statistics for all miners including
+// per-miner CPU usage, hash rates, mining time, GPU information, and
+// aggregate totals. This provides comprehensive resource usage data for
+// monitoring and analysis.
 func (api *APIServer) handleCPUStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetCPUStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// handlePauseMiner remotely pauses mining on a specific miner by setting
+// its ShouldMine flag to false. The miner will stop mining on its next
+// heartbeat check. Requires POST with JSON body containing "miner_id".
+// Returns 404 if miner not found.
+func (api *APIServer) handlePauseMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.PauseMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner paused",
+		"miner_id": req.MinerID,
+	})
+}
+
+// handleResumeMiner remotely resumes mining on a paused miner by setting
+// its ShouldMine flag to true. The miner will restart mining on its next
+// heartbeat check. Requires POST with JSON body containing "miner_id".
+// Returns 404 if miner not found.
+func (api *APIServer) handleResumeMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.ResumeMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner resumed",
+		"miner_id": req.MinerID,
+	})
+}
+
+// handleDeleteMiner removes a miner from the pool entirely. On the next
+// heartbeat, the miner will receive Active=false and trigger self-deletion
+// of its executable. Requires POST with JSON body containing "miner_id".
+// Returns 404 if miner not found.
+func (api *APIServer) handleDeleteMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID string `json:"miner_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.DeleteMiner(req.MinerID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "success",
+		"message":  "Miner deleted",
+		"miner_id": req.MinerID,
+	})
+}
+
+// handleThrottleMiner sets CPU usage limits for a specific miner. The
+// throttle_percent value (0-100) controls CPU consumption, where 0 means
+// unlimited and 100 means maximum throttling. Requires POST with JSON body
+// containing "miner_id" and "throttle_percent". Returns 400 if percentage
+// is out of range, 404 if miner not found.
+func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MinerID         string `json:"miner_id"`
+		ThrottlePercent int    `json:"throttle_percent"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.pool.SetCPUThrottle(req.MinerID, req.ThrottlePercent); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":           "success",
+		"message":          fmt.Sprintf("CPU throttle set to %d%%", req.ThrottlePercent),
+		"miner_id":         req.MinerID,
+		"throttle_percent": req.ThrottlePercent,
+	})
 }

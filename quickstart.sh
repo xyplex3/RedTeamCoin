@@ -4,13 +4,13 @@ echo "=== RedTeamCoin Quick Start ==="
 echo
 
 # Check if protoc is installed
-if ! command -v protoc &> /dev/null; then
-    echo "Error: protoc is not installed."
-    echo "Please install Protocol Buffers compiler:"
-    echo "  Ubuntu/Debian: sudo apt-get install -y protobuf-compiler"
-    echo "  macOS: brew install protobuf"
-    echo "  Or download from: https://github.com/protocolbuffers/protobuf/releases"
-    exit 1
+if ! command -v protoc &>/dev/null; then
+	echo "Error: protoc is not installed."
+	echo "Please install Protocol Buffers compiler:"
+	echo "  Ubuntu/Debian: sudo apt-get install -y protobuf-compiler"
+	echo "  macOS: brew install protobuf"
+	echo "  Or download from: https://github.com/protocolbuffers/protobuf/releases"
+	exit 1
 fi
 
 echo "✓ protoc found"

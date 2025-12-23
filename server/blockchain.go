@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -9,25 +10,38 @@ import (
 	"time"
 )
 
-// Block represents a block in the blockchain
+// Block represents a single block in the blockchain containing transaction
+// data, proof-of-work hash, and linkage to the previous block.
+//
+// Each block is immutable once added to the chain and contains a nonce value
+// that was found through the mining process to satisfy the difficulty
+// requirement.
 type Block struct {
-	Index        int64
-	Timestamp    int64
-	Data         string
-	PreviousHash string
-	Hash         string
-	Nonce        int64
-	MinedBy      string
+	Index        int64  // Position of the block in the chain
+	Timestamp    int64  // Unix timestamp when block was created
+	Data         string // Arbitrary data stored in the block
+	PreviousHash string // Hash of the previous block in the chain
+	Hash         string // SHA-256 hash of this block's contents
+	Nonce        int64  // Proof-of-work nonce that satisfies difficulty
+	MinedBy      string // ID of the miner who found this block
 }
 
-// Blockchain represents the chain of blocks
+// Blockchain represents an immutable chain of blocks using proof-of-work
+// consensus. All operations are thread-safe for concurrent access by
+// multiple goroutines.
+//
+// The difficulty parameter controls mining complexity by requiring block
+// hashes to have a certain number of leading zeros.
 type Blockchain struct {
-	Blocks     []*Block
-	Difficulty int
-	mu         sync.RWMutex
+	Blocks     []*Block     // Ordered list of blocks in the chain
+	Difficulty int          // Number of leading zeros required in block hashes
+	mu         sync.RWMutex // Protects concurrent access to Blocks
 }
 
-// NewBlockchain creates a new blockchain with genesis block
+// NewBlockchain creates a new blockchain initialized with a genesis block.
+// The difficulty parameter specifies how many leading zeros are required
+// in valid block hashes. Higher difficulty values require more computational
+// work to mine blocks.
 func NewBlockchain(difficulty int) *Blockchain {
 	bc := &Blockchain{
 		Blocks:     make([]*Block, 0),
@@ -48,7 +62,9 @@ func NewBlockchain(difficulty int) *Blockchain {
 	return bc
 }
 
-// calculateHash calculates the hash of a block
+// calculateHash calculates the SHA-256 hash of a block by concatenating its
+// index, timestamp, data, previous hash, and nonce. The result is returned
+// as a hexadecimal string.
 func calculateHash(block *Block) string {
 	record := strconv.FormatInt(block.Index, 10) +
 		strconv.FormatInt(block.Timestamp, 10) +
@@ -62,7 +78,8 @@ func calculateHash(block *Block) string {
 	return hex.EncodeToString(hashed)
 }
 
-// GetLatestBlock returns the last block in the chain
+// GetLatestBlock returns the most recently added block in the blockchain,
+// or nil if the chain is empty. This method is safe for concurrent use.
 func (bc *Blockchain) GetLatestBlock() *Block {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
@@ -73,7 +90,9 @@ func (bc *Blockchain) GetLatestBlock() *Block {
 	return bc.Blocks[len(bc.Blocks)-1]
 }
 
-// AddBlock adds a new block to the blockchain
+// AddBlock adds a new block to the blockchain after validating it against
+// the current chain state. It returns an error if the block is invalid
+// according to consensus rules. This method is safe for concurrent use.
 func (bc *Blockchain) AddBlock(block *Block) error {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
@@ -87,7 +106,9 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	return nil
 }
 
-// isValidNewBlock checks if a new block is valid
+// isValidNewBlock reports whether a new block is valid for addition to the
+// chain. It verifies the block index, previous hash linkage, hash correctness,
+// and difficulty requirements.
 func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 	if previousBlock.Index+1 != newBlock.Index {
 		return false
@@ -114,7 +135,9 @@ func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 	return true
 }
 
-// GetBlockchain returns a copy of all blocks
+// GetBlockchain returns a copy of all blocks in the chain.
+// This method is safe for concurrent use and does not affect the original
+// blockchain.
 func (bc *Blockchain) GetBlockchain() []*Block {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
@@ -124,14 +147,17 @@ func (bc *Blockchain) GetBlockchain() []*Block {
 	return blocks
 }
 
-// GetBlockCount returns the number of blocks
+// GetBlockCount returns the total number of blocks in the blockchain,
+// including the genesis block. This method is safe for concurrent use.
 func (bc *Blockchain) GetBlockCount() int {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
 	return len(bc.Blocks)
 }
 
-// ValidateChain validates the entire blockchain
+// ValidateChain reports whether the entire blockchain is valid by checking
+// each block's linkage and proof-of-work. It returns false if any block in
+// the chain violates consensus rules. This method is safe for concurrent use.
 func (bc *Blockchain) ValidateChain() bool {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()

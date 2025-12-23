@@ -200,7 +200,7 @@ func main() {
 	networkIPs := getNetworkIPs()
 
 	fmt.Printf("\nServer started successfully!\n")
-	fmt.Printf("- gRPC Server: Binding to 0.0.0.0:%d (all network interfaces)\n", grpcPort)
+	fmt.Printf("- gRPC Server: Port %d (all network interfaces)\n", grpcPort)
 	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
 	if len(networkIPs) > 0 {
 		fmt.Printf("  Network access from: ")
@@ -247,27 +247,37 @@ func main() {
 }
 
 // startGRPCServer starts the gRPC server for miner connections.
-// It binds to 0.0.0.0 to accept connections from all network interfaces,
-// allowing both local and remote miner connections. This function blocks
-// until the server stops or encounters a fatal error.
+// It creates listeners for both IPv4 and IPv6 to accept connections from
+// all network interfaces. If IPv6 is unavailable, it silently continues
+// with IPv4 only. This function blocks until the server stops or encounters
+// a fatal error.
 func startGRPCServer(pool *MiningPool) {
-	// Bind to 0.0.0.0 to accept connections from all network interfaces
-	listenAddr := fmt.Sprintf("0.0.0.0:%d", grpcPort)
-
-	lis, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		log.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
-	}
-
-	// Get the actual address we're listening on
-	actualAddr := lis.Addr().String()
-
 	grpcServer := grpc.NewServer()
 	pb.RegisterMiningPoolServer(grpcServer, NewMiningPoolServer(pool))
 
-	fmt.Printf("gRPC server listening on %s\n", actualAddr)
+	// Try to create IPv4 listener
+	ipv4Addr := fmt.Sprintf("0.0.0.0:%d", grpcPort)
+	lis4, err := net.Listen("tcp4", ipv4Addr)
+	if err != nil {
+		log.Fatalf("Failed to listen on IPv4 port %d: %v", grpcPort, err)
+	}
+	fmt.Printf("gRPC server listening on %s (IPv4)\n", lis4.Addr().String())
 
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve gRPC: %v", err)
+	// Try to create IPv6 listener (silently skip if unavailable)
+	ipv6Addr := fmt.Sprintf("[::]:%d", grpcPort)
+	lis6, err := net.Listen("tcp6", ipv6Addr)
+	if err == nil {
+		fmt.Printf("gRPC server listening on %s (IPv6)\n", lis6.Addr().String())
+		// Serve IPv6 in a separate goroutine
+		go func() {
+			if err := grpcServer.Serve(lis6); err != nil {
+				log.Fatalf("Failed to serve gRPC on IPv6: %v", err)
+			}
+		}()
+	}
+
+	// Serve IPv4 in the main goroutine
+	if err := grpcServer.Serve(lis4); err != nil {
+		log.Fatalf("Failed to serve gRPC on IPv4: %v", err)
 	}
 }

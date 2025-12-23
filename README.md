@@ -231,6 +231,7 @@ java -jar bin/redteamcoin-miner-client.jar -server 192.168.1.100:50051
 ```
 
 **Features:**
+
 - gRPC protocol (matches Go client)
 - Headless operation (no GUI)
 - Server control (pause/resume/throttle)
@@ -270,6 +271,7 @@ java -jar bin/redteamcoin-miner-standalone.jar --pool localhost:50051
 ```
 
 **Features:**
+
 - Desktop GUI interface
 - Visual statistics display
 - Simple JSON/Socket protocol

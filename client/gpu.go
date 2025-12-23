@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining client.
 package main
 
 import (
@@ -7,27 +8,35 @@ import (
 	"sync/atomic"
 )
 
-// GPUDevice represents a detected GPU
+// GPUDevice represents a detected GPU device available for mining.
+// Devices can be either CUDA (NVIDIA) or OpenCL (AMD/Intel) compatible.
 type GPUDevice struct {
-	ID           int
-	Name         string
-	Type         string // "CUDA" or "OpenCL"
-	Memory       uint64 // Memory in bytes
-	ComputeUnits int
-	Available    bool
+	ID           int    // Unique device identifier
+	Name         string // Device name from hardware
+	Type         string // Device type: "CUDA" or "OpenCL"
+	Memory       uint64 // Total device memory in bytes
+	ComputeUnits int    // Number of compute units/SMs/CUs
+	Available    bool   // Whether device is currently available for use
 }
 
-// GPUMiner handles GPU-based mining
+// GPUMiner coordinates GPU-based cryptocurrency mining across multiple
+// devices. It supports both CUDA (NVIDIA) and OpenCL (AMD/Intel) devices
+// and can utilize all detected GPUs simultaneously.
+//
+// The miner automatically detects available devices during initialization
+// and manages their lifecycle. All operations are thread-safe.
 type GPUMiner struct {
-	devices     []GPUDevice
-	running     bool
-	mu          sync.Mutex
-	hashCount   int64
-	cudaMiner   *CUDAMiner
-	openCLMiner *OpenCLMiner
+	devices     []GPUDevice  // All detected GPU devices
+	running     bool         // Whether mining is active
+	mu          sync.Mutex   // Protects concurrent access
+	hashCount   int64        // Atomic hash counter
+	cudaMiner   *CUDAMiner   // CUDA mining implementation
+	openCLMiner *OpenCLMiner // OpenCL mining implementation
 }
 
-// NewGPUMiner creates a new GPU miner with device detection
+// NewGPUMiner creates a new GPU miner and automatically detects all available
+// CUDA and OpenCL devices. The miner is initialized in a stopped state and
+// must be started with Start before mining begins.
 func NewGPUMiner() *GPUMiner {
 	gm := &GPUMiner{
 		devices:   make([]GPUDevice, 0),
@@ -48,19 +57,25 @@ func NewGPUMiner() *GPUMiner {
 	return gm
 }
 
-// GetDevices returns list of detected GPU devices
+// GetDevices returns a slice of all detected GPU devices including both
+// CUDA and OpenCL devices. The returned slice is safe to read concurrently
+// with mining operations. This method is safe for concurrent use.
 func (gm *GPUMiner) GetDevices() []GPUDevice {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 	return gm.devices
 }
 
-// HasGPUs returns true if any GPUs are available
+// HasGPUs reports whether any GPU devices (CUDA or OpenCL) were detected
+// during initialization. Returns false if no compatible GPUs are available.
 func (gm *GPUMiner) HasGPUs() bool {
 	return len(gm.devices) > 0
 }
 
-// Start begins GPU mining
+// Start initializes and begins GPU mining on all detected devices. It
+// starts both CUDA and OpenCL miners if their respective devices are
+// available. Returns an error if already running or if no GPUs are detected.
+// Individual GPU initialization errors are logged but don't prevent startup.
 func (gm *GPUMiner) Start() error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
@@ -92,7 +107,8 @@ func (gm *GPUMiner) Start() error {
 	return nil
 }
 
-// Stop halts GPU mining
+// Stop halts all GPU mining operations and releases GPU resources. This
+// method is safe to call multiple times and safe for concurrent use.
 func (gm *GPUMiner) Stop() {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
@@ -112,7 +128,10 @@ func (gm *GPUMiner) Stop() {
 	}
 }
 
-// MineBlock attempts to mine a block using GPU
+// MineBlock attempts to find a valid nonce for the given block parameters
+// using GPU acceleration. It tries CUDA first, then OpenCL if CUDA fails
+// or is unavailable. Returns the found nonce, hash, total hashes computed,
+// and whether a valid solution was found within the nonce range.
 func (gm *GPUMiner) MineBlock(blockIndex, timestamp int64, data, previousHash string, difficulty int, startNonce, nonceRange int64) (nonce int64, hash string, hashes int64, found bool) {
 	// Try CUDA first if available
 	if gm.cudaMiner != nil && gm.cudaMiner.HasDevices() {
@@ -134,12 +153,17 @@ func (gm *GPUMiner) MineBlock(blockIndex, timestamp int64, data, previousHash st
 	return 0, "", 0, false
 }
 
-// GetHashCount returns total hashes computed by GPU
+// GetHashCount returns the cumulative number of hashes computed by all
+// GPU devices since mining started. This counter is updated atomically
+// and is safe to read concurrently.
 func (gm *GPUMiner) GetHashCount() int64 {
 	return atomic.LoadInt64(&gm.hashCount)
 }
 
-// GetStats returns GPU mining statistics
+// GetStats returns a map containing GPU mining statistics including device
+// count, running status, total hashes, and per-device information (name,
+// type, memory, compute units, availability). Useful for monitoring and
+// reporting.
 func (gm *GPUMiner) GetStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 

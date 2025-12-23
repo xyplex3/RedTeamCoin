@@ -4,6 +4,7 @@ bin/
 *.dll
 *.so
 *.dylib
+*.o
 
 # Test binary, built with `go test -c`
 *.test
@@ -13,6 +14,9 @@ bin/
 
 # Go workspace file
 go.work
+
+# log files
+pool_log.json
 
 # Generated protobuf files
 proto/*.pb.go
@@ -33,3 +37,21 @@ certs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Project-specific files
+CLAUDE.md
+system.md
+.claude/
+
+# Releases
+dist/
+dist-*/
+
+# Local test files
+test-goreleaser-docker.sh
+*.deb
+*.deb.*
+*.tar.gz
+*.tar.gz.*
+*.zip
+*.rpm

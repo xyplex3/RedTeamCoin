@@ -1,3 +1,4 @@
+// Package main implements the RedTeamCoin mining pool server components.
 package main
 
 import (
@@ -6,54 +7,88 @@ import (
 	"time"
 )
 
-// GPUDeviceInfo represents information about a GPU device
+// GPUDeviceInfo contains hardware information about a GPU device available
+// for mining. Miners report their GPU capabilities during registration and
+// heartbeats.
 type GPUDeviceInfo struct {
-	ID           int
-	Name         string
-	Type         string // "CUDA" or "OpenCL"
-	Memory       uint64
-	ComputeUnits int
-	Available    bool
+	ID           int    // Unique device identifier
+	Name         string // Device name from hardware
+	Type         string // Device type: "CUDA" or "OpenCL"
+	Memory       uint64 // Total device memory in bytes
+	ComputeUnits int    // Number of compute units/SMs
+	Available    bool   // Whether device is currently available
 }
 
-// MinerRecord represents information about a connected miner
+// PoolStats contains aggregated statistics about the mining pool's
+// performance and state. This data is exposed via the API for monitoring.
+type PoolStats struct {
+	TotalMiners      int     `json:"total_miners"`
+	ActiveMiners     int     `json:"active_miners"`
+	TotalHashRate    int64   `json:"total_hash_rate"`
+	TotalBlocksMined int64   `json:"total_blocks_mined"`
+	TotalHashes      int64   `json:"total_hashes"`
+	TotalMiningTime  float64 `json:"total_mining_time"`
+	AvgCPUUsage      float64 `json:"avg_cpu_usage"`
+	TotalCPUUsage    float64 `json:"total_cpu_usage"`
+	BlockchainHeight int     `json:"blockchain_height"`
+	Difficulty       int     `json:"difficulty"`
+	BlockReward      int64   `json:"block_reward"`
+}
+
+// MinerRecord tracks the state and statistics of a connected miner.
+// All fields are protected by the MiningPool's mutex for thread-safe access.
+//
+// The server can control miner behavior through ShouldMine and
+// CPUThrottlePercent fields, which are communicated during heartbeats.
 type MinerRecord struct {
 	ID                 string
-	IPAddress          string        // Client-reported IP address
-	IPAddressActual    string        // Server-detected actual IP address
-	Hostname           string        // Client-reported hostname
+	IPAddress          string // Client-reported IP address
+	IPAddressActual    string // Server-detected actual IP address
+	Hostname           string // Client-reported hostname
 	RegisteredAt       time.Time
 	LastHeartbeat      time.Time
 	Active             bool
+	ShouldMine         bool // Server control: whether miner should mine
+	CPUThrottlePercent int  // CPU usage limit (0-100), 0 = no limit
 	BlocksMined        int64
 	HashRate           int64
-	TotalMiningTime    time.Duration      // Total time spent mining
-	CPUUsagePercent    float64            // Current CPU usage percentage
-	TotalHashes        int64              // Total hashes computed
-	GPUDevices         []GPUDeviceInfo    // GPU devices available to this miner
-	GPUHashRate        int64              // Hash rate from GPU mining
-	GPUEnabled         bool               // Whether GPU mining is enabled
-	HybridMode         bool               // Whether hybrid CPU+GPU mining is enabled
+	TotalMiningTime    time.Duration   // Total time spent mining
+	CPUUsagePercent    float64         // Current CPU usage percentage
+	TotalHashes        int64           // Total hashes computed
+	GPUDevices         []GPUDeviceInfo // GPU devices available to this miner
+	GPUHashRate        int64           // Hash rate from GPU mining
+	GPUEnabled         bool            // Whether GPU mining is enabled
+	HybridMode         bool            // Whether hybrid CPU+GPU mining is enabled
 }
 
-// PendingWork represents work assigned to a miner
+// PendingWork tracks a block assignment to a specific miner.
+// Work is considered stale if not submitted within 5 minutes.
 type PendingWork struct {
-	MinerID       string
-	Block         *Block
-	AssignedAt    time.Time
+	MinerID    string
+	Block      *Block
+	AssignedAt time.Time
 }
 
-// MiningPool manages the pool of miners and work distribution
+// MiningPool coordinates work distribution among connected miners and
+// validates submitted blocks. All methods are safe for concurrent use by
+// multiple goroutines.
+//
+// The pool automatically generates new work blocks and assigns them to miners
+// on demand. When a miner successfully mines a block, the pool validates and
+// adds it to the blockchain, then rewards the miner.
 type MiningPool struct {
-	blockchain    *Blockchain
-	miners        map[string]*MinerRecord
-	pendingWork   map[string]*PendingWork
-	mu            sync.RWMutex
-	workQueue     chan *Block
-	blockReward   int64
+	blockchain  *Blockchain
+	miners      map[string]*MinerRecord
+	pendingWork map[string]*PendingWork
+	mu          sync.RWMutex
+	workQueue   chan *Block
+	blockReward int64
+	logger      *PoolLogger
 }
 
-// NewMiningPool creates a new mining pool
+// NewMiningPool creates a new mining pool that coordinates work distribution
+// for the given blockchain. The pool starts a background goroutine to
+// generate new work blocks every 30 seconds.
 func NewMiningPool(blockchain *Blockchain) *MiningPool {
 	pool := &MiningPool{
 		blockchain:  blockchain,
@@ -61,6 +96,7 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 		pendingWork: make(map[string]*PendingWork),
 		workQueue:   make(chan *Block, 100),
 		blockReward: 50,
+		logger:      nil, // Will be set after creation
 	}
 
 	// Start work generator
@@ -69,7 +105,16 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 	return pool
 }
 
-// RegisterMiner registers a new miner in the pool
+// SetLogger assigns a logger to the mining pool for event tracking and
+// periodic statistics logging. This must be called before miners start
+// connecting to ensure events are properly logged.
+func (mp *MiningPool) SetLogger(logger *PoolLogger) {
+	mp.logger = logger
+}
+
+// RegisterMiner registers a new miner in the pool or reactivates an existing
+// one. It records both the client-reported IP address and the actual IP
+// detected by the server. This method is safe for concurrent use.
 func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -83,25 +128,40 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 	}
 
 	mp.miners[id] = &MinerRecord{
-		ID:              id,
-		IPAddress:       ipAddress,
-		IPAddressActual: actualIP,
-		Hostname:        hostname,
-		RegisteredAt:    time.Now(),
-		LastHeartbeat:   time.Now(),
-		Active:          true,
-		BlocksMined:     0,
-		HashRate:        0,
-		TotalMiningTime: 0,
-		CPUUsagePercent: 0,
-		TotalHashes:     0,
+		ID:                 id,
+		IPAddress:          ipAddress,
+		IPAddressActual:    actualIP,
+		Hostname:           hostname,
+		RegisteredAt:       time.Now(),
+		LastHeartbeat:      time.Now(),
+		Active:             true,
+		ShouldMine:         true, // Mining enabled by default
+		CPUThrottlePercent: 0,    // No throttling by default (0 = unlimited)
+		BlocksMined:        0,
+		HashRate:           0,
+		TotalMiningTime:    0,
+		CPUUsagePercent:    0,
+		TotalHashes:        0,
 	}
 
 	fmt.Printf("Miner registered: %s (Reported IP: %s, Actual IP: %s, Hostname: %s)\n", id, ipAddress, actualIP, hostname)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_registered", "New miner registered", id, map[string]interface{}{
+			"ip_address":        ipAddress,
+			"ip_address_actual": actualIP,
+			"hostname":          hostname,
+		})
+	}
+
 	return nil
 }
 
-// GetWork assigns work to a miner
+// GetWork assigns a mining work unit to the specified miner.
+// It returns existing pending work if less than 5 minutes old, otherwise
+// assigns new work from the queue or generates it. This method is safe for
+// concurrent use.
 func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -150,7 +210,12 @@ func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 	}
 }
 
-// SubmitWork processes a submitted solution
+// SubmitWork validates and processes a block solution submitted by a miner.
+// It verifies the solution matches pending work, validates the proof-of-work,
+// adds the block to the blockchain if valid, and returns the block reward.
+// Stale blocks (superseded by another miner) are rejected with an error.
+// Returns true and the reward amount if accepted, false otherwise. This
+// method is safe for concurrent use.
 func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, hash string) (bool, int64, error) {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -205,10 +270,24 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 	}
 
 	fmt.Printf("Block %d mined by %s (Hash: %s)\n", blockIndex, minerID, hash)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("block_mined", "Block successfully mined", minerID, map[string]interface{}{
+			"block_index": blockIndex,
+			"hash":        hash,
+			"reward":      mp.blockReward,
+			"nonce":       nonce,
+		})
+	}
+
 	return true, mp.blockReward, nil
 }
 
-// UpdateHeartbeat updates miner heartbeat and statistics
+// UpdateHeartbeat updates a miner's last-seen timestamp and performance
+// statistics. It records the current hash rate, CPU usage percentage,
+// total hashes computed, and cumulative mining time. Returns an error if
+// the miner is not registered. This method is safe for concurrent use.
 func (mp *MiningPool) UpdateHeartbeat(minerID string, hashRate int64, cpuUsage float64, totalHashes int64, miningTime time.Duration) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -226,7 +305,12 @@ func (mp *MiningPool) UpdateHeartbeat(minerID string, hashRate int64, cpuUsage f
 	return nil
 }
 
-// UpdateHeartbeatWithGPU updates miner heartbeat with GPU statistics
+// UpdateHeartbeatWithGPU updates a miner's heartbeat with both CPU and GPU
+// statistics. In addition to standard heartbeat data (hash rate, CPU usage,
+// total hashes, mining time), this method records GPU device information,
+// GPU hash rate, and whether GPU or hybrid mining is enabled. Returns an
+// error if the miner is not registered. This method is safe for concurrent
+// use.
 func (mp *MiningPool) UpdateHeartbeatWithGPU(minerID string, hashRate int64, cpuUsage float64, totalHashes int64, miningTime time.Duration, gpuDevices []GPUDeviceInfo, gpuHashRate int64, gpuEnabled bool, hybridMode bool) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -248,7 +332,10 @@ func (mp *MiningPool) UpdateHeartbeatWithGPU(minerID string, hashRate int64, cpu
 	return nil
 }
 
-// StopMiner stops a miner
+// StopMiner marks a miner as inactive and removes its pending work
+// assignments. It returns the total number of blocks the miner successfully
+// mined during its session. Returns an error if the miner is not registered.
+// This method is safe for concurrent use.
 func (mp *MiningPool) StopMiner(minerID string) (int64, error) {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -268,7 +355,9 @@ func (mp *MiningPool) StopMiner(minerID string) (int64, error) {
 	return blocksMined, nil
 }
 
-// GetMiners returns all registered miners
+// GetMiners returns a slice containing all registered miners in the pool,
+// both active and inactive. The returned slice is a new allocation and can
+// be safely modified by the caller. This method is safe for concurrent use.
 func (mp *MiningPool) GetMiners() []*MinerRecord {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
@@ -280,7 +369,10 @@ func (mp *MiningPool) GetMiners() []*MinerRecord {
 	return miners
 }
 
-// GetActiveMinerCount returns the number of active miners
+// GetActiveMinerCount returns the number of miners that are currently
+// active and have sent a heartbeat within the last 2 minutes. Miners that
+// have not communicated recently are not counted as active. This method is
+// safe for concurrent use.
 func (mp *MiningPool) GetActiveMinerCount() int {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
@@ -294,7 +386,11 @@ func (mp *MiningPool) GetActiveMinerCount() int {
 	return count
 }
 
-// generateWork continuously generates new work blocks
+// generateWork continuously creates new work blocks every 30 seconds and
+// adds them to the work queue. This function runs in a background goroutine
+// for the lifetime of the pool, ensuring fresh work is always available for
+// miners. It uses a non-blocking send to avoid stalling if the queue is
+// full.
 func (mp *MiningPool) generateWork() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -317,8 +413,12 @@ func (mp *MiningPool) generateWork() {
 	}
 }
 
-// GetPoolStats returns pool statistics
-func (mp *MiningPool) GetPoolStats() map[string]interface{} {
+// GetPoolStats returns aggregated statistics for the entire mining pool,
+// including total and active miner counts, combined hash rates, total blocks
+// mined, average CPU usage, blockchain height, difficulty, and block reward.
+// Active miners are those with heartbeats within the last 2 minutes. This
+// method is safe for concurrent use.
+func (mp *MiningPool) GetPoolStats() PoolStats {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
 
@@ -346,23 +446,24 @@ func (mp *MiningPool) GetPoolStats() map[string]interface{} {
 		avgCPU = totalCPUUsage / float64(activeMiners)
 	}
 
-	return map[string]interface{}{
-		"total_miners":        len(mp.miners),
-		"active_miners":       activeMiners,
-		"total_hash_rate":     totalHashRate,
-		"total_blocks_mined":  totalBlocksMined,
-		"total_hashes":        totalHashes,
-		"total_mining_time":   totalMiningTime.Seconds(),
-		"avg_cpu_usage":       avgCPU,
-		"total_cpu_usage":     totalCPUUsage,
-		"blockchain_height":   mp.blockchain.GetBlockCount(),
-		"difficulty":          mp.blockchain.Difficulty,
-		"block_reward":        mp.blockReward,
+	return PoolStats{
+		TotalMiners:      len(mp.miners),
+		ActiveMiners:     activeMiners,
+		TotalHashRate:    totalHashRate,
+		TotalBlocksMined: totalBlocksMined,
+		TotalHashes:      totalHashes,
+		TotalMiningTime:  totalMiningTime.Seconds(),
+		AvgCPUUsage:      avgCPU,
+		TotalCPUUsage:    totalCPUUsage,
+		BlockchainHeight: mp.blockchain.GetBlockCount(),
+		Difficulty:       mp.blockchain.Difficulty,
+		BlockReward:      mp.blockReward,
 	}
 }
 
-// CPUStats represents CPU usage statistics for a miner
-// GPUDeviceStats represents GPU device statistics for API
+// GPUDeviceStats represents GPU device statistics for API responses,
+// providing a JSON-serializable view of GPU hardware information including
+// device identification, memory, and compute capabilities.
 type GPUDeviceStats struct {
 	ID           int    `json:"id"`
 	Name         string `json:"name"`
@@ -372,41 +473,175 @@ type GPUDeviceStats struct {
 	Available    bool   `json:"available"`
 }
 
+// CPUStats represents detailed performance and resource usage statistics
+// for a single miner, including CPU usage, hash rates, mining time, and
+// GPU information if applicable. This structure is used for API responses
+// and monitoring dashboards.
 type CPUStats struct {
-	MinerID         string            `json:"miner_id"`
-	IPAddress       string            `json:"ip_address"`
-	IPAddressActual string            `json:"ip_address_actual"`
-	Hostname        string            `json:"hostname"`
-	CPUUsagePercent float64           `json:"cpu_usage_percent"`
-	TotalHashes     int64             `json:"total_hashes"`
-	MiningTimeHours float64           `json:"mining_time_hours"`
-	MiningTimeSec   float64           `json:"mining_time_seconds"`
-	HashRate        int64             `json:"hash_rate"`
-	Active          bool              `json:"active"`
-	RegisteredAt    string            `json:"registered_at"`
-	GPUDevices      []GPUDeviceStats  `json:"gpu_devices,omitempty"`
-	GPUHashRate     int64             `json:"gpu_hash_rate,omitempty"`
-	GPUEnabled      bool              `json:"gpu_enabled"`
-	HybridMode      bool              `json:"hybrid_mode"`
+	MinerID         string           `json:"miner_id"`
+	IPAddress       string           `json:"ip_address"`
+	IPAddressActual string           `json:"ip_address_actual"`
+	Hostname        string           `json:"hostname"`
+	CPUUsagePercent float64          `json:"cpu_usage_percent"`
+	TotalHashes     int64            `json:"total_hashes"`
+	MiningTimeHours float64          `json:"mining_time_hours"`
+	MiningTimeSec   float64          `json:"mining_time_seconds"`
+	HashRate        int64            `json:"hash_rate"`
+	Active          bool             `json:"active"`
+	RegisteredAt    string           `json:"registered_at"`
+	GPUDevices      []GPUDeviceStats `json:"gpu_devices,omitempty"`
+	GPUHashRate     int64            `json:"gpu_hash_rate,omitempty"`
+	GPUEnabled      bool             `json:"gpu_enabled"`
+	HybridMode      bool             `json:"hybrid_mode"`
 }
 
 // TotalCPUStats represents aggregate CPU and GPU statistics
 type TotalCPUStats struct {
-	TotalMiners       int         `json:"total_miners"`
-	ActiveMiners      int         `json:"active_miners"`
-	TotalCPUUsage     float64     `json:"total_cpu_usage_percent"`
-	AverageCPUUsage   float64     `json:"average_cpu_usage_percent"`
-	TotalHashes       int64       `json:"total_hashes"`
-	TotalMiningHours  float64     `json:"total_mining_hours"`
-	TotalMiningTime   float64     `json:"total_mining_seconds"`
-	TotalHashRate     int64       `json:"total_hash_rate"`
-	TotalGPUHashRate  int64       `json:"total_gpu_hash_rate"`
-	GPUEnabledMiners  int         `json:"gpu_enabled_miners"`
-	HybridMiners      int         `json:"hybrid_miners"`
-	MinerStats        []CPUStats  `json:"miner_stats"`
+	TotalMiners      int        `json:"total_miners"`
+	ActiveMiners     int        `json:"active_miners"`
+	TotalCPUUsage    float64    `json:"total_cpu_usage_percent"`
+	AverageCPUUsage  float64    `json:"average_cpu_usage_percent"`
+	TotalHashes      int64      `json:"total_hashes"`
+	TotalMiningHours float64    `json:"total_mining_hours"`
+	TotalMiningTime  float64    `json:"total_mining_seconds"`
+	TotalHashRate    int64      `json:"total_hash_rate"`
+	TotalGPUHashRate int64      `json:"total_gpu_hash_rate"`
+	GPUEnabledMiners int        `json:"gpu_enabled_miners"`
+	HybridMiners     int        `json:"hybrid_miners"`
+	MinerStats       []CPUStats `json:"miner_stats"`
 }
 
-// GetCPUStats returns detailed CPU usage statistics
+// PauseMiner pauses mining for a specific miner
+func (mp *MiningPool) PauseMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	miner.ShouldMine = false
+	fmt.Printf("Miner paused: %s\n", minerID)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_paused", "Miner mining paused by server", minerID, nil)
+	}
+
+	return nil
+}
+
+// ResumeMiner resumes mining for a specific miner
+func (mp *MiningPool) ResumeMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	miner.ShouldMine = true
+	fmt.Printf("Miner resumed: %s\n", minerID)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_resumed", "Miner mining resumed by server", minerID, nil)
+	}
+
+	return nil
+}
+
+// DeleteMiner removes a miner from the pool
+func (mp *MiningPool) DeleteMiner(minerID string) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	// Remove pending work
+	delete(mp.pendingWork, minerID)
+
+	// Log the event before deletion
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_deleted", "Miner deleted from pool", minerID, map[string]interface{}{
+			"total_blocks_mined": miner.BlocksMined,
+			"total_hashes":       miner.TotalHashes,
+			"ip_address":         miner.IPAddress,
+			"hostname":           miner.Hostname,
+		})
+	}
+
+	// Remove miner
+	delete(mp.miners, minerID)
+
+	fmt.Printf("Miner deleted: %s (Total blocks mined: %d)\n", minerID, miner.BlocksMined)
+	return nil
+}
+
+// GetMinerStatus returns the mining status for a specific miner
+func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
+	mp.mu.RLock()
+	defer mp.mu.RUnlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return false, fmt.Errorf("miner not found")
+	}
+
+	return miner.ShouldMine, nil
+}
+
+// SetCPUThrottle sets the CPU throttle percentage for a specific miner
+func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return fmt.Errorf("miner not found")
+	}
+
+	// Validate throttle percentage
+	if throttlePercent < 0 || throttlePercent > 100 {
+		return fmt.Errorf("throttle percentage must be between 0 and 100")
+	}
+
+	miner.CPUThrottlePercent = throttlePercent
+	fmt.Printf("Miner %s CPU throttle set to %d%%\n", minerID, throttlePercent)
+
+	// Log the event
+	if mp.logger != nil {
+		mp.logger.LogEvent("miner_throttled", "CPU throttle set for miner", minerID, map[string]interface{}{
+			"throttle_percent": throttlePercent,
+		})
+	}
+
+	return nil
+}
+
+// GetCPUThrottle returns the CPU throttle percentage for a specific miner
+func (mp *MiningPool) GetCPUThrottle(minerID string) (int, error) {
+	mp.mu.RLock()
+	defer mp.mu.RUnlock()
+
+	miner, exists := mp.miners[minerID]
+	if !exists {
+		return 0, fmt.Errorf("miner not found")
+	}
+
+	return miner.CPUThrottlePercent, nil
+}
+
+// GetCPUStats returns comprehensive CPU and GPU usage statistics for all
+// miners in the pool. It aggregates data including total miners, active
+// count, hash rates, CPU usage, and GPU statistics. The returned structure
+// includes both aggregate totals and per-miner breakdowns. This method is
+// safe for concurrent use.
 func (mp *MiningPool) GetCPUStats() *TotalCPUStats {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()

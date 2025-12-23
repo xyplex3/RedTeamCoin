@@ -1,0 +1,468 @@
+---
+name: Test & Build Verification
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  # Test code quality and compilation
+  test-code:
+    name: Code Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: choco install protoc
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Generate protobuf
+        run: make proto
+        shell: bash
+
+      - name: Build server
+        run: CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }} ./server
+        shell: bash
+
+      - name: Build client (CPU)
+        run: CGO_ENABLED=0 go build -v -o bin/client-${{ matrix.os }} ./client
+        shell: bash
+
+      - name: Verify binaries exist
+        run: |
+          ls -la bin/
+        shell: bash
+
+  # Test cross-compilation to all platforms
+  test-cross-compile:
+    name: Cross-Compilation Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Test Linux AMD64 cross-compile
+        run: |
+          echo "Building Linux AMD64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o bin/client-linux-amd64 ./client
+          file bin/client-linux-amd64
+          ls -lh bin/client-linux-amd64
+
+      - name: Test Linux ARM64 cross-compile
+        run: |
+          echo "Building Linux ARM64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -o bin/client-linux-arm64 ./client
+          file bin/client-linux-arm64
+          ls -lh bin/client-linux-arm64
+
+      - name: Test Windows AMD64 cross-compile
+        run: |
+          echo "Building Windows AMD64..."
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -v -o bin/client-windows-amd64.exe ./client
+          file bin/client-windows-amd64.exe
+          ls -lh bin/client-windows-amd64.exe
+
+      - name: Test macOS AMD64 cross-compile
+        run: |
+          echo "Building macOS AMD64..."
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -v -o bin/client-darwin-amd64 ./client
+          file bin/client-darwin-amd64
+          ls -lh bin/client-darwin-amd64
+
+      - name: Test macOS ARM64 cross-compile
+        run: |
+          echo "Building macOS ARM64..."
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -v -o bin/client-darwin-arm64 ./client
+          file bin/client-darwin-arm64
+          ls -lh bin/client-darwin-arm64
+
+      - name: Verify all binaries created
+        run: |
+          echo "All cross-compiled binaries:"
+          ls -lh bin/
+
+          # Check all expected files exist
+          test -f bin/client-linux-amd64
+          test -f bin/client-linux-arm64
+          test -f bin/client-windows-amd64.exe
+          test -f bin/client-darwin-amd64
+          test -f bin/client-darwin-arm64
+
+          echo "✓ All cross-compilation targets successful"
+
+      - name: Upload cross-compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-compiled-binaries
+          path: bin/*
+          retention-days: 7
+
+  # Test GPU builds compile (even without GPU hardware)
+  test-gpu-compilation:
+    name: GPU Build Compilation (${{ matrix.config.name }})
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: "Linux OpenCL"
+            os: ubuntu-latest
+            target: opencl
+            setup: |
+              sudo apt-get update
+              sudo apt-get install -y ocl-icd-opencl-dev protobuf-compiler build-essential
+
+          - name: "macOS OpenCL"
+            os: macos-latest
+            target: opencl
+            setup: |
+              brew install protobuf
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: ${{ matrix.config.setup }}
+        shell: bash
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Build with ${{ matrix.config.target }}
+        run: |
+          echo "Building client with ${{ matrix.config.target }} support..."
+          CGO_ENABLED=1 go build -tags ${{ matrix.config.target }} -v -o bin/client-${{ matrix.config.target }} ./client
+
+          echo "Binary info:"
+          file bin/client-${{ matrix.config.target }}
+          ls -lh bin/client-${{ matrix.config.target }}
+
+          echo "✓ ${{ matrix.config.target }} build successful"
+
+      - name: Verify CGO directives
+        run: |
+          echo "Checking platform-specific CGO directives..."
+
+          # Check CUDA has platform-specific directives
+          if grep -q "// #cgo linux LDFLAGS:" client/cuda.go; then
+            echo "✓ CUDA has Linux-specific directives"
+          else
+            echo "✗ CUDA missing Linux-specific directives"
+            exit 1
+          fi
+
+          if grep -q "// #cgo windows LDFLAGS:" client/cuda.go; then
+            echo "✓ CUDA has Windows-specific directives"
+          else
+            echo "✗ CUDA missing Windows-specific directives"
+            exit 1
+          fi
+
+          # Check OpenCL has platform-specific directives
+          if grep -q "// #cgo linux LDFLAGS:" client/opencl.go; then
+            echo "✓ OpenCL has Linux-specific directives"
+          else
+            echo "✗ OpenCL missing Linux-specific directives"
+            exit 1
+          fi
+
+          if grep -q "// #cgo darwin LDFLAGS:" client/opencl.go; then
+            echo "✓ OpenCL has macOS-specific directives"
+          else
+            echo "✗ OpenCL missing macOS-specific directives"
+            exit 1
+          fi
+
+          echo "✓ All platform-specific CGO directives present"
+
+      - name: Upload GPU binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-binary-${{ matrix.config.name }}
+          path: bin/client-*
+          retention-days: 7
+
+  # Test Windows OpenCL cross-compilation (the original problem!)
+  test-windows-opencl-cross-compile:
+    name: Windows OpenCL Cross-Compilation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler mingw-w64 build-essential
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Set up Windows OpenCL SDK for cross-compilation
+        run: |
+          echo "Setting up Windows OpenCL SDK for cross-compilation..."
+
+          # Clone OpenCL headers from Khronos Group
+          git clone --depth 1 https://github.com/KhronosGroup/OpenCL-Headers.git
+          sudo mkdir -p /usr/x86_64-w64-mingw32/include
+          sudo cp -r OpenCL-Headers/CL /usr/x86_64-w64-mingw32/include/
+
+          # Create minimal OpenCL import library for Windows
+          sudo mkdir -p /usr/x86_64-w64-mingw32/lib
+          cat > OpenCL.def << 'EOF'
+          LIBRARY OpenCL
+          EXPORTS
+          clGetPlatformIDs
+          clGetPlatformInfo
+          clGetDeviceIDs
+          clGetDeviceInfo
+          clCreateContext
+          clCreateCommandQueue
+          clCreateProgramWithSource
+          clBuildProgram
+          clCreateKernel
+          clCreateBuffer
+          clSetKernelArg
+          clEnqueueNDRangeKernel
+          clEnqueueReadBuffer
+          clFinish
+          clReleaseMemObject
+          clReleaseKernel
+          clReleaseProgram
+          clReleaseCommandQueue
+          clReleaseContext
+          EOF
+          x86_64-w64-mingw32-dlltool -d OpenCL.def -l libOpenCL.a
+          sudo mv libOpenCL.a /usr/x86_64-w64-mingw32/lib/
+
+          # Verify setup
+          echo "Verifying OpenCL SDK setup:"
+          ls -la /usr/x86_64-w64-mingw32/include/CL/
+          ls -la /usr/x86_64-w64-mingw32/lib/libOpenCL.a
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Test Windows OpenCL cross-compilation
+        run: |
+          echo "=================================================="
+          echo "Testing Windows OpenCL Cross-Compilation"
+          echo "=================================================="
+          echo ""
+          echo "This is THE KEY TEST for the original issue:"
+          echo "  'CUDA and OpenCL drivers couldn't cross-compile on Linux'"
+          echo ""
+
+          # Build Windows OpenCL binary from Linux
+          make build-windows-opencl
+
+          echo ""
+          echo "Binary info:"
+          file bin/client-windows-opencl.exe
+          ls -lh bin/client-windows-opencl.exe
+
+          # Verify it's a Windows PE executable
+          if file bin/client-windows-opencl.exe | grep -q "PE32+ executable.*Windows"; then
+            echo ""
+            echo "✓ SUCCESS: Windows OpenCL binary cross-compiled successfully!"
+            echo "✓ The original CUDA/OpenCL cross-compilation issue is FIXED!"
+          else
+            echo ""
+            echo "✗ FAILED: Binary is not a valid Windows executable"
+            exit 1
+          fi
+
+      - name: Upload Windows OpenCL binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-opencl-cross-compiled
+          path: bin/client-windows-opencl.exe
+          retention-days: 7
+
+  # Verify the fix actually works
+  verify-fix:
+    name: Verify Cross-Compilation Fix
+    runs-on: ubuntu-latest
+    needs: [test-code, test-cross-compile, test-gpu-compilation, test-windows-opencl-cross-compile]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download cross-compiled artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-binaries
+          path: cross-compiled/
+
+      - name: Verify the original issue is fixed
+        run: |
+          echo "=================================================="
+          echo "Verifying Cross-Compilation Fix"
+          echo "=================================================="
+          echo ""
+
+          echo "Original issue: CUDA and OpenCL drivers couldn't cross-compile"
+          echo "Fix: Platform-specific CGO directives + native platform builds"
+          echo ""
+
+          echo "Checking that all platforms built successfully:"
+          ls -lh cross-compiled/
+
+          # Count successful builds
+          LINUX_BUILDS=$(find cross-compiled/ -name '*linux*' -type f 2>/dev/null | wc -l)
+          WINDOWS_BUILDS=$(find cross-compiled/ -name '*windows*' -type f 2>/dev/null | wc -l)
+          DARWIN_BUILDS=$(find cross-compiled/ -name '*darwin*' -type f 2>/dev/null | wc -l)
+
+          echo ""
+          echo "Build Summary:"
+          echo "  Linux builds:   $LINUX_BUILDS (expected: 2)"
+          echo "  Windows builds: $WINDOWS_BUILDS (expected: 1)"
+          echo "  macOS builds:   $DARWIN_BUILDS (expected: 2)"
+          echo ""
+
+          if [ "$LINUX_BUILDS" -ge 2 ] && [ "$WINDOWS_BUILDS" -ge 1 ] && [ "$DARWIN_BUILDS" -ge 2 ]; then
+            echo "✓ SUCCESS: All platform cross-compilation working!"
+            echo ""
+            echo "The fix is working correctly:"
+            echo "  ✓ CPU-only binaries compile for all platforms"
+            echo "  ✓ GPU binaries compile on native platforms"
+            echo "  ✓ Platform-specific CGO directives verified"
+            exit 0
+          else
+            echo "✗ FAILED: Some platforms didn't build correctly"
+            exit 1
+          fi
+
+  # Test summary
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-code, test-cross-compile, test-gpu-compilation, test-windows-opencl-cross-compile, verify-fix]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "=================================================="
+          echo "Test Suite Summary"
+          echo "=================================================="
+          echo ""
+
+          if [ "${{ needs.test-code.result }}" == "success" ]; then
+            echo "✓ Code tests: PASSED"
+          else
+            echo "✗ Code tests: FAILED"
+          fi
+
+          if [ "${{ needs.test-cross-compile.result }}" == "success" ]; then
+            echo "✓ Cross-compilation: PASSED"
+          else
+            echo "✗ Cross-compilation: FAILED"
+          fi
+
+          if [ "${{ needs.test-gpu-compilation.result }}" == "success" ]; then
+            echo "✓ GPU compilation: PASSED"
+          else
+            echo "✗ GPU compilation: FAILED"
+          fi
+
+          if [ "${{ needs.test-windows-opencl-cross-compile.result }}" == "success" ]; then
+            echo "✓ Windows OpenCL cross-compilation: PASSED"
+          else
+            echo "✗ Windows OpenCL cross-compilation: FAILED"
+          fi
+
+          if [ "${{ needs.verify-fix.result }}" == "success" ]; then
+            echo "✓ Fix verification: PASSED"
+          else
+            echo "✗ Fix verification: FAILED"
+          fi
+
+          echo ""
+
+          # Fail if any required job failed
+          if [ "${{ needs.test-code.result }}" != "success" ] || \
+             [ "${{ needs.test-cross-compile.result }}" != "success" ] || \
+             [ "${{ needs.test-gpu-compilation.result }}" != "success" ] || \
+             [ "${{ needs.test-windows-opencl-cross-compile.result }}" != "success" ] || \
+             [ "${{ needs.verify-fix.result }}" != "success" ]; then
+            echo "Some tests failed. Check the logs above."
+            exit 1
+          fi
+
+          echo "🎉 All tests passed! Ready for release."

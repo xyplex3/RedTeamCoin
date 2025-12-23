@@ -1,0 +1,9 @@
+# Semgrep ignore file
+# Exclude files from Semgrep security scans
+
+# CUDA files legitimately use unsafe for C interop
+client/cuda.go
+client/opencl.go
+
+# Protobuf generated files
+**/*.pb.go

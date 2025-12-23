@@ -1,3 +1,6 @@
+//go:build cuda && cgo
+// +build cuda,cgo
+
 package main
 
 import (
@@ -5,18 +8,46 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
+	"unsafe"
 )
 
-// CUDAMiner handles NVIDIA GPU mining via CUDA
+// #cgo linux CFLAGS: -I/usr/local/cuda/include -I/usr/include
+// #cgo linux LDFLAGS: ${SRCDIR}/mine_cuda.o -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lcuda -lcudart -lstdc++
+// #cgo windows CFLAGS: -IC:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v12.0/include
+// #cgo windows LDFLAGS: ${SRCDIR}/mine_cuda.o -LC:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v12.0/lib/x64 -lcuda -lcudart
+// #cgo darwin CFLAGS: -I/usr/local/cuda/include
+// #cgo darwin LDFLAGS: ${SRCDIR}/mine_cuda.o -L/usr/local/cuda/lib -lcuda -lcudart -lstdc++
+// #include <stdint.h>
+// #include <stdbool.h>
+// #include <cuda_runtime.h>
+// extern void cuda_mine(
+//     const uint8_t* block_data,
+//     int data_len,
+//     int difficulty,
+//     uint64_t start_nonce,
+//     uint64_t nonce_range,
+//     uint64_t* result_nonce,
+//     uint8_t* result_hash,
+//     _Bool* found
+// );
+import "C"
+
+// CUDAMiner handles NVIDIA GPU mining via CUDA. It manages GPU device
+// detection, initialization, and proof-of-work computation using NVIDIA
+// CUDA kernels. Falls back to CPU mining if CUDA is unavailable.
 type CUDAMiner struct {
-	devices  []GPUDevice
-	running  bool
-	mu       sync.Mutex
+	devices []GPUDevice
+	running bool
+	mu      sync.Mutex
 }
 
-// NewCUDAMiner creates a new CUDA miner
+// NewCUDAMiner creates a new CUDA miner instance in a stopped state.
+// Device detection must be performed by calling DetectDevices before
+// mining can begin.
 func NewCUDAMiner() *CUDAMiner {
 	return &CUDAMiner{
 		devices: make([]GPUDevice, 0),
@@ -24,57 +55,78 @@ func NewCUDAMiner() *CUDAMiner {
 	}
 }
 
-// DetectDevices detects NVIDIA CUDA-capable GPUs
+// DetectDevices detects NVIDIA CUDA-capable GPUs using nvidia-smi. It
+// queries GPU index, name, and memory information, returning a slice of
+// detected devices. Returns an empty slice if nvidia-smi is unavailable
+// or no NVIDIA GPUs are found.
 func (cm *CUDAMiner) DetectDevices() []GPUDevice {
 	devices := make([]GPUDevice, 0)
 
-	// Note: This is a simulated detection for demonstration
-	// In production, you would use:
-	// - CGo bindings to CUDA driver API
-	// - nvidia-smi command line tool
-	// - NVML (NVIDIA Management Library)
-
-	// Try to detect NVIDIA GPUs (simulated)
-	// In real implementation, this would call CUDA API:
-	// cudaGetDeviceCount() and cudaGetDeviceProperties()
-
 	log.Println("Detecting NVIDIA CUDA devices...")
 
-	// Simulated detection - in production, replace with actual CUDA API calls
-	// This creates mock devices for demonstration
-	// Real implementation would use: cuda.GetDeviceCount() and cuda.GetDeviceProperties()
-
-	cudaAvailable := cm.checkCUDAAvailability()
-	if !cudaAvailable {
-		log.Println("CUDA not available - no NVIDIA GPUs detected or CUDA not installed")
+	// Try to detect NVIDIA GPUs using nvidia-smi
+	cmd := exec.Command("nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("CUDA not available - no NVIDIA GPUs detected or nvidia-smi not installed")
 		return devices
 	}
 
-	// Simulated: In production, this would be actual GPU detection
-	// For now, we'll return empty list unless CUDA is properly installed
-	log.Println("CUDA support detected but requires proper CUDA installation for actual GPU mining")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
 
+		parts := strings.Split(line, ",")
+		if len(parts) < 3 {
+			continue
+		}
+
+		name := strings.TrimSpace(parts[1])
+		memoryStr := strings.TrimSpace(parts[2])
+
+		var memory uint64
+		_, err := fmt.Sscanf(memoryStr, "%d", &memory)
+		if err != nil {
+			memory = 2048 // Default to 2GB if parsing fails
+		}
+		memory = memory * 1024 * 1024 // Convert MB to bytes
+
+		device := GPUDevice{
+			ID:           i,
+			Name:         fmt.Sprintf("NVIDIA %s", name),
+			Type:         "CUDA",
+			Memory:       memory,
+			ComputeUnits: 128, // Approximate value
+			Available:    true,
+		}
+
+		devices = append(devices, device)
+		log.Printf("Found CUDA GPU: %s (ID: %d, Memory: %d MB)\n", name, i, memory/1024/1024)
+	}
+
+	cm.devices = devices
 	return devices
 }
 
-// checkCUDAAvailability checks if CUDA is available
+// checkCUDAAvailability reports whether the nvidia-smi command is
+// available on the system, indicating CUDA driver installation.
 func (cm *CUDAMiner) checkCUDAAvailability() bool {
-	// In production, this would check:
-	// 1. CUDA runtime library availability
-	// 2. NVIDIA driver installation
-	// 3. Compatible GPU presence
-	//
-	// For now, we return false to indicate CUDA needs proper setup
-	// Users can install CUDA toolkit and rebuild with CGo bindings
-	return false
+	cmd := exec.Command("which", "nvidia-smi")
+	err := cmd.Run()
+	return err == nil
 }
 
-// HasDevices returns true if CUDA devices are available
+// HasDevices reports whether any CUDA devices were detected. This should
+// be checked before calling Start or MineBlock.
 func (cm *CUDAMiner) HasDevices() bool {
 	return len(cm.devices) > 0
 }
 
-// Start begins CUDA mining
+// Start marks the CUDA miner as running, enabling it to accept mining
+// requests. Returns an error if already running or if no CUDA devices
+// are available.
 func (cm *CUDAMiner) Start() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -92,7 +144,8 @@ func (cm *CUDAMiner) Start() error {
 	return nil
 }
 
-// Stop halts CUDA mining
+// Stop halts CUDA mining operations and marks the miner as stopped. Safe
+// to call multiple times.
 func (cm *CUDAMiner) Stop() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -105,30 +158,79 @@ func (cm *CUDAMiner) Stop() {
 	log.Println("CUDA miner stopped")
 }
 
-// MineBlock mines a block using CUDA GPU
+// MineBlock attempts to find a valid block nonce using CUDA GPU
+// acceleration. It tries GPU mining first via CUDA kernel; if that fails
+// or is unavailable, falls back to CPU mining. Returns the nonce, hash,
+// hash count, and whether a valid solution was found.
 func (cm *CUDAMiner) MineBlock(blockIndex, timestamp int64, data, previousHash string, difficulty int, startNonce, nonceRange int64) (nonce int64, hash string, hashes int64, found bool) {
 	if !cm.running || len(cm.devices) == 0 {
 		return 0, "", 0, false
 	}
 
-	// In production, this would:
-	// 1. Prepare block data for GPU
-	// 2. Allocate GPU memory
-	// 3. Launch CUDA kernel for parallel hashing
-	// 4. Check results and return if solution found
-	//
-	// CUDA kernel would look like:
-	// __global__ void mine_kernel(block_data, difficulty, start_nonce, results)
-	//
-	// For now, we fall back to CPU implementation
-	// To enable real GPU mining, install CUDA toolkit and use CGo bindings
+	// Prepare block data (all components except nonce)
+	blockData := fmt.Sprintf("%d%d%s%s", blockIndex, timestamp, data, previousHash)
+	blockBytes := []byte(blockData)
 
+	// Try GPU mining first
+	gpuNonce, gpuHash, found := cm.tryGPUMining(blockBytes, difficulty, startNonce, nonceRange)
+	if found {
+		return gpuNonce, gpuHash, nonceRange, true
+	}
+
+	// Fallback to CPU mining if GPU not available or kernel compilation failed
+	n, h, hc := cm.mineCPU(blockIndex, timestamp, data, previousHash, difficulty, startNonce, nonceRange)
+	return n, h, hc, h != ""
+}
+
+// tryGPUMining attempts to mine using the CUDA kernel by calling the
+// C/CUDA interface. It prepares block data, invokes the GPU kernel, and
+// returns results. Returns nonce, hash, and found status.
+func (cm *CUDAMiner) tryGPUMining(blockData []byte, difficulty int, startNonce, nonceRange int64) (int64, string, bool) {
+	// Allocate result buffers
+	var resultNonce uint64
+	resultHash := make([]byte, 32)
+	foundFlag := false
+
+	// Prepare C data
+	blockDataPtr := (*C.uint8_t)(unsafe.Pointer(&blockData[0]))
+	blockDataLen := C.int(len(blockData))
+	difficultyC := C.int(difficulty)
+	startNonceC := C.uint64_t(startNonce)
+	nonceRangeC := C.uint64_t(nonceRange)
+	resultNoncePtr := (*C.uint64_t)(unsafe.Pointer(&resultNonce))
+	resultHashPtr := (*C.uint8_t)(unsafe.Pointer(&resultHash[0]))
+	foundPtr := (*C._Bool)(unsafe.Pointer(&foundFlag))
+
+	// Call CUDA kernel
+	C.cuda_mine(
+		blockDataPtr,
+		blockDataLen,
+		difficultyC,
+		startNonceC,
+		nonceRangeC,
+		resultNoncePtr,
+		resultHashPtr,
+		foundPtr,
+	)
+
+	if foundFlag {
+		hashStr := hex.EncodeToString(resultHash)
+		return int64(resultNonce), hashStr, true
+	}
+
+	return 0, "", false
+}
+
+// mineCPU provides CPU-based proof-of-work mining as a fallback when CUDA
+// is unavailable or fails. It iterates through the nonce range using SHA256
+// hashing until a valid solution is found or the range is exhausted.
+func (cm *CUDAMiner) mineCPU(blockIndex, timestamp int64, data, previousHash string, difficulty int, startNonce, nonceRange int64) (int64, string, int64) {
 	prefix := ""
 	for i := 0; i < difficulty; i++ {
 		prefix += "0"
 	}
 
-	// Simulate GPU parallel processing (in production, this runs on GPU)
+	hashes := int64(0)
 	for n := startNonce; n < startNonce+nonceRange; n++ {
 		record := strconv.FormatInt(blockIndex, 10) +
 			strconv.FormatInt(timestamp, 10) +
@@ -144,73 +246,41 @@ func (cm *CUDAMiner) MineBlock(blockIndex, timestamp int64, data, previousHash s
 		hashes++
 
 		if len(hashStr) >= difficulty && hashStr[:difficulty] == prefix {
-			return n, hashStr, hashes, true
+			return n, hashStr, hashes
 		}
 	}
 
-	return 0, "", hashes, false
+	return 0, "", hashes
 }
 
 /*
-Production CUDA Implementation Notes:
+CUDA Implementation Notes:
 
-To enable real CUDA mining, you need:
+The CUDA kernel (mine.cu) implements:
+1. Full SHA256 computation on GPU
+2. Parallel nonce testing with kernel grid/block configuration
+3. Device memory management and data transfer
+4. Atomic operations for result synchronization
+
+To build and use:
 
 1. Install NVIDIA CUDA Toolkit:
    - Download from: https://developer.nvidia.com/cuda-downloads
-   - Install cuDNN for optimized operations
+   - Install dependencies: sudo apt-get install nvidia-cuda-toolkit
 
-2. Use CGo to interface with CUDA:
+2. Compile the CUDA kernel:
+   - nvcc -c -m64 -O3 client/mine.cu -o client/mine.o
 
-// #cgo LDFLAGS: -L/usr/local/cuda/lib64 -lcuda -lcudart
-// #include <cuda.h>
-// #include <cuda_runtime.h>
-import "C"
+3. Build with CUDA support:
+   - CGO_ENABLED=1 go build -tags cuda -o bin/client ./client
 
-3. Implement CUDA kernel (mine.cu):
+4. GPU detection and fallback:
+   - If CUDA not available or kernel fails, CPU fallback is used
+   - Performance: GPU mining can be 10-100x faster than CPU for large nonce ranges
+   - Energy efficient: Offloads computation to GPU, reducing CPU usage
 
-__global__ void sha256_mine_kernel(
-    uint8_t* block_data,
-    int difficulty,
-    uint64_t start_nonce,
-    uint64_t* result_nonce,
-    uint8_t* result_hash
-) {
-    uint64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    uint64_t nonce = start_nonce + idx;
-
-    // Compute SHA256 hash on GPU
-    uint8_t hash[32];
-    sha256_gpu(block_data, nonce, hash);
-
-    // Check if hash meets difficulty
-    if (check_difficulty(hash, difficulty)) {
-        atomicExch(result_nonce, nonce);
-        memcpy(result_hash, hash, 32);
-    }
-}
-
-4. Launch kernel from Go:
-
-func (cm *CUDAMiner) launchKernel(...) {
-    // Allocate GPU memory
-    C.cudaMalloc(&d_data, size)
-
-    // Copy data to GPU
-    C.cudaMemcpy(d_data, h_data, size, C.cudaMemcpyHostToDevice)
-
-    // Launch kernel
-    blocks := 256
-    threads := 256
-    C.sha256_mine_kernel<<<blocks, threads>>>(...)
-
-    // Copy results back
-    C.cudaMemcpy(h_result, d_result, size, C.cudaMemcpyDeviceToHost)
-
-    // Free GPU memory
-    C.cudaFree(d_data)
-}
-
-5. Build with:
-   CGO_ENABLED=1 go build -tags cuda
+The mining function automatically:
+- Tries GPU mining first
+- Falls back to CPU if GPU unavailable
+- Reports hash count for performance monitoring
 */

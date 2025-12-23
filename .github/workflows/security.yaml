@@ -1,0 +1,130 @@
+---
+name: Security Scanning
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    # Run weekly on Tuesdays at 21:28 UTC
+    - cron: "28 21 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write  # For uploading SARIF results
+  actions: read  # Required for CodeQL action v3
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  semgrep:
+    name: Semgrep Security Analysis
+    runs-on: ubuntu-latest
+    # Skip any PR created by dependabot to avoid permission issues
+    if: (github.actor != 'dependabot[bot]')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/golang
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true  # Don't fail the job on security findings
+
+  gosec:
+    name: Gosec Security Scanner
+    runs-on: ubuntu-latest
+    if: (github.actor != 'dependabot[bot]')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Go tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: make proto
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: -no-fail -exclude-generated -fmt=sarif -out=gosec-results.sarif ./...
+        env:
+          CGO_ENABLED: 0
+
+      - name: Upload Gosec SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        # Only upload SARIF on non-fork PRs and if we have the right permissions
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          sarif_file: gosec-results.sarif
+        continue-on-error: true  # Don't fail the job if SARIF upload fails
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [semgrep, gosec]
+    if: always()
+
+    steps:
+      - name: Check security scan results
+        run: |
+          echo "=================================================="
+          echo "Security Scan Summary"
+          echo "=================================================="
+          echo ""
+
+          if [ "${{ needs.semgrep.result }}" == "success" ]; then
+            echo "✓ Semgrep: PASSED"
+          elif [ "${{ needs.semgrep.result }}" == "skipped" ]; then
+            echo "⊘ Semgrep: SKIPPED (dependabot PR)"
+          else
+            echo "✗ Semgrep: FAILED"
+          fi
+
+          if [ "${{ needs.gosec.result }}" == "success" ]; then
+            echo "✓ Gosec: PASSED"
+          elif [ "${{ needs.gosec.result }}" == "skipped" ]; then
+            echo "⊘ Gosec: SKIPPED (dependabot PR)"
+          else
+            echo "✗ Gosec: FAILED"
+          fi
+
+          echo ""
+
+          # Don't fail if skipped (dependabot)
+          if [ "${{ needs.semgrep.result }}" == "skipped" ] && [ "${{ needs.gosec.result }}" == "skipped" ]; then
+            echo "Security scans skipped for dependabot PR"
+            exit 0
+          fi
+
+          # Fail if any non-skipped job failed
+          if [ "${{ needs.semgrep.result }}" == "failure" ] || [ "${{ needs.gosec.result }}" == "failure" ]; then
+            echo "Some security scans failed. Please review the findings above."
+            exit 1
+          fi
+
+          echo "✓ All security scans passed!"

@@ -606,6 +606,14 @@ RedTeamCoin/
 │   │   └── com/redteamcoin/miner/
 │   │       └── RedTeamMiner.java
 │   └── pom.xml             # Maven build configuration
+├── web-wasm/               # Browser-based miner (WebAssembly)
+│   ├── miner.go            # Go source (compiles to WASM)
+│   ├── miner.wasm          # Compiled WebAssembly binary
+│   ├── index.html          # Web interface
+│   ├── miner.js            # JavaScript coordinator
+│   ├── worker.js           # Web Worker threads
+│   ├── wasm_exec.js        # Go WASM runtime
+│   └── sha256.wgsl         # WebGPU shader
 ├── proto/                  # Protocol buffer definitions
 │   ├── mining.proto        # Service definitions
 │   ├── mining.pb.go        # Generated Go code

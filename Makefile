@@ -161,7 +161,7 @@ clean:
 	rm -rf bin/
 	rm -f proto/*.pb.go
 	rm -f client/mine.o
-	rm -f web/miner.wasm
+	rm -f web-wasm/miner.wasm
 	rm -rf java-standalone/target/
 	rm -rf java-client/target/
 	@echo "✓ Clean complete (removed all binaries and generated files)"
@@ -175,16 +175,16 @@ deps:
 # Build WebAssembly miner
 build-wasm:
 	@echo "Building WebAssembly miner..."
-	@mkdir -p web
-	GOOS=js GOARCH=wasm go build -o web/miner.wasm ./web/
-	@echo "✓ WebAssembly miner built: web/miner.wasm"
+	@mkdir -p web-wasm
+	GOOS=js GOARCH=wasm go build -o web-wasm/miner.wasm ./web-wasm/
+	@echo "✓ WebAssembly miner built: web-wasm/miner.wasm"
 	@echo "Files needed for web deployment:"
-	@echo "  - web/miner.wasm"
-	@echo "  - web/wasm_exec.js"
-	@echo "  - web/miner.js"
-	@echo "  - web/worker.js"
-	@echo "  - web/index.html"
-	@echo "  - web/sha256.wgsl (for WebGPU)"
+	@echo "  - web-wasm/miner.wasm"
+	@echo "  - web-wasm/wasm_exec.js"
+	@echo "  - web-wasm/miner.js"
+	@echo "  - web-wasm/worker.js"
+	@echo "  - web-wasm/index.html"
+	@echo "  - web-wasm/sha256.wgsl (for WebGPU)"
 
 # Build Java standalone miner (GUI-enabled desktop application)
 build-java-standalone:
@@ -219,7 +219,7 @@ build-java: build-java-standalone
 serve-web: build-wasm
 	@echo "Starting local web server on http://localhost:8080"
 	@echo "Press Ctrl+C to stop"
-	cd web && python3 -m http.server 8080
+	cd web-wasm && python3 -m http.server 8080
 
 # Initialize the project
 init: install-tools deps proto

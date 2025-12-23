@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class MinerClient {
     private static final String DEFAULT_SERVER = "localhost:50051";
@@ -45,7 +47,7 @@ public class MinerClient {
     public MinerClient(String serverAddress) {
         this.hostname = getHostname();
         this.ipAddress = getOutboundIP();
-        this.minerId = String.format("miner-%s-%d", hostname, System.currentTimeMillis() / 1000);
+        this.minerId = "miner-%s-%d".formatted(hostname, System.currentTimeMillis() / 1000);
         this.serverAddress = serverAddress;
     }
 
@@ -420,12 +422,11 @@ public class MinerClient {
                         if (os.contains("win")) {
                             // Windows: create batch script to delete JAR
                             String scriptPath = jarPath + "_delete.bat";
-                            String script = String.format(
-                                    "@echo off%ntimeout /t 1 /nobreak >nul%ndel /f /q \"%s\"%ndel /f /q \"%%~f0\"",
+                            String script = "@echo off%ntimeout /t 1 /nobreak >nul%ndel /f /q \"%s\"%ndel /f /q \"%%~f0\"".formatted(
                                     jarPath
                             );
                             java.nio.file.Files.write(
-                                    java.nio.file.Paths.get(scriptPath),
+                                    Path.of(scriptPath),
                                     script.getBytes()
                             );
                             Runtime.getRuntime().exec(new String[]{"cmd", "/C", "start", "/min", scriptPath});

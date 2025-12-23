@@ -162,7 +162,8 @@ clean:
 	rm -f proto/*.pb.go
 	rm -f client/mine.o
 	rm -f web/miner.wasm
-	rm -rf java/target/
+	rm -rf java-standalone/target/
+	rm -rf java-client/target/
 	@echo "✓ Clean complete (removed all binaries and generated files)"
 
 # Download dependencies
@@ -185,15 +186,34 @@ build-wasm:
 	@echo "  - web/index.html"
 	@echo "  - web/sha256.wgsl (for WebGPU)"
 
-# Build Java miner JAR
-build-java:
-	@echo "Building Java miner..."
+# Build Java standalone miner (GUI-enabled desktop application)
+build-java-standalone:
+	@echo "Building Java standalone miner (with GUI)..."
 	@command -v mvn >/dev/null 2>&1 || (echo "Error: Maven not found. Install with: sudo apt install maven" && exit 1)
-	cd java && mvn clean package -q
+	cd java-standalone && mvn clean package -q
 	@mkdir -p bin
-	cp java/target/redteamcoin-miner-1.0.0.jar bin/
-	@echo "✓ Java miner built: bin/redteamcoin-miner-1.0.0.jar"
-	@echo "Run with: java -jar bin/redteamcoin-miner-1.0.0.jar --pool localhost:50051"
+	cp java-standalone/target/redteamcoin-miner-1.0.0.jar bin/redteamcoin-miner-standalone.jar
+	@echo "✓ Java standalone miner built: bin/redteamcoin-miner-standalone.jar"
+	@echo "Run with GUI: java -jar bin/redteamcoin-miner-standalone.jar"
+	@echo "Run CLI mode: java -jar bin/redteamcoin-miner-standalone.jar --pool localhost:50051"
+
+# Build Java client miner (gRPC headless client)
+build-java-client:
+	@echo "Building Java gRPC client miner..."
+	@command -v mvn >/dev/null 2>&1 || (echo "Error: Maven not found. Install with: sudo apt install maven" && exit 1)
+	cd java-client && mvn clean package -q
+	@mkdir -p bin
+	cp java-client/target/redteamcoin-miner.jar bin/redteamcoin-miner-client.jar
+	@echo "✓ Java client miner built: bin/redteamcoin-miner-client.jar"
+	@echo "Run with: java -jar bin/redteamcoin-miner-client.jar -server localhost:50051"
+
+# Build all Java miners
+build-java-all: build-java-standalone build-java-client
+	@echo "✓ All Java miners built successfully"
+
+# Legacy alias for backward compatibility
+build-java: build-java-standalone
+	@echo "Note: 'build-java' now builds the standalone version. Use 'build-java-all' to build both."
 
 # Serve web miner locally for testing
 serve-web: build-wasm
@@ -219,7 +239,10 @@ help:
 	@echo "  make build-windows-opencl - Cross-compile client for Windows with OpenCL support"
 	@echo "  make build-all-platforms - Cross-compile client for all platforms (CPU-only)"
 	@echo "  make build-wasm         - Build WebAssembly miner for browsers"
-	@echo "  make build-java         - Build Java miner JAR"
+	@echo "  make build-java-standalone - Build Java standalone miner (with GUI)"
+	@echo "  make build-java-client  - Build Java gRPC client miner (headless)"
+	@echo "  make build-java-all     - Build all Java miners"
+	@echo "  make build-java         - Build Java standalone miner (legacy alias)"
 	@echo "  make serve-web          - Start local web server for testing web miner"
 	@echo "  make build-tools        - Build analysis tools (damage report generator)"
 	@echo "  make install-gpu-deps   - Check and report GPU dependencies"

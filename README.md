@@ -52,7 +52,8 @@ three main components:
   configurable difficulty
 - **Mining Pool Server**: Manages multiple miners and work distribution via gRPC
 - **Client Miners**: Automated mining clients (Go and Java) with IP address and hostname logging
-- **Java Client**: Cross-platform JAR miner for easy deployment
+- **Java Standalone Miner**: GUI-enabled desktop miner with visual interface
+- **Java gRPC Client**: Headless gRPC client for servers and automation
 - **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete
   miners remotely
 - **CPU Throttling**: Limit miner CPU usage from 0-100% to manage resources
@@ -193,42 +194,101 @@ certificates. Click "Advanced" → "Proceed to localhost".
 **Run multiple miners:**
 Open additional terminals and run `./bin/client` in each.
 
-#### Java Client (JAR File)
+#### Java Miners
 
-The Java client option creates a JAR file that can be deployed on Java based systems.
+RedTeamCoin provides two Java miner implementations:
 
-Note: this only does CPU mining.
+##### Java gRPC Client (Headless)
+
+Production-ready gRPC client for servers and automation.
 
 **Prerequisites:**
 
 - Java 11 or later
 - Maven (for building only)
 
-**Build the JAR:**
+**Build using Makefile:**
+
+```bash
+make build-java-client
+```
+
+**Or build manually:**
 
 ```bash
 cd java-client
 mvn clean package
 ```
 
-**Run the JAR:**
+**Run:**
 
 ```bash
 # Connect to localhost
-java -jar java-client/target/redteamcoin-miner.jar
+java -jar bin/redteamcoin-miner-client.jar
 
 # Connect to remote server
-java -jar java-client/target/redteamcoin-miner.jar -server 192.168.1.100:50051
+java -jar bin/redteamcoin-miner-client.jar -server 192.168.1.100:50051
 ```
 
-**Benefits of Java Client:**
+**Features:**
+- gRPC protocol (matches Go client)
+- Headless operation (no GUI)
+- Server control (pause/resume/throttle)
+- Auto-reconnection
+- Self-deletion on server command
+
+##### Java Standalone Miner (GUI)
+
+Desktop miner with graphical interface.
+
+**Prerequisites:**
+
+- Java 21 or later
+- Maven (for building only)
+
+**Build using Makefile:**
+
+```bash
+make build-java-standalone
+```
+
+**Or build manually:**
+
+```bash
+cd java-standalone
+mvn clean package
+```
+
+**Run:**
+
+```bash
+# GUI mode (default)
+java -jar bin/redteamcoin-miner-standalone.jar
+
+# CLI mode
+java -jar bin/redteamcoin-miner-standalone.jar --pool localhost:50051
+```
+
+**Features:**
+- Desktop GUI interface
+- Visual statistics display
+- Simple JSON/Socket protocol
+- Embedded in applications
+
+##### Build All Java Miners:
+
+```bash
+make build-java-all
+```
+
+**Benefits of Java Miners:**
 
 - Single JAR file, easy to distribute
 - Cross-platform (Windows, Linux, macOS)
 - No compilation needed on target systems
 - Just requires Java Runtime (JRE)
 
-See [java-client/README.md](java-client/README.md) for complete Java client documentation.
+See [java-client/README.md](java-client/README.md) for complete Java gRPC client documentation.
 
 ### Connecting to Remote Servers
 
@@ -531,7 +591,7 @@ RedTeamCoin/
 │   ├── opencl_nocgo.go     # OpenCL stub (no CGO)
 │   ├── mine.cu             # CUDA kernel source
 │   └── mine.cl             # OpenCL kernel source
-├── java-client/            # Mining client (Java)
+├── java-client/            # gRPC mining client (Java - headless)
 │   ├── src/main/java/      # Java source code
 │   │   └── com/redteamcoin/miner/
 │   │       └── MinerClient.java
@@ -541,6 +601,11 @@ RedTeamCoin/
 │   ├── README.md           # Java client documentation
 │   ├── QUICKSTART.md       # Quick start guide
 │   └── BUILD_INSTRUCTIONS.md # Build instructions
+├── java-standalone/        # Standalone miner (Java - GUI enabled)
+│   ├── src/main/java/      # Java source code
+│   │   └── com/redteamcoin/miner/
+│   │       └── RedTeamMiner.java
+│   └── pom.xml             # Maven build configuration
 ├── proto/                  # Protocol buffer definitions
 │   ├── mining.proto        # Service definitions
 │   ├── mining.pb.go        # Generated Go code
@@ -906,7 +971,7 @@ ss -an | grep 50051
 
 ## Documentation
 
-- [java-client/README.md](java-client/README.md) - Java miner client (JAR file)
+- [java-client/README.md](java-client/README.md) - Java gRPC client (headless miner)
 - [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
 - [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
 - [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration

@@ -16,7 +16,7 @@ using an isolated, non-public blockchain.
 
 **Created by:**
 
-- Peter Greko, Luciano Krigun, Jayson Grace (@l50), and TKTK
+- Peter Greko, Luciano Krigun, and Jayson Grace (@l50)
 
 ## Table of Contents
 

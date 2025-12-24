@@ -39,7 +39,6 @@ jobs:
             p/golang
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-        continue-on-error: true  # Don't fail the job on security findings
 
   gosec:
     name: Gosec Security Scanner
@@ -71,7 +70,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: -no-fail -exclude-generated -fmt=sarif -out=gosec-results.sarif ./...
+          args: -exclude-generated -fmt=sarif -out=gosec-results.sarif ./...
         env:
           CGO_ENABLED: 0
 

@@ -84,7 +84,9 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			if _, ok := h.miners[miner.ID]; ok {
 				delete(h.miners, miner.ID)
-				miner.Conn.Close()
+				if err := miner.Conn.Close(); err != nil {
+					log.Printf("[WebSocket] Error closing connection for %s: %v", miner.ID, err)
+				}
 			}
 			h.mu.Unlock()
 			log.Printf("[WebSocket] Miner disconnected: %s", miner.ID)
@@ -246,7 +248,9 @@ func (h *WebSocketHub) handleRegister(miner *WebMiner, msg map[string]interface{
 
 func (h *WebSocketHub) handleGetWork(miner *WebMiner) {
 	// Register web miner with the pool first if not already registered
-	h.pool.RegisterMiner(miner.ID, "web", "browser", "web-client")
+	if err := h.pool.RegisterMiner(miner.ID, "web", "browser", "web-client"); err != nil {
+		log.Printf("[WebSocket] Error registering miner %s: %v", miner.ID, err)
+	}
 
 	// Get work from the pool
 	block, err := h.pool.GetWork(miner.ID)

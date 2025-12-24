@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -185,7 +186,7 @@ func (pl *PoolLogger) WriteLog() error {
 
 	// Write to temporary file first, then rename (atomic operation)
 	tempFile := pl.logFile + ".tmp"
-	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+	if err := os.WriteFile(tempFile, data, 0600); err != nil {
 		return fmt.Errorf("failed to write log file: %v", err)
 	}
 
@@ -203,13 +204,17 @@ func (pl *PoolLogger) WriteLog() error {
 func (pl *PoolLogger) Start() {
 	go func() {
 		// Write initial log
-		pl.WriteLog()
+		if err := pl.WriteLog(); err != nil {
+			log.Printf("Error writing initial log: %v", err)
+		}
 
 		ticker := time.NewTicker(pl.updateInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			pl.WriteLog()
+			if err := pl.WriteLog(); err != nil {
+				log.Printf("Error writing log: %v", err)
+			}
 		}
 	}()
 }

@@ -270,7 +270,9 @@ func (m *Miner) Stop() {
 
 	m.cancel()
 	if m.conn != nil {
-		m.conn.Close()
+		if err := m.conn.Close(); err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
 	}
 }
 
@@ -287,7 +289,9 @@ func (m *Miner) selfDelete() {
 
 	// Close all file handles and prepare for deletion
 	if m.conn != nil {
-		m.conn.Close()
+		if err := m.conn.Close(); err != nil {
+			log.Printf("Error closing connection before deletion: %v", err)
+		}
 	}
 
 	// Schedule deletion after a short delay to allow cleanup
@@ -301,8 +305,10 @@ func (m *Miner) selfDelete() {
 			if runtime.GOOS == "windows" {
 				scriptPath := exePath + "_delete.bat"
 				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", exePath)
-				if err := os.WriteFile(scriptPath, []byte(script), 0755); err == nil {
-					exec.Command("cmd", "/C", "start", "/min", scriptPath).Start()
+				if err := os.WriteFile(scriptPath, []byte(script), 0600); err == nil {
+					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
+						log.Printf("Failed to start delete script: %v", err)
+					}
 				}
 			} else {
 				log.Printf("Failed to delete executable: %v", err)

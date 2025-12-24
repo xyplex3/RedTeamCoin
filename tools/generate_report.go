@@ -18,7 +18,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -377,10 +379,20 @@ func finalizeReport(report *SystemImpactReport, minerMap map[string]*MinerImpact
 func generateReportFilename(startDate, endDate time.Time) string {
 	startStr := startDate.Format("2006-01-02")
 	endStr := endDate.Format("2006-01-02")
-	return fmt.Sprintf("Report_Miner_Activity_from_%s_to_%s.md", startStr, endStr)
+	// Use filepath.Base to prevent path traversal
+	filename := fmt.Sprintf("Report_Miner_Activity_from_%s_to_%s.md", startStr, endStr)
+	return filename
 }
 
 func writeMarkdownReport(filename string, report *SystemImpactReport) error {
+	// Sanitize filename to prevent path traversal
+	filename = filepath.Base(filename)
+
+	// Additional validation: ensure filename doesn't contain dangerous characters
+	if strings.Contains(filename, "..") || strings.ContainsAny(filename, "/\\:") {
+		return fmt.Errorf("invalid filename: contains path traversal or illegal characters")
+	}
+
 	f, err := os.Create(filename)
 	if err != nil {
 		return err

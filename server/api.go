@@ -95,7 +95,9 @@ func (api *APIServer) sendGenericErrorPage(w http.ResponseWriter) {
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		log.Printf("Error writing error page: %v", err)
+	}
 }
 
 // authMiddleware validates the Bearer token in the Authorization header
@@ -146,6 +148,15 @@ func (api *APIServer) Start(port int, httpPort int) error {
 
 	addr := fmt.Sprintf(":%d", port)
 
+	// Configure HTTP server with timeouts to prevent resource exhaustion
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	if api.useTLS {
 		// Start HTTP to HTTPS redirect server if httpPort is provided
 		if httpPort > 0 {
@@ -160,14 +171,14 @@ func (api *APIServer) Start(port int, httpPort int) error {
 		fmt.Printf("  Private Key: %s\n", api.keyFile)
 		fmt.Printf("API authentication enabled - token required in Authorization header\n")
 
-		return http.ListenAndServeTLS(addr, api.certFile, api.keyFile, mux)
+		return server.ListenAndServeTLS(api.certFile, api.keyFile)
 	}
 
 	// Start HTTP server
 	fmt.Printf("Starting API server on http://localhost%s\n", addr)
 	fmt.Printf("API authentication enabled - token required in Authorization header\n")
 	fmt.Printf("WARNING: TLS is disabled - connections are not encrypted\n")
-	return http.ListenAndServe(addr, mux)
+	return server.ListenAndServe()
 }
 
 // startHTTPRedirect starts an HTTP server that issues 301 permanent
@@ -453,7 +464,9 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 </html>
 `
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		log.Printf("Error writing index page: %v", err)
+	}
 }
 
 // handleStats returns JSON-encoded pool statistics including total and
@@ -462,7 +475,9 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetPoolStats()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("Error encoding stats: %v", err)
+	}
 }
 
 // handleMiners returns a JSON array of all registered miners with their
@@ -533,7 +548,9 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding miners response: %v", err)
+	}
 }
 
 // handleBlockchain returns a JSON array containing all blocks in the
@@ -542,7 +559,9 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 	blocks := api.blockchain.GetBlockchain()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(blocks)
+	if err := json.NewEncoder(w).Encode(blocks); err != nil {
+		log.Printf("Error encoding blockchain: %v", err)
+	}
 }
 
 // handleBlock returns JSON details for a single block specified by index
@@ -551,12 +570,17 @@ func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleBlock(w http.ResponseWriter, r *http.Request) {
 	// Extract block index from URL
 	var index int
-	fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index)
+	if _, err := fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index); err != nil {
+		http.Error(w, "Invalid block index", http.StatusBadRequest)
+		return
+	}
 
 	blocks := api.blockchain.GetBlockchain()
 	if index >= 0 && index < len(blocks) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(blocks[index])
+		if err := json.NewEncoder(w).Encode(blocks[index]); err != nil {
+			log.Printf("Error encoding block: %v", err)
+		}
 	} else {
 		http.Error(w, "Block not found", http.StatusNotFound)
 	}
@@ -571,7 +595,9 @@ func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		"valid": valid,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding validate response: %v", err)
+	}
 }
 
 // handleCPUStats returns detailed JSON statistics for all miners including
@@ -581,7 +607,9 @@ func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleCPUStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetCPUStats()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("Error encoding CPU stats: %v", err)
+	}
 }
 
 // handlePauseMiner remotely pauses mining on a specific miner by setting
@@ -606,16 +634,20 @@ func (api *APIServer) handlePauseMiner(w http.ResponseWriter, r *http.Request) {
 	if err := api.pool.PauseMiner(req.MinerID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if encErr := json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); encErr != nil {
+			log.Printf("Error encoding error response: %v", encErr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":   "success",
 		"message":  "Miner paused",
 		"miner_id": req.MinerID,
-	})
+	}); err != nil {
+		log.Printf("Error encoding pause response: %v", err)
+	}
 }
 
 // handleResumeMiner remotely resumes mining on a paused miner by setting
@@ -640,16 +672,20 @@ func (api *APIServer) handleResumeMiner(w http.ResponseWriter, r *http.Request) 
 	if err := api.pool.ResumeMiner(req.MinerID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if encErr := json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); encErr != nil {
+			log.Printf("Error encoding error response: %v", encErr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":   "success",
 		"message":  "Miner resumed",
 		"miner_id": req.MinerID,
-	})
+	}); err != nil {
+		log.Printf("Error encoding resume response: %v", err)
+	}
 }
 
 // handleDeleteMiner removes a miner from the pool entirely. On the next
@@ -674,16 +710,20 @@ func (api *APIServer) handleDeleteMiner(w http.ResponseWriter, r *http.Request) 
 	if err := api.pool.DeleteMiner(req.MinerID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if encErr := json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); encErr != nil {
+			log.Printf("Error encoding error response: %v", encErr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":   "success",
 		"message":  "Miner deleted",
 		"miner_id": req.MinerID,
-	})
+	}); err != nil {
+		log.Printf("Error encoding delete response: %v", err)
+	}
 }
 
 // handleThrottleMiner sets CPU usage limits for a specific miner. The
@@ -710,15 +750,19 @@ func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request
 	if err := api.pool.SetCPUThrottle(req.MinerID, req.ThrottlePercent); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if encErr := json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); encErr != nil {
+			log.Printf("Error encoding error response: %v", encErr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":           "success",
 		"message":          fmt.Sprintf("CPU throttle set to %d%%", req.ThrottlePercent),
 		"miner_id":         req.MinerID,
 		"throttle_percent": req.ThrottlePercent,
-	})
+	}); err != nil {
+		log.Printf("Error encoding throttle response: %v", err)
+	}
 }

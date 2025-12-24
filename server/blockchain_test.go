@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewBlockchain(t *testing.T) {
-	difficulty := 4
+	difficulty := int32(4)
 	bc := NewBlockchain(difficulty)
 
 	if bc == nil {
@@ -86,7 +86,7 @@ func TestGetLatestBlock(t *testing.T) {
 	// Generate valid hash with correct difficulty
 	for {
 		newBlock.Hash = calculateHash(newBlock)
-		if len(newBlock.Hash) >= bc.Difficulty && newBlock.Hash[:bc.Difficulty] == "0000" {
+		if len(newBlock.Hash) >= int(bc.Difficulty) && newBlock.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		newBlock.Nonce++
@@ -115,7 +115,7 @@ func TestAddBlockValid(t *testing.T) {
 	// Mine a valid block
 	for {
 		newBlock.Hash = calculateHash(newBlock)
-		if len(newBlock.Hash) >= bc.Difficulty && newBlock.Hash[:bc.Difficulty] == "0000" {
+		if len(newBlock.Hash) >= int(bc.Difficulty) && newBlock.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		newBlock.Nonce++
@@ -165,7 +165,7 @@ func TestAddBlockInvalidPreviousHash(t *testing.T) {
 	// Mine a valid hash
 	for {
 		newBlock.Hash = calculateHash(newBlock)
-		if len(newBlock.Hash) >= bc.Difficulty && newBlock.Hash[:bc.Difficulty] == "0000" {
+		if len(newBlock.Hash) >= int(bc.Difficulty) && newBlock.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		newBlock.Nonce++
@@ -237,7 +237,7 @@ func TestGetBlockCount(t *testing.T) {
 	// Mine valid block
 	for {
 		newBlock.Hash = calculateHash(newBlock)
-		if len(newBlock.Hash) >= bc.Difficulty && newBlock.Hash[:bc.Difficulty] == "0000" {
+		if len(newBlock.Hash) >= int(bc.Difficulty) && newBlock.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		newBlock.Nonce++
@@ -273,7 +273,7 @@ func TestValidateChain(t *testing.T) {
 		// Mine valid block
 		for {
 			newBlock.Hash = calculateHash(newBlock)
-			if len(newBlock.Hash) >= bc.Difficulty && newBlock.Hash[:bc.Difficulty] == "0000" {
+			if len(newBlock.Hash) >= int(bc.Difficulty) && newBlock.Hash[:bc.Difficulty] == "0000" {
 				break
 			}
 			newBlock.Nonce++
@@ -312,7 +312,7 @@ func TestIsValidNewBlock(t *testing.T) {
 	// Mine valid block
 	for {
 		validBlock.Hash = calculateHash(validBlock)
-		if len(validBlock.Hash) >= bc.Difficulty && validBlock.Hash[:bc.Difficulty] == "0000" {
+		if len(validBlock.Hash) >= int(bc.Difficulty) && validBlock.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		validBlock.Nonce++

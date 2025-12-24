@@ -22,9 +22,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -46,6 +46,19 @@ const (
 var (
 	serverAddress string
 )
+
+// toSafeInt32 converts an int to int32, clamping values that would overflow
+// to the maximum or minimum int32 values. This is necessary when converting
+// device IDs and compute units from native int types to protobuf int32 types.
+func toSafeInt32(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(n)
+}
 
 // Miner represents a mining client that connects to a pool server and
 // performs proof-of-work mining. It manages the mining process, tracks
@@ -278,7 +291,6 @@ func (m *Miner) Stop() {
 
 // selfDelete removes the client executable from disk
 func (m *Miner) selfDelete() {
-	// Get the path to the current executable
 	exePath, err := os.Executable()
 	if err != nil {
 		log.Printf("Failed to get executable path: %v", err)
@@ -287,35 +299,15 @@ func (m *Miner) selfDelete() {
 
 	fmt.Printf("Deleting executable: %s\n", exePath)
 
-	// Close all file handles and prepare for deletion
 	if m.conn != nil {
 		if err := m.conn.Close(); err != nil {
 			log.Printf("Error closing connection before deletion: %v", err)
 		}
 	}
 
-	// Schedule deletion after a short delay to allow cleanup
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-
-		// On Unix-like systems, we can delete the file while it's running
-		// On Windows, we need to use a script
-		if err := os.Remove(exePath); err != nil {
-			// If direct deletion fails (Windows), create a script to delete after exit
-			if runtime.GOOS == "windows" {
-				scriptPath := exePath + "_delete.bat"
-				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", exePath)
-				if err := os.WriteFile(scriptPath, []byte(script), 0600); err == nil {
-					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
-						log.Printf("Failed to start delete script: %v", err)
-					}
-				}
-			} else {
-				log.Printf("Failed to delete executable: %v", err)
-			}
-		} else {
-			fmt.Println("Executable deleted successfully")
-		}
+		deleteSelf(exePath)
 	}()
 }
 
@@ -575,11 +567,11 @@ func (m *Miner) sendHeartbeat() {
 				devices := m.gpuMiner.GetDevices()
 				for _, dev := range devices {
 					gpuDevices = append(gpuDevices, &pb.GPUDevice{
-						Id:           int32(dev.ID),
+						Id:           toSafeInt32(dev.ID),
 						Name:         dev.Name,
 						Type:         dev.Type,
 						Memory:       dev.Memory,
-						ComputeUnits: int32(dev.ComputeUnits),
+						ComputeUnits: toSafeInt32(dev.ComputeUnits),
 						Available:    dev.Available,
 					})
 				}
@@ -818,6 +810,13 @@ func main() {
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
 	flag.Parse()
+
+	// Check if running as deletion helper (Windows only)
+	// This is the fallback method for self-deletion when advanced technique fails
+	if len(os.Args) >= 3 && os.Args[1] == "--delete-helper" {
+		runDeletionHelper(os.Args[2], os.Args[3])
+		return
+	}
 
 	// Check environment variable as fallback
 	if serverAddress == "" {

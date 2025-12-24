@@ -33,7 +33,7 @@ type MinerLogInfo struct {
 	LastHeartbeat      time.Time `json:"last_heartbeat"`
 	Active             bool      `json:"active"`
 	ShouldMine         bool      `json:"should_mine"`
-	CPUThrottlePercent int       `json:"cpu_throttle_percent"`
+	CPUThrottlePercent int32     `json:"cpu_throttle_percent"`
 	BlocksMined        int64     `json:"blocks_mined"`
 	HashRate           int64     `json:"hash_rate"`
 	CPUUsagePercent    float64   `json:"cpu_usage_percent"`
@@ -54,7 +54,7 @@ type PoolSnapshot struct {
 	TotalHashRate    int64          `json:"total_hash_rate"`
 	TotalBlocksMined int64          `json:"total_blocks_mined"`
 	BlockchainHeight int64          `json:"blockchain_height"`
-	Difficulty       int            `json:"difficulty"`
+	Difficulty       int32          `json:"difficulty"`
 	Miners           []MinerLogInfo `json:"miners"`
 }
 

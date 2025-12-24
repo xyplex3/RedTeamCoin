@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -34,7 +35,7 @@ type Block struct {
 // hashes to have a certain number of leading zeros.
 type Blockchain struct {
 	Blocks     []*Block     // Ordered list of blocks in the chain
-	Difficulty int          // Number of leading zeros required in block hashes
+	Difficulty int32        // Number of leading zeros required in block hashes (1-10)
 	mu         sync.RWMutex // Protects concurrent access to Blocks
 }
 
@@ -42,7 +43,22 @@ type Blockchain struct {
 // The difficulty parameter specifies how many leading zeros are required
 // in valid block hashes. Higher difficulty values require more computational
 // work to mine blocks.
-func NewBlockchain(difficulty int) *Blockchain {
+//
+// Difficulty is clamped to [1, 10] range for practical mining.
+func NewBlockchain(difficulty int32) *Blockchain {
+	// Validate and clamp difficulty to reasonable bounds
+	originalDifficulty := difficulty
+	if difficulty < 1 {
+		difficulty = 1
+	} else if difficulty > 10 {
+		difficulty = 10
+	}
+
+	if difficulty != originalDifficulty {
+		log.Printf("Difficulty clamped from %d to %d (valid range: 1-10)",
+			originalDifficulty, difficulty)
+	}
+
 	bc := &Blockchain{
 		Blocks:     make([]*Block, 0),
 		Difficulty: difficulty,
@@ -124,11 +140,11 @@ func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 
 	// Check if hash meets difficulty requirement
 	prefix := ""
-	for i := 0; i < bc.Difficulty; i++ {
+	for i := int32(0); i < bc.Difficulty; i++ {
 		prefix += "0"
 	}
 
-	if len(newBlock.Hash) < bc.Difficulty || newBlock.Hash[:bc.Difficulty] != prefix {
+	if len(newBlock.Hash) < int(bc.Difficulty) || newBlock.Hash[:bc.Difficulty] != prefix {
 		return false
 	}
 

@@ -361,14 +361,14 @@ GPU_MINING=true ./bin/client -server mining-pool.example.com:50051
 
 ### Performance Comparison
 
-| Configuration | Hash Rate | Speedup | Efficiency (MH/W) |
-|--------------|-----------|---------|-------------------|
-| CPU (1 core) | ~2 MH/s | Baseline | ~0.02 |
-| CPU (8 cores) | ~16 MH/s | 8x | ~0.02 |
-| GPU (RTX 3080) | ~500 MH/s | 250x | ~2.0 |
-| GPU (RTX 3090) | ~600 MH/s | 300x | ~2.5 |
-| GPU (AMD MI250) | ~800 MH/s | 400x | ~3.0 |
-| Hybrid (CPU+GPU) | ~620 MH/s | 310x | ~2.0 |
+| Configuration    | Hash Rate | Speedup  | Efficiency (MH/W) |
+| ---------------- | --------- | -------- | ----------------- |
+| CPU (1 core)     | ~2 MH/s   | Baseline | ~0.02             |
+| CPU (8 cores)    | ~16 MH/s  | 8x       | ~0.02             |
+| GPU (RTX 3080)   | ~500 MH/s | 250x     | ~2.0              |
+| GPU (RTX 3090)   | ~600 MH/s | 300x     | ~2.5              |
+| GPU (AMD MI250)  | ~800 MH/s | 400x     | ~3.0              |
+| Hybrid (CPU+GPU) | ~620 MH/s | 310x     | ~2.0              |
 
 **Note:** GPU mining is 100-150x more energy efficient than CPU mining.
 
@@ -787,6 +787,7 @@ cd client && go test -cover
 **Test Coverage:**
 
 - **Server**: 76 tests, 66.3% coverage
+
   - `blockchain_test.go`: 15 tests - Blockchain validation, hash calculation, concurrent access
   - `pool_test.go`: 26 tests - Miner management, work distribution, statistics
   - `grpc_server_test.go`: 17 tests - gRPC endpoints, miner control, heartbeats
@@ -986,6 +987,12 @@ This is a **demonstration/educational project** for understanding blockchain
 and cryptocurrency concepts. It is not intended for production use and lacks
 many features required for a real cryptocurrency (cryptographic signatures,
 wallets, transaction validation, etc.).
+
+## Credits & Acknowledgments
+
+- **Windows Self-Deletion**: The client's Windows self-deletion functionality
+  (`client/delete_windows.go`) is inspired by and based on techniques from
+  [go-self-delete](https://github.com/secur30nly/go-self-delete) by secur30nly.
 
 ## License
 

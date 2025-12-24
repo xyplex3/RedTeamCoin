@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -385,15 +384,23 @@ func generateReportFilename(startDate, endDate time.Time) string {
 }
 
 func writeMarkdownReport(filename string, report *SystemImpactReport) error {
-	// Sanitize filename to prevent path traversal
-	filename = filepath.Base(filename)
-
-	// Additional validation: ensure filename doesn't contain dangerous characters
-	if strings.Contains(filename, "..") || strings.ContainsAny(filename, "/\\:") {
-		return fmt.Errorf("invalid filename: contains path traversal or illegal characters")
+	// Use os.Root to scope file access to current directory only
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %v", err)
 	}
 
-	f, err := os.Create(filename)
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("failed to open root directory: %v", err)
+	}
+	defer root.Close()
+
+	// Sanitize filename to prevent path traversal
+	cleanFilename := filepath.Base(filename)
+
+	// Create file using root-scoped access
+	f, err := root.Create(cleanFilename)
 	if err != nil {
 		return err
 	}

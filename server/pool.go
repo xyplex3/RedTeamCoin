@@ -31,7 +31,7 @@ type PoolStats struct {
 	AvgCPUUsage      float64 `json:"avg_cpu_usage"`
 	TotalCPUUsage    float64 `json:"total_cpu_usage"`
 	BlockchainHeight int     `json:"blockchain_height"`
-	Difficulty       int     `json:"difficulty"`
+	Difficulty       int32   `json:"difficulty"`
 	BlockReward      int64   `json:"block_reward"`
 }
 
@@ -48,8 +48,8 @@ type MinerRecord struct {
 	RegisteredAt       time.Time
 	LastHeartbeat      time.Time
 	Active             bool
-	ShouldMine         bool // Server control: whether miner should mine
-	CPUThrottlePercent int  // CPU usage limit (0-100), 0 = no limit
+	ShouldMine         bool  // Server control: whether miner should mine
+	CPUThrottlePercent int32 // CPU usage limit (0-100), 0 = no limit
 	BlocksMined        int64
 	HashRate           int64
 	TotalMiningTime    time.Duration   // Total time spent mining
@@ -597,7 +597,7 @@ func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
 }
 
 // SetCPUThrottle sets the CPU throttle percentage for a specific miner
-func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error {
+func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int32) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
 
@@ -625,7 +625,7 @@ func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error 
 }
 
 // GetCPUThrottle returns the CPU throttle percentage for a specific miner
-func (mp *MiningPool) GetCPUThrottle(minerID string) (int, error) {
+func (mp *MiningPool) GetCPUThrottle(minerID string) (int32, error) {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
 

@@ -48,15 +48,17 @@ type APIServer struct {
 // NewAPIServer creates a new API server with the specified configuration.
 // It initializes a WebSocket hub for real-time updates and starts it in
 // a background goroutine with context-based lifecycle management. The
-// authToken is required for all API requests. The context allows graceful
-// shutdown of background goroutines.
+// authToken is required for all API requests. The input context is used as
+// a parent; a derived context with cancel function is created for lifecycle
+// management. The derived context will be cancelled when either the parent
+// context is cancelled or Shutdown() is called.
 //
 // Goroutine Lifecycle: Starts 1 background goroutine (WebSocket hub)
 // that runs until the context is cancelled via Shutdown().
 func NewAPIServer(ctx context.Context, pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
-	ctx, cancel := context.WithCancel(ctx)
+	serverCtx, cancel := context.WithCancel(ctx)
 	wsHub := NewWebSocketHub(pool)
-	go wsHub.Run(ctx)
+	go wsHub.Run(serverCtx)
 
 	return &APIServer{
 		pool:       pool,
@@ -66,7 +68,7 @@ func NewAPIServer(ctx context.Context, pool *MiningPool, blockchain *Blockchain,
 		certFile:   certFile,
 		keyFile:    keyFile,
 		wsHub:      wsHub,
-		ctx:        ctx,
+		ctx:        serverCtx,
 		cancel:     cancel,
 	}
 }
@@ -75,9 +77,7 @@ func NewAPIServer(ctx context.Context, pool *MiningPool, blockchain *Blockchain,
 // It automatically sets the Content-Type header and logs any encoding errors.
 func (api *APIServer) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	if status != http.StatusOK {
-		w.WriteHeader(status)
-	}
+	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("Error encoding JSON response: %v", err)
 	}
@@ -236,7 +236,7 @@ func (api *APIServer) Shutdown(ctx context.Context) error {
 
 	// Shutdown redirect server if it exists
 	if api.redirectServer != nil {
-		if err := api.redirectServer.Shutdown(ctx); err != nil {
+		if err := api.redirectServer.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("redirect server shutdown: %w", err))
 		}
 	}
@@ -642,7 +642,7 @@ func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleBlock(w http.ResponseWriter, r *http.Request) {
 	// Extract block index from URL
 	var index int
-	if _, err := fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index); err != nil {
+	if n, err := fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index); err != nil || n != 1 {
 		http.Error(w, "Invalid block index", http.StatusBadRequest)
 		return
 	}

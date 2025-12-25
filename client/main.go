@@ -332,15 +332,16 @@ func (m *Miner) selfDelete() {
 		return
 	}
 
+	// Clean path to normalize it
+	realPath = filepath.Clean(realPath)
+
 	// Validate path is absolute
 	if !filepath.IsAbs(realPath) {
 		log.Printf("Refusing to delete relative path: %s", realPath)
 		return
 	}
 
-	// Clean path for safe output
-	safePath := filepath.Clean(realPath)
-	fmt.Printf("Deleting executable: %s\n", safePath)
+	fmt.Printf("Deleting executable: %s\n", realPath)
 
 	if m.conn != nil {
 		if err := m.conn.Close(); err != nil {
@@ -372,10 +373,19 @@ func (m *Miner) selfDelete() {
 
 		if err := os.Remove(realPath); err != nil {
 			if runtime.GOOS == "windows" {
+				// Windows batch scripts handle spaces via surrounding quotes,
+				// but do not use doubled quotes for escaping. Executable paths
+				// should never contain double quotes on Windows; if they do,
+				// refuse to generate a deletion script.
+				if strings.Contains(realPath, `"`) {
+					log.Printf("Executable path contains unsupported quote character, aborting deletion script: %s", realPath)
+					return
+				}
+
 				scriptPath := realPath + "_delete.bat"
-				// Escape quotes in path for batch script safety
-				escapedPath := strings.ReplaceAll(realPath, `"`, `""`)
-				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", escapedPath)
+				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", realPath)
+				// Note: On Windows, file permission bits (0600) are not enforced the same way as on Unix.
+				// The 0600 mode is applied for consistency, but Windows uses ACLs for actual security.
 				if err := os.WriteFile(scriptPath, []byte(script), 0600); err == nil {
 					// #nosec G204 -- scriptPath is constructed from validated realPath
 					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
@@ -926,10 +936,6 @@ var (
 	selfDeleteOnExit atomic.Bool
 )
 
-func init() {
-	selfDeleteOnExit.Store(true)
-}
-
 // startShutdownMonitor starts monitoring for shutdown signals and triggers.
 // Returns channels for signal and file-based shutdown, and the shutdown file path.
 // The context is used to cancel the file monitoring goroutine on shutdown.
@@ -940,23 +946,23 @@ func startShutdownMonitor(ctx context.Context, exePath string) (chan os.Signal, 
 	shutdownFile := exePath + ".shutdown"
 	shutdownChan := make(chan struct{})
 
-	if selfDeleteOnExit.Load() {
-		go func() {
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
+	// Monitor for shutdown file regardless of autoDelete setting
+	// The shutdown file monitoring and self-deletion are separate concerns
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := os.Stat(shutdownFile); err == nil {
+					close(shutdownChan)
 					return
-				case <-ticker.C:
-					if _, err := os.Stat(shutdownFile); err == nil {
-						close(shutdownChan)
-						return
-					}
 				}
 			}
-		}()
-	}
+		}
+	}()
 
 	return sigChan, shutdownChan, shutdownFile
 }
@@ -1050,6 +1056,4 @@ func main() {
 	}()
 
 	miner.Start()
-
-	fmt.Println("Miner terminated.")
 }

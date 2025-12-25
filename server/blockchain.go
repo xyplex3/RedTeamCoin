@@ -139,12 +139,13 @@ func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 	}
 
 	// Check if hash meets difficulty requirement
+	difficulty := int(bc.Difficulty)
 	prefix := ""
-	for i := int32(0); i < bc.Difficulty; i++ {
+	for i := 0; i < difficulty; i++ {
 		prefix += "0"
 	}
 
-	if len(newBlock.Hash) < int(bc.Difficulty) || newBlock.Hash[:bc.Difficulty] != prefix {
+	if len(newBlock.Hash) < difficulty || newBlock.Hash[:difficulty] != prefix {
 		return false
 	}
 

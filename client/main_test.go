@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -652,7 +653,7 @@ func TestClampToInt32WithGPUDevice(t *testing.T) {
 	}
 
 	for i, dev := range devices {
-		t.Run("device_"+string(rune('0'+i)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("device_%d", i), func(t *testing.T) {
 			clampedID := clampToInt32(dev.id)
 			clampedCU := clampToInt32(dev.computeUnits)
 

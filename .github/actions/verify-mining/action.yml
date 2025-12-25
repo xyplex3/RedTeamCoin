@@ -1,6 +1,6 @@
 ---
 name: 'Verify Mining Functionality'
-description: 'Verifies that CPU mining produces non-zero hash rate and mined blocks (prevents regression of hash rate stuck at 0 H/s bug)'
+description: 'Verifies CPU mining produces non-zero hash rate and mined blocks'
 author: 'RedTeamCoin'
 
 inputs:

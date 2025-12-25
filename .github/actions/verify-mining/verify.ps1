@@ -210,10 +210,11 @@ Write-Host ""
 $result | ConvertTo-Json -Depth 10 | Out-File "mining-verification.json" -Encoding UTF8
 
 # Set GitHub Actions outputs
+$verificationStatus = if ($result.success) { "true" } else { "false" }
 Add-Content -Path $env:GITHUB_OUTPUT -Value "hash-rate=$($result.hash_rate)"
 Add-Content -Path $env:GITHUB_OUTPUT -Value "blocks-mined=$($result.blocks_mined)"
 Add-Content -Path $env:GITHUB_OUTPUT -Value "blockchain-height=$($result.blockchain_height)"
-Add-Content -Path $env:GITHUB_OUTPUT -Value "verification-passed=$($result.success.ToString().ToLower())"
+Add-Content -Path $env:GITHUB_OUTPUT -Value "verification-passed=$verificationStatus"
 
 # Exit with appropriate code
 if (-not $result.success) {

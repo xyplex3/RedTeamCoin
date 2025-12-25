@@ -53,7 +53,7 @@ runs:
 
         # Choose platform-specific script
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          powershell -ExecutionPolicy Bypass -File "${{ github.action_path }}/verify.ps1" \
+          pwsh -ExecutionPolicy Bypass -File "${{ github.action_path }}/verify.ps1" \
             -ServerBin "${{ inputs.server-bin }}" \
             -ClientBin "${{ inputs.client-bin }}" \
             -ServerPort ${{ inputs.server-port }} \

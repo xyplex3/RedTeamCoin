@@ -29,7 +29,7 @@ BLOCKCHAIN_HEIGHT=0
 ERRORS=()
 
 # Cleanup function - invoked by trap on EXIT
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 cleanup() {
 	echo ""
 	echo "Cleaning up..."

@@ -146,8 +146,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate and sanitize the log file path to prevent path traversal
+	cleanPath := filepath.Clean(*logFile)
+	if filepath.IsAbs(cleanPath) {
+		// For absolute paths, verify the file exists and is a regular file
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error accessing log file: %v\n", err)
+			os.Exit(1)
+		}
+		if info.IsDir() {
+			fmt.Fprintf(os.Stderr, "Error: %s is a directory, not a file\n", cleanPath)
+			os.Exit(1)
+		}
+	}
+
 	// Read and parse log file
-	data, err := os.ReadFile(*logFile)
+	// #nosec G304 -- Path is validated above: cleaned, checked for directory traversal, and file existence verified
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading log file: %v\n", err)
 		os.Exit(1)

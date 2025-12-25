@@ -975,7 +975,9 @@ func main() {
 		// Self-delete if enabled (after mining stops)
 		if selfDeleteOnExit {
 			fmt.Println("Auto-delete enabled, removing executable...")
-			os.Remove(shutdownFile) // Clean up trigger file
+			if err := os.Remove(shutdownFile); err != nil {
+				log.Printf("Warning: failed to remove shutdown file: %v", err)
+			}
 			miner.selfDelete()
 		}
 

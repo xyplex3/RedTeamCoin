@@ -18,6 +18,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"strconv"
 	"time"
 	"unsafe"
@@ -244,32 +245,110 @@ func markForDeletion(handle windows.Handle) error {
 // at path. It polls the parent process every 100ms until it's no longer
 // accessible, waits an additional 500ms for handle release, then performs
 // the deletion. This function is invoked when the program is launched with
-// the --delete-helper flag. Errors are silently ignored as this runs in a
-// detached helper process.
+// the --delete-helper flag.
 func runDeletionHelper(pidStr, path string) {
+	logFile, err := os.OpenFile(path+".deletion.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return
+	}
+	defer logFile.Close()
+
+	logger := log.New(logFile, "", log.LstdFlags)
+	logger.Printf("Deletion helper started for PID %s, path %s", pidStr, path)
+
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
+		logger.Printf("Failed to parse PID: %v", err)
 		return
 	}
 
-	for {
-		handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION, false, uint32(pid))
-		if err != nil {
-			break
-		}
-		windows.CloseHandle(handle)
-		time.Sleep(100 * time.Millisecond)
+	logger.Printf("Waiting for parent process %d to exit...", pid)
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.SYNCHRONIZE, false, uint32(pid))
+	if err != nil {
+		logger.Printf("Failed to open parent process: %v", err)
+		return
+	}
+	defer windows.CloseHandle(handle)
+
+	// Use WaitForSingleObject to efficiently wait for process termination
+	const INFINITE = 0xFFFFFFFF
+	logger.Printf("Waiting for process object to be signaled...")
+	ret, err := windows.WaitForSingleObject(handle, INFINITE)
+	if ret == windows.WAIT_OBJECT_0 {
+		logger.Printf("Parent process exited (process object signaled)")
+	} else {
+		logger.Printf("Wait failed: ret=%d, err=%v", ret, err)
+		return
 	}
 
+	logger.Printf("Parent exited, waiting for file handles to release...")
 	time.Sleep(500 * time.Millisecond)
 
-	pathPtr, err := windows.UTF16PtrFromString(path)
+	logger.Printf("Attempting to delete %s using advanced technique", path)
+
+	// Try advanced NTFS deletion first (rename to ADS + mark for deletion)
+	fileHandle, err := openHandleForDeletion(path)
 	if err != nil {
+		logger.Printf("Failed to open file for deletion: %v", err)
+		return
+	}
+	defer windows.CloseHandle(fileHandle)
+
+	logger.Printf("Successfully opened file handle for deletion")
+
+	err = renameToADS(fileHandle)
+	if err != nil {
+		logger.Printf("Failed to rename to ADS: %v, trying direct deletion", err)
+		windows.CloseHandle(fileHandle)
+
+		// Fallback to simple deletion with retry
+		maxRetries := 10
+		for i := 0; i < maxRetries; i++ {
+			pathPtr, err := windows.UTF16PtrFromString(path)
+			if err != nil {
+				logger.Printf("Failed to convert path to UTF16: %v", err)
+				return
+			}
+
+			err = windows.DeleteFile(pathPtr)
+			if err == nil {
+				logger.Printf("Successfully deleted %s using DeleteFile on attempt %d", path, i+1)
+				return
+			}
+
+			if i < maxRetries-1 {
+				waitTime := time.Duration(50*(1<<uint(i))) * time.Millisecond
+				logger.Printf("DeleteFile attempt %d failed: %v, retrying in %v...", i+1, err, waitTime)
+				time.Sleep(waitTime)
+			} else {
+				logger.Printf("DeleteFile failed after %d attempts: %v", maxRetries, err)
+			}
+		}
+
+		// Final fallback: mark for deletion on reboot
+		logger.Printf("All deletion attempts failed, marking for deletion on reboot...")
+		pathPtr, err := windows.UTF16PtrFromString(path)
+		if err != nil {
+			logger.Printf("Failed to convert path for MoveFileEx: %v", err)
+			return
+		}
+
+		const MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
+		err = windows.MoveFileEx(pathPtr, nil, MOVEFILE_DELAY_UNTIL_REBOOT)
+		if err != nil {
+			logger.Printf("MoveFileEx DELAY_UNTIL_REBOOT failed: %v", err)
+			return
+		}
+		logger.Printf("Successfully marked %s for deletion on next reboot", path)
 		return
 	}
 
-	err = windows.DeleteFile(pathPtr)
+	logger.Printf("Successfully renamed to ADS, marking for deletion")
+	err = markForDeletion(fileHandle)
 	if err != nil {
+		logger.Printf("Failed to mark for deletion: %v", err)
 		return
 	}
+
+	logger.Printf("Successfully marked %s for deletion", path)
 }

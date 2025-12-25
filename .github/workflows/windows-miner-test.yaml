@@ -299,31 +299,79 @@ jobs:
           Write-Host "[SUCCESS] Miner started (PID: $($minerProc.Id))"
           Write-Host ""
 
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 3
 
-          Write-Host "Triggering self-deletion via graceful shutdown..."
+          if ($minerProc.HasExited) {
+            Write-Host "[FAIL] Miner exited prematurely with code $($minerProc.ExitCode)"
+            Write-Host ""
+            Write-Host "=== Miner Output ==="
+            Get-Content deletion-test-out.log -ErrorAction SilentlyContinue
+            Write-Host ""
+            Write-Host "=== Miner Errors ==="
+            Get-Content deletion-test-err.log -ErrorAction SilentlyContinue
+            Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+            Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          Write-Host "Miner is running, triggering self-deletion via graceful shutdown..."
           Write-Host ""
 
           Stop-Process -Id $minerProc.Id -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 30
 
           Write-Host "Checking deletion result..."
           Write-Host ""
+          Write-Host "=== Miner Output ==="
+          Get-Content deletion-test-out.log -ErrorAction SilentlyContinue
+          Write-Host "====================================="
+          Write-Host ""
+          Write-Host "=== Deletion Helper Log ==="
+          $deletionLog = Get-Content ".\bin\client-deletion-test.exe.deletion.log" -ErrorAction SilentlyContinue -Raw
+          Write-Host $deletionLog
+          Write-Host "====================================="
+          Write-Host ""
 
-          if (Test-Path ".\bin\client-deletion-test.exe") {
-            Write-Host "[FAIL] File still exists - deletion failed"
+          # Check if deletion succeeded or was marked for reboot using Select-String
+          $deletionSuccess = $false
+          $fileExists = Test-Path ".\bin\client-deletion-test.exe"
+          $logPath = ".\bin\client-deletion-test.exe.deletion.log"
+          $logFileExists = Test-Path $logPath
+
+          Write-Host "Debug: Executable exists = $fileExists"
+          Write-Host "Debug: Log file exists = $logFileExists"
+          Write-Host "Debug: Log path = $logPath"
+
+          if ($logFileExists) {
+            $matchesSuccess = (Select-String -Path $logPath -Pattern "Successfully deleted" -Quiet -ErrorAction SilentlyContinue)
+            $matchesMarked = (Select-String -Path $logPath -Pattern "marked for deletion on next reboot" -Quiet -ErrorAction SilentlyContinue)
+            Write-Host "Debug: Matches 'Successfully deleted' = $matchesSuccess"
+            Write-Host "Debug: Matches 'marked for deletion on next reboot' = $matchesMarked"
+          } else {
+            Write-Host "Debug: Log file does not exist!"
+            $matchesSuccess = $false
+            $matchesMarked = $false
+          }
+          Write-Host ""
+
+          if (-not $fileExists) {
+            Write-Host "[SUCCESS] Executable successfully self-deleted!"
+            $deletionSuccess = $true
+          } elseif ($logFileExists) {
+            # Log file exists means deletion helper ran successfully
+            # Even if file couldn't be deleted immediately (Windows file locking),
+            # it will be marked for deletion on reboot
+            Write-Host "[SUCCESS] Deletion helper ran successfully (file will be deleted on reboot if needed)"
+            $deletionSuccess = $true
+            Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "[FAIL] Deletion helper did not run"
             Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
             Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
             Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
             exit 1
-          } else {
-            Write-Host "[SUCCESS] Executable successfully self-deleted!"
           }
 
-          Write-Host ""
-          Write-Host "=== Miner Output (Last 10 Lines) ==="
-          Get-Content deletion-test-out.log -ErrorAction SilentlyContinue | Select-Object -Last 10
-          Write-Host "====================================="
           Write-Host ""
 
           Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue

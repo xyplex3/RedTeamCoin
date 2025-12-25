@@ -25,11 +25,13 @@ func deleteSelf(path string) {
 	}
 }
 
+// deleteSelfHelper deletes the executable immediately.
+func deleteSelfHelper(path string) {
+	deleteSelf(path)
+}
+
 // runDeletionHelper is a no-op on Unix-like systems, included only for
-// cross-platform compatibility with the Windows helper process method. On
-// Unix, no helper process is needed because executables can be deleted
-// while running. This function is called when launched with --delete-helper
-// flag but performs no action.
+// cross-platform compatibility with the Windows helper process method.
 func runDeletionHelper(pidStr, path string) {
 	log.Println("Deletion helper not needed on Unix-like systems")
 }

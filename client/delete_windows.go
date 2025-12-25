@@ -236,12 +236,23 @@ func deleteSelfHelper(path string) {
 
 // openHandleForDeletion opens the file at path with DELETE access rights and
 // sharing permissions that allow reading and deletion while the handle is open.
-// This handle is used for subsequent rename and deletion operations. Returns
-// the file handle or an error if opening fails.
+// Attempts to clear read-only attribute if present, which can cause "Access is denied"
+// errors during POSIX deletion. Returns the file handle or an error if opening fails.
 func openHandleForDeletion(path string) (windows.Handle, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return 0, err
+	}
+
+	// Clear read-only attribute if present to avoid "Access is denied"
+	// This is required for POSIX deletion semantics on Windows
+	attrs, err := windows.GetFileAttributes(pathPtr)
+	if err == nil && (attrs&windows.FILE_ATTRIBUTE_READONLY) != 0 {
+		debugLog("clearing read-only attribute")
+		newAttrs := attrs &^ windows.FILE_ATTRIBUTE_READONLY
+		if err := windows.SetFileAttributes(pathPtr, newAttrs); err != nil {
+			debugLog("failed to clear read-only attribute: %v", err)
+		}
 	}
 
 	handle, err := windows.CreateFile(

@@ -938,15 +938,17 @@ func main() {
 		<-sigChan
 		fmt.Println("Signal received, initiating shutdown...")
 		miner.Stop()
+
+		// Self-delete if enabled (after mining stops)
+		if selfDeleteOnExit {
+			fmt.Println("Auto-delete enabled, removing executable...")
+			miner.selfDelete()
+		}
+
+		os.Exit(0)
 	}()
 
 	miner.Start()
 
 	fmt.Println("Miner terminated.")
-
-	// Self-delete if enabled (after mining stops)
-	if selfDeleteOnExit {
-		fmt.Println("Auto-delete enabled, removing executable...")
-		miner.selfDelete()
-	}
 }

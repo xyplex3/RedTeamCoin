@@ -106,9 +106,7 @@ func deleteSelfHelper(path string) {
 
 	// Startup info with hidden window
 	var si windows.StartupInfo
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-	// Justification: unsafe.Sizeof required by Windows API to set structure size for StartupInfo
-	si.Cb = uint32(unsafe.Sizeof(si))
+	si.Cb = uint32(unsafe.Sizeof(si)) // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 	si.Flags = windows.STARTF_USESHOWWINDOW
 	si.ShowWindow = windows.SW_HIDE
 
@@ -170,29 +168,21 @@ func renameToADS(handle windows.Handle) error {
 	newNameU16 := windows.StringToUTF16(newName)
 
 	// Calculate size for FILE_RENAME_INFO structure
-	fileNameBytes := len(newNameU16) * 2 // UTF-16 = 2 bytes per character
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-	// Justification: unsafe.Sizeof required to calculate Windows structure size for FILE_RENAME_INFO
-	structSize := int(unsafe.Sizeof(FILE_RENAME_INFO{})) + fileNameBytes - 2
+	fileNameBytes := len(newNameU16) * 2                                     // UTF-16 = 2 bytes per character
+	structSize := int(unsafe.Sizeof(FILE_RENAME_INFO{})) + fileNameBytes - 2 // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 
 	// Allocate buffer for FILE_RENAME_INFO
 	buffer := make([]byte, structSize)
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-	// Justification: unsafe.Pointer required to cast byte buffer to Windows FILE_RENAME_INFO structure
-	renameInfo := (*FILE_RENAME_INFO)(unsafe.Pointer(&buffer[0]))
-	renameInfo.ReplaceIfExists = 0 // FALSE
+	renameInfo := (*FILE_RENAME_INFO)(unsafe.Pointer(&buffer[0])) // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
+	renameInfo.ReplaceIfExists = 0                                // FALSE
 	renameInfo.RootDirectory = 0
 	renameInfo.FileNameLength = uint32(fileNameBytes)
 
 	// Copy filename using RtlCopyMemory
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-	// Justification: unsafe.Pointer and unsafe.Offsetof required for manual memory layout of Windows structure
-	fileNamePtr := unsafe.Pointer(uintptr(unsafe.Pointer(renameInfo)) + unsafe.Offsetof(renameInfo.FileName))
+	fileNamePtr := unsafe.Pointer(uintptr(unsafe.Pointer(renameInfo)) + unsafe.Offsetof(renameInfo.FileName)) // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 	_, _, _ = procRtlCopyMemory.Call(
 		uintptr(fileNamePtr),
-		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-		// Justification: unsafe.Pointer required to pass UTF-16 string buffer to Windows RtlCopyMemory
-		uintptr(unsafe.Pointer(&newNameU16[0])),
+		uintptr(unsafe.Pointer(&newNameU16[0])), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 		uintptr(fileNameBytes),
 	)
 
@@ -200,9 +190,7 @@ func renameToADS(handle windows.Handle) error {
 	ret, _, err := procSetFileInformationByHandle.Call(
 		uintptr(handle),
 		uintptr(FileRenameInfo),
-		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-		// Justification: unsafe.Pointer required to pass FILE_RENAME_INFO structure to Windows API
-		uintptr(unsafe.Pointer(renameInfo)),
+		uintptr(unsafe.Pointer(renameInfo)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 		uintptr(structSize),
 	)
 
@@ -222,12 +210,8 @@ func markForDeletion(handle windows.Handle) error {
 	ret, _, err := procSetFileInformationByHandle.Call(
 		uintptr(handle),
 		uintptr(FileDispositionInfo),
-		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-		// Justification: unsafe.Pointer required to pass FILE_DISPOSITION_INFO structure to Windows API
-		uintptr(unsafe.Pointer(&dispInfo)),
-		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
-		// Justification: unsafe.Sizeof required to pass structure size to Windows API
-		uintptr(unsafe.Sizeof(dispInfo)),
+		uintptr(unsafe.Pointer(&dispInfo)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
+		uintptr(unsafe.Sizeof(dispInfo)),   // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
 	)
 
 	if ret == 0 {

@@ -69,6 +69,124 @@ jobs:
           ls -la bin/
         shell: bash
 
+      - name: Upload built binaries
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: binaries-${{ matrix.os }}
+          path: bin/*
+          retention-days: 7
+
+  # Verify mining functionality on Linux
+  verify-mining-linux:
+    name: Verify Mining Works (Linux)
+    needs: test-code
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download Linux binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: binaries-ubuntu-latest
+          path: bin/
+
+      - name: Make binaries executable
+        run: chmod +x bin/server-ubuntu-latest bin/client-ubuntu-latest
+
+      - name: Run mining verification
+        uses: ./.github/actions/verify-mining
+        with:
+          server-bin: bin/server-ubuntu-latest
+          client-bin: bin/client-ubuntu-latest
+          mining-duration: '30'
+
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: mining-verification-linux
+          path: |
+            mining-verification.json
+            server-stdout.log
+            out.log
+          retention-days: 7
+
+  # Verify mining functionality on macOS
+  verify-mining-macos:
+    name: Verify Mining Works (macOS)
+    needs: test-code
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download macOS binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: binaries-macos-latest
+          path: bin/
+
+      - name: Make binaries executable
+        run: chmod +x bin/server-macos-latest bin/client-macos-latest
+
+      - name: Run mining verification
+        uses: ./.github/actions/verify-mining
+        with:
+          server-bin: bin/server-macos-latest
+          client-bin: bin/client-macos-latest
+          mining-duration: '30'
+
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: mining-verification-macos
+          path: |
+            mining-verification.json
+            server-stdout.log
+            out.log
+          retention-days: 7
+
+  # Verify mining functionality on Windows
+  verify-mining-windows:
+    name: Verify Mining Works (Windows)
+    needs: test-code
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download Windows binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: binaries-windows-latest
+          path: bin/
+
+      - name: Run mining verification
+        uses: ./.github/actions/verify-mining
+        with:
+          server-bin: bin/server-windows-latest.exe
+          client-bin: bin/client-windows-latest.exe
+          mining-duration: '30'
+
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: mining-verification-windows
+          path: |
+            mining-verification.json
+            server-stdout.log
+            out.log
+          retention-days: 7
+
   # Test cross-compilation to all platforms
   test-cross-compile:
     name: Cross-Compilation Tests
@@ -412,7 +530,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [test-code, test-cross-compile, test-gpu-compilation, test-windows-opencl-cross-compile, verify-fix]
+    needs: [test-code, test-cross-compile, test-gpu-compilation, test-windows-opencl-cross-compile, verify-fix, verify-mining-linux, verify-mining-macos, verify-mining-windows]
     if: always()
 
     steps:
@@ -453,6 +571,24 @@ jobs:
             echo "✗ Fix verification: FAILED"
           fi
 
+          if [ "${{ needs.verify-mining-linux.result }}" == "success" ]; then
+            echo "✓ Mining verification (Linux): PASSED"
+          else
+            echo "✗ Mining verification (Linux): FAILED"
+          fi
+
+          if [ "${{ needs.verify-mining-macos.result }}" == "success" ]; then
+            echo "✓ Mining verification (macOS): PASSED"
+          else
+            echo "✗ Mining verification (macOS): FAILED"
+          fi
+
+          if [ "${{ needs.verify-mining-windows.result }}" == "success" ]; then
+            echo "✓ Mining verification (Windows): PASSED"
+          else
+            echo "✗ Mining verification (Windows): FAILED"
+          fi
+
           echo ""
 
           # Fail if any required job failed
@@ -460,7 +596,10 @@ jobs:
              [ "${{ needs.test-cross-compile.result }}" != "success" ] || \
              [ "${{ needs.test-gpu-compilation.result }}" != "success" ] || \
              [ "${{ needs.test-windows-opencl-cross-compile.result }}" != "success" ] || \
-             [ "${{ needs.verify-fix.result }}" != "success" ]; then
+             [ "${{ needs.verify-fix.result }}" != "success" ] || \
+             [ "${{ needs.verify-mining-linux.result }}" != "success" ] || \
+             [ "${{ needs.verify-mining-macos.result }}" != "success" ] || \
+             [ "${{ needs.verify-mining-windows.result }}" != "success" ]; then
             echo "Some tests failed. Check the logs above."
             exit 1
           fi

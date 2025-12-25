@@ -99,13 +99,15 @@ if [ "$TOTAL_HASH_COUNT" -gt 0 ]; then
 		# Extract highest non-zero hash rate
 		HASH_RATE=$(grep "Hash rate:" out.log | grep -v "0 H/s" |
 			sed 's/.*Hash rate: \([0-9]*\) H\/s.*/\1/' |
-			sort -n | tail -1)
+			sort -n | tail -1 | tr -d '\n' || echo "0")
+		HASH_RATE=${HASH_RATE:-0}
 		echo "✓ Hash rate working: ${HASH_RATE} H/s (max observed)"
 	fi
 fi
 
 # Check 3.4: Verify blocks were mined
 BLOCKS_MINED=$(grep -c "BLOCK MINED!" out.log || echo "0")
+BLOCKS_MINED=$(echo "$BLOCKS_MINED" | tr -d '\n')
 
 if [ "$BLOCKS_MINED" -eq 0 ]; then
 	VERIFICATION_PASSED=false
@@ -129,6 +131,7 @@ if API_TOKEN=$(grep "Token:" server-stdout.log | head -1 | awk '{print $2}'); th
 
 		# Count blocks (including genesis)
 		BLOCKCHAIN_HEIGHT=$(echo "$BLOCKCHAIN_JSON" | jq '. | length' 2>/dev/null || echo "0")
+		BLOCKCHAIN_HEIGHT=$(echo "$BLOCKCHAIN_HEIGHT" | tr -d '\n')
 		echo "✓ Blockchain height: $BLOCKCHAIN_HEIGHT blocks (including genesis)"
 
 		# Verify blockchain grew

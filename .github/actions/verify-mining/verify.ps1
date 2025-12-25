@@ -39,11 +39,15 @@ $result = @{
 }
 
 try {
+    # Convert paths to absolute
+    $ServerBinAbs = (Resolve-Path $ServerBin).Path
+    $ClientBinAbs = (Resolve-Path $ClientBin).Path
+
     # Step 1: Start server in background
     Write-Host "Step 1: Starting server..."
     $serverJob = Start-Job -ScriptBlock {
         Set-Location $using:PWD
-        & $using:ServerBin 2>&1 | Tee-Object -FilePath "server-stdout.log"
+        & $using:ServerBinAbs 2>&1 | Tee-Object -FilePath "server-stdout.log"
     }
 
     # Wait for server to start
@@ -59,7 +63,7 @@ try {
 
     # Step 2: Run miner for specified duration
     Write-Host "Step 2: Starting miner for ${Duration} seconds..."
-    $minerProc = Start-Process -FilePath $ClientBin `
+    $minerProc = Start-Process -FilePath $ClientBinAbs `
         -ArgumentList "--server", "127.0.0.1:$ServerPort" `
         -PassThru -NoNewWindow `
         -RedirectStandardOutput "out.log" `

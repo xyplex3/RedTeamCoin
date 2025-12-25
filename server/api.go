@@ -159,9 +159,8 @@ func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // Start begins serving HTTP or HTTPS traffic on the specified port. If TLS
 // is enabled and httpPort is non-zero, also starts an HTTP redirect server.
-// This method starts servers in background goroutines and returns immediately.
-// Use Shutdown() for graceful server shutdown. All administrative endpoints
-// require Bearer token authentication.
+// This method blocks until the server encounters an error or is shut down.
+// All administrative endpoints require Bearer token authentication.
 func (api *APIServer) Start(port int, httpPort int) error {
 	mux := http.NewServeMux()
 
@@ -209,29 +208,14 @@ func (api *APIServer) Start(port int, httpPort int) error {
 		fmt.Printf("  Private Key: %s\n", api.keyFile)
 		fmt.Printf("API authentication enabled - token required in Authorization header\n")
 
-		// Start HTTPS server in background goroutine
-		// Lifecycle: Runs until Shutdown() is called
-		go func() {
-			if err := api.server.ListenAndServeTLS(api.certFile, api.keyFile); err != nil && err != http.ErrServerClosed {
-				log.Printf("HTTPS server error: %v", err)
-			}
-		}()
-		return nil
+		return api.server.ListenAndServeTLS(api.certFile, api.keyFile)
 	}
 
 	// Start HTTP server
 	fmt.Printf("Starting API server on http://localhost%s\n", addr)
 	fmt.Printf("API authentication enabled - token required in Authorization header\n")
 	fmt.Printf("WARNING: TLS is disabled - connections are not encrypted\n")
-
-	// Start HTTP server in background goroutine
-	// Lifecycle: Runs until Shutdown() is called
-	go func() {
-		if err := api.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP server error: %v", err)
-		}
-	}()
-	return nil
+	return api.server.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the API server and all background goroutines.

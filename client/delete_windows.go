@@ -63,10 +63,6 @@ const (
 	// Actual delays will be: 100ms, 200ms, 400ms, 800ms, ...
 	// Increased for CI environments with antivirus/indexing delays.
 	baseDeletionBackoff = 100 * time.Millisecond
-
-	// MOVEFILE_DELAY_UNTIL_REBOOT is the Windows flag for MoveFileEx to schedule
-	// file deletion on next system reboot.
-	MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
 )
 
 var (
@@ -405,8 +401,7 @@ func runDeletionHelper(pidStr, path string) {
 }
 
 // attemptFallbackDeletion tries to delete the file using simpler methods when
-// advanced techniques fail. First attempts DeleteFile with exponential backoff
-// retry, then marks for deletion on reboot as a last resort.
+// advanced techniques fail. Attempts DeleteFile with exponential backoff retry.
 func attemptFallbackDeletion(path string) {
 	debugLog("attempting fallback deletion for %s", path)
 
@@ -424,20 +419,5 @@ func attemptFallbackDeletion(path string) {
 		return
 	}
 
-	debugLog("fallback deletion failed after retries: %v, scheduling deletion on reboot", err)
-
-	// Final fallback: mark for deletion on reboot
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		debugLog("failed to convert path for reboot deletion: %v", err)
-		return
-	}
-
-	err = windows.MoveFileEx(pathPtr, nil, MOVEFILE_DELAY_UNTIL_REBOOT)
-	if err != nil {
-		debugLog("failed to schedule deletion on reboot: %v", err)
-		return
-	}
-
-	debugLog("file scheduled for deletion on next reboot")
+	debugLog("fallback deletion failed after retries: %v", err)
 }

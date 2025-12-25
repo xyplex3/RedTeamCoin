@@ -328,10 +328,9 @@ func (m *Miner) selfDelete() {
 		}
 	}
 
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		deleteSelf(exePath)
-	}()
+	// Wait briefly for all file handles to close
+	time.Sleep(500 * time.Millisecond)
+	deleteSelf(exePath)
 }
 
 // mine runs the main mining loop, requesting work from the pool server,
@@ -932,15 +931,6 @@ func main() {
 		time.Sleep(retryInterval)
 	}
 
-	// Spawn deletion helper at startup if enabled
-	if selfDeleteOnExit {
-		exePath, err := os.Executable()
-		if err == nil {
-			fmt.Println("Auto-delete enabled, spawning deletion monitor...")
-			deleteSelfHelper(exePath)
-		}
-	}
-
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
@@ -953,4 +943,10 @@ func main() {
 	miner.Start()
 
 	fmt.Println("Miner terminated.")
+
+	// Self-delete if enabled (after mining stops)
+	if selfDeleteOnExit {
+		fmt.Println("Auto-delete enabled, removing executable...")
+		miner.selfDelete()
+	}
 }

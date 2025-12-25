@@ -56,11 +56,13 @@ const (
 	INFINITE = 0xFFFFFFFF
 
 	// maxDeletionRetries is the maximum number of retry attempts for file deletion.
-	maxDeletionRetries = 10
+	// Increased for CI environments where antivirus may hold files longer.
+	maxDeletionRetries = 20
 
 	// baseDeletionBackoff is the base delay for exponential backoff during deletion retries.
-	// Actual delays will be: 50ms, 100ms, 200ms, 400ms, ...
-	baseDeletionBackoff = 50 * time.Millisecond
+	// Actual delays will be: 100ms, 200ms, 400ms, 800ms, ...
+	// Increased for CI environments with antivirus/indexing delays.
+	baseDeletionBackoff = 100 * time.Millisecond
 
 	// MOVEFILE_DELAY_UNTIL_REBOOT is the Windows flag for MoveFileEx to schedule
 	// file deletion on next system reboot.
@@ -391,35 +393,15 @@ func runDeletionHelper(pidStr, path string) {
 	}
 
 	debugLog("helper: process exited, waiting for handle release")
-	time.Sleep(500 * time.Millisecond)
 
-	// Try advanced NTFS deletion first (rename to ADS + mark for deletion)
-	debugLog("helper: attempting advanced deletion for %s", path)
-	fileHandle, err := openHandleForDeletion(path)
-	if err != nil {
-		debugLog("helper: failed to open handle for deletion: %v", err)
-		attemptFallbackDeletion(path)
-		return
-	}
-	defer windows.CloseHandle(fileHandle)
+	// Wait longer in CI environments for handles to fully release
+	// Windows can take time to release file handles, especially with antivirus/indexing
+	time.Sleep(2 * time.Second)
 
-	err = renameToADS(fileHandle)
-	if err != nil {
-		debugLog("helper: failed to rename to ADS: %v", err)
-		windows.CloseHandle(fileHandle)
-		attemptFallbackDeletion(path)
-		return
-	}
-
-	err = markForDeletion(fileHandle)
-	if err != nil {
-		debugLog("helper: failed to mark for deletion: %v", err)
-		windows.CloseHandle(fileHandle)
-		attemptFallbackDeletion(path)
-		return
-	}
-
-	debugLog("helper: successfully marked file for deletion")
+	// Skip advanced techniques in helper - they already failed in parent
+	// Go straight to aggressive retry deletion
+	debugLog("helper: attempting direct deletion with retry for %s", path)
+	attemptFallbackDeletion(path)
 }
 
 // attemptFallbackDeletion tries to delete the file using simpler methods when

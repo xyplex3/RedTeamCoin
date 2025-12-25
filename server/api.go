@@ -2,11 +2,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
+)
+
+// HTTP server timeout configurations for API and redirect servers.
+const (
+	apiReadTimeout       = 15 * time.Second
+	apiWriteTimeout      = 15 * time.Second
+	apiIdleTimeout       = 60 * time.Second
+	redirectReadTimeout  = 5 * time.Second
+	redirectWriteTimeout = 5 * time.Second
+	redirectIdleTimeout  = 30 * time.Second
 )
 
 // APIServer provides a REST API and web dashboard for pool administration.
@@ -19,22 +30,33 @@ import (
 //   - WebSocket updates for real-time monitoring
 //
 // All administrative endpoints require authentication via Bearer token.
+// The server supports graceful shutdown via the Shutdown method.
 type APIServer struct {
-	pool       *MiningPool   // Mining pool to expose via API
-	blockchain *Blockchain   // Blockchain to query
-	authToken  string        // Bearer token for authentication
-	useTLS     bool          // Whether to enable HTTPS
-	certFile   string        // Path to TLS certificate
-	keyFile    string        // Path to TLS private key
-	wsHub      *WebSocketHub // WebSocket hub for real-time updates
+	pool           *MiningPool   // Mining pool to expose via API
+	blockchain     *Blockchain   // Blockchain to query
+	authToken      string        // Bearer token for authentication
+	useTLS         bool          // Whether to enable HTTPS
+	certFile       string        // Path to TLS certificate
+	keyFile        string        // Path to TLS private key
+	wsHub          *WebSocketHub // WebSocket hub for real-time updates
+	ctx            context.Context
+	cancel         context.CancelFunc
+	server         *http.Server // Main HTTP/HTTPS server
+	redirectServer *http.Server // HTTP to HTTPS redirect server
 }
 
 // NewAPIServer creates a new API server with the specified configuration.
 // It initializes a WebSocket hub for real-time updates and starts it in
-// a background goroutine. The authToken is required for all API requests.
-func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
+// a background goroutine with context-based lifecycle management. The
+// authToken is required for all API requests. The context allows graceful
+// shutdown of background goroutines.
+//
+// Goroutine Lifecycle: Starts 1 background goroutine (WebSocket hub)
+// that runs until the context is cancelled via Shutdown().
+func NewAPIServer(ctx context.Context, pool *MiningPool, blockchain *Blockchain, authToken string, useTLS bool, certFile, keyFile string) *APIServer {
+	ctx, cancel := context.WithCancel(ctx)
 	wsHub := NewWebSocketHub(pool)
-	go wsHub.Run()
+	go wsHub.Run(ctx)
 
 	return &APIServer{
 		pool:       pool,
@@ -44,6 +66,20 @@ func NewAPIServer(pool *MiningPool, blockchain *Blockchain, authToken string, us
 		certFile:   certFile,
 		keyFile:    keyFile,
 		wsHub:      wsHub,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+}
+
+// writeJSON writes a JSON response with the given status code and value.
+// It automatically sets the Content-Type header and logs any encoding errors.
+func (api *APIServer) writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
 	}
 }
 
@@ -95,7 +131,9 @@ func (api *APIServer) sendGenericErrorPage(w http.ResponseWriter) {
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		log.Printf("Error writing error page: %v", err)
+	}
 }
 
 // authMiddleware validates the Bearer token in the Authorization header
@@ -121,8 +159,9 @@ func (api *APIServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // Start begins serving HTTP or HTTPS traffic on the specified port. If TLS
 // is enabled and httpPort is non-zero, also starts an HTTP redirect server.
-// This method blocks until the server encounters an error or is shut down.
-// All administrative endpoints require Bearer token authentication.
+// This method starts servers in background goroutines and returns immediately.
+// Use Shutdown() for graceful server shutdown. All administrative endpoints
+// require Bearer token authentication.
 func (api *APIServer) Start(port int, httpPort int) error {
 	mux := http.NewServeMux()
 
@@ -146,8 +185,18 @@ func (api *APIServer) Start(port int, httpPort int) error {
 
 	addr := fmt.Sprintf(":%d", port)
 
+	// Configure HTTP server with timeouts to prevent resource exhaustion
+	api.server = &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  apiReadTimeout,
+		WriteTimeout: apiWriteTimeout,
+		IdleTimeout:  apiIdleTimeout,
+	}
+
 	if api.useTLS {
-		// Start HTTP to HTTPS redirect server if httpPort is provided
+		// Start HTTP to HTTPS redirect server in background goroutine if httpPort is provided
+		// Lifecycle: Runs until Shutdown() is called
 		if httpPort > 0 {
 			go api.startHTTPRedirect(httpPort, port)
 		}
@@ -160,14 +209,65 @@ func (api *APIServer) Start(port int, httpPort int) error {
 		fmt.Printf("  Private Key: %s\n", api.keyFile)
 		fmt.Printf("API authentication enabled - token required in Authorization header\n")
 
-		return http.ListenAndServeTLS(addr, api.certFile, api.keyFile, mux)
+		// Start HTTPS server in background goroutine
+		// Lifecycle: Runs until Shutdown() is called
+		go func() {
+			if err := api.server.ListenAndServeTLS(api.certFile, api.keyFile); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTPS server error: %v", err)
+			}
+		}()
+		return nil
 	}
 
 	// Start HTTP server
 	fmt.Printf("Starting API server on http://localhost%s\n", addr)
 	fmt.Printf("API authentication enabled - token required in Authorization header\n")
 	fmt.Printf("WARNING: TLS is disabled - connections are not encrypted\n")
-	return http.ListenAndServe(addr, mux)
+
+	// Start HTTP server in background goroutine
+	// Lifecycle: Runs until Shutdown() is called
+	go func() {
+		if err := api.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+	return nil
+}
+
+// Shutdown gracefully shuts down the API server and all background goroutines.
+// It stops the main HTTP/HTTPS server, redirect server (if running), and the
+// WebSocket hub. The shutdown timeout is controlled by the provided context.
+func (api *APIServer) Shutdown(ctx context.Context) error {
+	// Cancel all background goroutines
+	api.cancel()
+
+	var shutdownErrs []error
+
+	// Shutdown main server
+	if api.server != nil {
+		if err := api.server.Shutdown(ctx); err != nil {
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("main server shutdown: %w", err))
+		}
+	}
+
+	// Shutdown redirect server if it exists
+	if api.redirectServer != nil {
+		if err := api.redirectServer.Shutdown(ctx); err != nil {
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("redirect server shutdown: %w", err))
+		}
+	}
+
+	if len(shutdownErrs) > 0 {
+		// Return first error, log the rest
+		for i, err := range shutdownErrs {
+			if i > 0 {
+				log.Printf("Additional shutdown error: %v", err)
+			}
+		}
+		return shutdownErrs[0]
+	}
+
+	return nil
 }
 
 // startHTTPRedirect starts an HTTP server that issues 301 permanent
@@ -186,7 +286,15 @@ func (api *APIServer) startHTTPRedirect(httpPort, httpsPort int) {
 	httpAddr := fmt.Sprintf(":%d", httpPort)
 	fmt.Printf("Starting HTTP->HTTPS redirect server on http://localhost%s\n", httpAddr)
 
-	if err := http.ListenAndServe(httpAddr, redirect); err != nil {
+	api.redirectServer = &http.Server{
+		Addr:         httpAddr,
+		Handler:      redirect,
+		ReadTimeout:  redirectReadTimeout,
+		WriteTimeout: redirectWriteTimeout,
+		IdleTimeout:  redirectIdleTimeout,
+	}
+
+	if err := api.redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Printf("HTTP redirect server error: %v", err)
 	}
 }
@@ -453,7 +561,9 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 </html>
 `
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		log.Printf("Error writing index page: %v", err)
+	}
 }
 
 // handleStats returns JSON-encoded pool statistics including total and
@@ -461,8 +571,7 @@ func (api *APIServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 // difficulty, and block reward.
 func (api *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetPoolStats()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	api.writeJSON(w, http.StatusOK, stats)
 }
 
 // handleMiners returns a JSON array of all registered miners with their
@@ -489,7 +598,7 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 		LastHeartbeat      time.Time           `json:"LastHeartbeat"`
 		Active             bool                `json:"Active"`
 		ShouldMine         bool                `json:"ShouldMine"`
-		CPUThrottlePercent int                 `json:"CPUThrottlePercent"`
+		CPUThrottlePercent int32               `json:"CPUThrottlePercent"`
 		BlocksMined        int64               `json:"BlocksMined"`
 		HashRate           int64               `json:"HashRate"`
 		GPUDevices         []GPUDeviceResponse `json:"GPUDevices,omitempty"`
@@ -532,8 +641,7 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	api.writeJSON(w, http.StatusOK, response)
 }
 
 // handleBlockchain returns a JSON array containing all blocks in the
@@ -541,8 +649,7 @@ func (api *APIServer) handleMiners(w http.ResponseWriter, r *http.Request) {
 // details (index, timestamp, data, hashes, nonce, and miner ID).
 func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 	blocks := api.blockchain.GetBlockchain()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(blocks)
+	api.writeJSON(w, http.StatusOK, blocks)
 }
 
 // handleBlock returns JSON details for a single block specified by index
@@ -551,12 +658,14 @@ func (api *APIServer) handleBlockchain(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) handleBlock(w http.ResponseWriter, r *http.Request) {
 	// Extract block index from URL
 	var index int
-	fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index)
+	if _, err := fmt.Sscanf(r.URL.Path, "/api/blocks/%d", &index); err != nil {
+		http.Error(w, "Invalid block index", http.StatusBadRequest)
+		return
+	}
 
 	blocks := api.blockchain.GetBlockchain()
 	if index >= 0 && index < len(blocks) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(blocks[index])
+		api.writeJSON(w, http.StatusOK, blocks[index])
 	} else {
 		http.Error(w, "Block not found", http.StatusNotFound)
 	}
@@ -570,8 +679,7 @@ func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"valid": valid,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	api.writeJSON(w, http.StatusOK, response)
 }
 
 // handleCPUStats returns detailed JSON statistics for all miners including
@@ -580,8 +688,7 @@ func (api *APIServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 // monitoring and analysis.
 func (api *APIServer) handleCPUStats(w http.ResponseWriter, r *http.Request) {
 	stats := api.pool.GetCPUStats()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	api.writeJSON(w, http.StatusOK, stats)
 }
 
 // handlePauseMiner remotely pauses mining on a specific miner by setting
@@ -604,14 +711,11 @@ func (api *APIServer) handlePauseMiner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.pool.PauseMiner(req.MinerID); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		api.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	api.writeJSON(w, http.StatusOK, map[string]string{
 		"status":   "success",
 		"message":  "Miner paused",
 		"miner_id": req.MinerID,
@@ -638,14 +742,11 @@ func (api *APIServer) handleResumeMiner(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := api.pool.ResumeMiner(req.MinerID); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		api.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	api.writeJSON(w, http.StatusOK, map[string]string{
 		"status":   "success",
 		"message":  "Miner resumed",
 		"miner_id": req.MinerID,
@@ -672,14 +773,11 @@ func (api *APIServer) handleDeleteMiner(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := api.pool.DeleteMiner(req.MinerID); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		api.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	api.writeJSON(w, http.StatusOK, map[string]string{
 		"status":   "success",
 		"message":  "Miner deleted",
 		"miner_id": req.MinerID,
@@ -699,7 +797,7 @@ func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request
 
 	var req struct {
 		MinerID         string `json:"miner_id"`
-		ThrottlePercent int    `json:"throttle_percent"`
+		ThrottlePercent int32  `json:"throttle_percent"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -708,14 +806,11 @@ func (api *APIServer) handleThrottleMiner(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := api.pool.SetCPUThrottle(req.MinerID, req.ThrottlePercent); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		api.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	api.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "success",
 		"message":          fmt.Sprintf("CPU throttle set to %d%%", req.ThrottlePercent),
 		"miner_id":         req.MinerID,

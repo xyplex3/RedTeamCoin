@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -31,7 +32,7 @@ type PoolStats struct {
 	AvgCPUUsage      float64 `json:"avg_cpu_usage"`
 	TotalCPUUsage    float64 `json:"total_cpu_usage"`
 	BlockchainHeight int     `json:"blockchain_height"`
-	Difficulty       int     `json:"difficulty"`
+	Difficulty       int32   `json:"difficulty"`
 	BlockReward      int64   `json:"block_reward"`
 }
 
@@ -48,8 +49,8 @@ type MinerRecord struct {
 	RegisteredAt       time.Time
 	LastHeartbeat      time.Time
 	Active             bool
-	ShouldMine         bool // Server control: whether miner should mine
-	CPUThrottlePercent int  // CPU usage limit (0-100), 0 = no limit
+	ShouldMine         bool  // Server control: whether miner should mine
+	CPUThrottlePercent int32 // CPU usage limit (0-100), 0 = no limit
 	BlocksMined        int64
 	HashRate           int64
 	TotalMiningTime    time.Duration   // Total time spent mining
@@ -75,7 +76,8 @@ type PendingWork struct {
 //
 // The pool automatically generates new work blocks and assigns them to miners
 // on demand. When a miner successfully mines a block, the pool validates and
-// adds it to the blockchain, then rewards the miner.
+// adds it to the blockchain, then rewards the miner. The pool supports graceful
+// shutdown via the Shutdown method.
 type MiningPool struct {
 	blockchain  *Blockchain
 	miners      map[string]*MinerRecord
@@ -84,12 +86,19 @@ type MiningPool struct {
 	workQueue   chan *Block
 	blockReward int64
 	logger      *PoolLogger
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 // NewMiningPool creates a new mining pool that coordinates work distribution
 // for the given blockchain. The pool starts a background goroutine to
-// generate new work blocks every 30 seconds.
+// generate new work blocks every 30 seconds. Use Shutdown() for graceful
+// termination of background goroutines.
+//
+// Goroutine Lifecycle: Starts 1 background goroutine (work generator)
+// that runs until Shutdown() is called.
 func NewMiningPool(blockchain *Blockchain) *MiningPool {
+	ctx, cancel := context.WithCancel(context.Background())
 	pool := &MiningPool{
 		blockchain:  blockchain,
 		miners:      make(map[string]*MinerRecord),
@@ -97,10 +106,12 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 		workQueue:   make(chan *Block, 100),
 		blockReward: 50,
 		logger:      nil, // Will be set after creation
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 
-	// Start work generator
-	go pool.generateWork()
+	// Start work generator with context for lifecycle management
+	go pool.generateWork(ctx)
 
 	return pool
 }
@@ -110,6 +121,13 @@ func NewMiningPool(blockchain *Blockchain) *MiningPool {
 // connecting to ensure events are properly logged.
 func (mp *MiningPool) SetLogger(logger *PoolLogger) {
 	mp.logger = logger
+}
+
+// Shutdown gracefully shuts down the mining pool by cancelling all background
+// goroutines. This stops the work generator and allows for clean shutdown of
+// the pool. This method is safe for concurrent use.
+func (mp *MiningPool) Shutdown() {
+	mp.cancel()
 }
 
 // RegisterMiner registers a new miner in the pool or reactivates an existing
@@ -388,27 +406,31 @@ func (mp *MiningPool) GetActiveMinerCount() int {
 
 // generateWork continuously creates new work blocks every 30 seconds and
 // adds them to the work queue. This function runs in a background goroutine
-// for the lifetime of the pool, ensuring fresh work is always available for
-// miners. It uses a non-blocking send to avoid stalling if the queue is
-// full.
-func (mp *MiningPool) generateWork() {
+// that respects context cancellation for graceful shutdown. It uses a
+// non-blocking send to avoid stalling if the queue is full.
+func (mp *MiningPool) generateWork(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		latest := mp.blockchain.GetLatestBlock()
-		newBlock := &Block{
-			Index:        latest.Index + 1,
-			Timestamp:    time.Now().Unix(),
-			Data:         fmt.Sprintf("Block data %d", latest.Index+1),
-			PreviousHash: latest.Hash,
-			Nonce:        0,
-		}
-
-		// Try to add to queue, don't block if full
+	for {
 		select {
-		case mp.workQueue <- newBlock:
-		default:
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			latest := mp.blockchain.GetLatestBlock()
+			newBlock := &Block{
+				Index:        latest.Index + 1,
+				Timestamp:    time.Now().Unix(),
+				Data:         fmt.Sprintf("Block data %d", latest.Index+1),
+				PreviousHash: latest.Hash,
+				Nonce:        0,
+			}
+
+			// Try to add to queue, don't block if full
+			select {
+			case mp.workQueue <- newBlock:
+			default:
+			}
 		}
 	}
 }
@@ -511,7 +533,10 @@ type TotalCPUStats struct {
 	MinerStats       []CPUStats `json:"miner_stats"`
 }
 
-// PauseMiner pauses mining for a specific miner
+// PauseMiner sets the ShouldMine flag to false for the specified miner,
+// instructing it to stop mining operations on its next heartbeat check.
+// The miner remains registered in the pool and can be resumed later.
+// Returns an error if the miner ID is not found.
 func (mp *MiningPool) PauseMiner(minerID string) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -532,7 +557,10 @@ func (mp *MiningPool) PauseMiner(minerID string) error {
 	return nil
 }
 
-// ResumeMiner resumes mining for a specific miner
+// ResumeMiner sets the ShouldMine flag to true for the specified miner,
+// instructing it to resume mining operations on its next heartbeat check.
+// This reverses the effect of PauseMiner. Returns an error if the miner
+// ID is not found.
 func (mp *MiningPool) ResumeMiner(minerID string) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -553,7 +581,10 @@ func (mp *MiningPool) ResumeMiner(minerID string) error {
 	return nil
 }
 
-// DeleteMiner removes a miner from the pool
+// DeleteMiner permanently removes a miner from the pool, clearing all its
+// statistics and pending work assignments. The miner will need to
+// re-register to join the pool again. Returns an error if the miner ID
+// is not found.
 func (mp *MiningPool) DeleteMiner(minerID string) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -583,7 +614,10 @@ func (mp *MiningPool) DeleteMiner(minerID string) error {
 	return nil
 }
 
-// GetMinerStatus returns the mining status for a specific miner
+// GetMinerStatus returns the ShouldMine flag value for the specified
+// miner, indicating whether the miner should currently be mining. Returns
+// true if mining is enabled, false if paused. Returns an error if the
+// miner ID is not found.
 func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
@@ -596,8 +630,13 @@ func (mp *MiningPool) GetMinerStatus(minerID string) (bool, error) {
 	return miner.ShouldMine, nil
 }
 
-// SetCPUThrottle sets the CPU throttle percentage for a specific miner
-func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error {
+// SetCPUThrottle configures CPU usage limits for the specified miner.
+// The throttlePercent parameter must be between 0 and 100, where 0 means
+// no CPU throttling (unlimited usage) and higher values increase
+// throttling intensity. The new throttle setting takes effect on the
+// miner's next heartbeat check. Returns an error if the miner is not
+// found or if throttlePercent is outside the valid range.
+func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int32) error {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
 
@@ -624,8 +663,10 @@ func (mp *MiningPool) SetCPUThrottle(minerID string, throttlePercent int) error 
 	return nil
 }
 
-// GetCPUThrottle returns the CPU throttle percentage for a specific miner
-func (mp *MiningPool) GetCPUThrottle(minerID string) (int, error) {
+// GetCPUThrottle returns the current CPU throttle setting (0-100) for
+// the specified miner, where 0 indicates no throttling. Returns an error
+// if the miner ID is not found.
+func (mp *MiningPool) GetCPUThrottle(minerID string) (int32, error) {
 	mp.mu.RLock()
 	defer mp.mu.RUnlock()
 

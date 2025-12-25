@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 )
@@ -145,8 +146,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Clean the path and validate it exists as a regular file
+	cleanPath := filepath.Clean(*logFile)
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error accessing log file: %v\n", err)
+		os.Exit(1)
+	}
+	if info.IsDir() {
+		fmt.Fprintf(os.Stderr, "Error: %s is a directory, not a file\n", cleanPath)
+		os.Exit(1)
+	}
+
 	// Read and parse log file
-	data, err := os.ReadFile(*logFile)
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading log file: %v\n", err)
 		os.Exit(1)
@@ -171,6 +184,10 @@ func main() {
 	fmt.Printf("Report generated successfully: %s\n", reportFile)
 }
 
+// analyzeImpact processes log data to generate a comprehensive system impact
+// report. It calculates resource consumption, identifies unique systems,
+// processes miner statistics, and generates per-miner impact metrics including
+// estimated costs and hardware degradation.
 func analyzeImpact(logData *LogFile) SystemImpactReport {
 	report := SystemImpactReport{
 		ReportGeneratedAt: time.Now(),
@@ -374,14 +391,33 @@ func finalizeReport(report *SystemImpactReport, minerMap map[string]*MinerImpact
 	})
 }
 
+// generateReportFilename creates a descriptive filename for the impact report
+// based on the analysis date range in the format
+// "Report_Miner_Activity_from_YYYY-MM-DD_to_YYYY-MM-DD.md".
 func generateReportFilename(startDate, endDate time.Time) string {
 	startStr := startDate.Format("2006-01-02")
 	endStr := endDate.Format("2006-01-02")
 	return fmt.Sprintf("Report_Miner_Activity_from_%s_to_%s.md", startStr, endStr)
 }
 
+// writeMarkdownReport generates a detailed Markdown-formatted impact
+// assessment report and writes it to the specified file. The report includes
+// executive summary, resource consumption analysis, performance impact,
+// infrastructure damage assessment, security implications, financial impact,
+// and detailed system-by-system analysis with recommendations.
 func writeMarkdownReport(filename string, report *SystemImpactReport) error {
-	f, err := os.Create(filename)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("failed to open root directory: %w", err)
+	}
+	defer root.Close()
+
+	f, err := root.Create(filepath.Base(filename))
 	if err != nil {
 		return err
 	}
@@ -720,6 +756,9 @@ func writeMarkdownReport(filename string, report *SystemImpactReport) error {
 	return nil
 }
 
+// formatDuration converts a time.Duration to a human-readable string in the
+// format "Xd Xh Xm" (days, hours, minutes) or "Xh Xm" for durations less than
+// a day.
 func formatDuration(d time.Duration) string {
 	hours := int(d.Hours())
 	minutes := int(d.Minutes()) % 60
@@ -732,6 +771,9 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", hours, minutes)
 }
 
+// formatNumber converts large integers to abbreviated string format with
+// suffix (K for thousands, M for millions, B for billions, T for trillions)
+// for improved readability in reports.
 func formatNumber(n int64) string {
 	switch {
 	case n >= 1e12:
@@ -769,6 +811,9 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// getImpactLevel categorizes system performance impact based on CPU usage
+// percentage. Returns CRITICAL (≥90%), HIGH (70-89%), MODERATE (50-69%),
+// or LOW (<50%).
 func getImpactLevel(cpuUsage float64) string {
 	switch {
 	case cpuUsage >= 90:

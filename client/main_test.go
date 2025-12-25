@@ -544,3 +544,133 @@ func TestMinerConnectionSetup(t *testing.T) {
 		t.Logf("Expected error connecting without server: %v", err)
 	}
 }
+
+func TestClampToInt32(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected int32
+	}{
+		{
+			name:     "zero value",
+			input:    0,
+			expected: 0,
+		},
+		{
+			name:     "positive value in range",
+			input:    12345,
+			expected: 12345,
+		},
+		{
+			name:     "negative value in range",
+			input:    -12345,
+			expected: -12345,
+		},
+		{
+			name:     "max int32 value",
+			input:    2147483647, // math.MaxInt32
+			expected: 2147483647,
+		},
+		{
+			name:     "min int32 value",
+			input:    -2147483648, // math.MinInt32
+			expected: -2147483648,
+		},
+		{
+			name:     "value exceeding max int32",
+			input:    2147483648, // MaxInt32 + 1
+			expected: 2147483647, // Should clamp to MaxInt32
+		},
+		{
+			name:     "value exceeding min int32",
+			input:    -2147483649, // MinInt32 - 1
+			expected: -2147483648, // Should clamp to MinInt32
+		},
+		{
+			name:     "large positive value",
+			input:    9223372036854775807, // math.MaxInt64 (if int is 64-bit)
+			expected: 2147483647,          // Should clamp to MaxInt32
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := clampToInt32(tt.input)
+			if result != tt.expected {
+				t.Errorf("clampToInt32(%d) = %d, expected %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestClampToInt32Boundaries(t *testing.T) {
+	// Test boundary conditions explicitly
+	t.Run("exactly at MaxInt32", func(t *testing.T) {
+		result := clampToInt32(2147483647)
+		if result != 2147483647 {
+			t.Errorf("Expected %d, got %d", 2147483647, result)
+		}
+	})
+
+	t.Run("exactly at MinInt32", func(t *testing.T) {
+		result := clampToInt32(-2147483648)
+		if result != -2147483648 {
+			t.Errorf("Expected %d, got %d", -2147483648, result)
+		}
+	})
+
+	t.Run("one above MaxInt32", func(t *testing.T) {
+		result := clampToInt32(2147483648)
+		if result != 2147483647 {
+			t.Errorf("Expected clamped to MaxInt32 (%d), got %d", 2147483647, result)
+		}
+	})
+
+	t.Run("one below MinInt32", func(t *testing.T) {
+		result := clampToInt32(-2147483649)
+		if result != -2147483648 {
+			t.Errorf("Expected clamped to MinInt32 (%d), got %d", -2147483648, result)
+		}
+	})
+}
+
+func TestClampToInt32WithGPUDevice(t *testing.T) {
+	// Test realistic GPU device scenarios
+	type gpuDevice struct {
+		id           int
+		computeUnits int
+	}
+
+	devices := []gpuDevice{
+		{id: 0, computeUnits: 3584},          // Normal GPU
+		{id: 1, computeUnits: 10496},         // High-end GPU
+		{id: 2147483647, computeUnits: 256},  // At max boundary
+		{id: 2147483648, computeUnits: 512},  // Over max boundary
+		{id: -1, computeUnits: 0},            // Edge case
+		{id: -2147483648, computeUnits: 128}, // At min boundary
+		{id: -2147483649, computeUnits: 64},  // Below min boundary
+	}
+
+	for i, dev := range devices {
+		t.Run("device_"+string(rune('0'+i)), func(t *testing.T) {
+			clampedID := clampToInt32(dev.id)
+			clampedCU := clampToInt32(dev.computeUnits)
+
+			// Verify clamped values are within int32 range
+			if clampedID < -2147483648 || clampedID > 2147483647 {
+				t.Errorf("Clamped ID %d out of int32 range", clampedID)
+			}
+			if clampedCU < -2147483648 || clampedCU > 2147483647 {
+				t.Errorf("Clamped compute units %d out of int32 range", clampedCU)
+			}
+
+			// Verify overflow cases are clamped correctly
+			if dev.id > 2147483647 && clampedID != 2147483647 {
+				t.Errorf("ID %d should clamp to MaxInt32, got %d", dev.id, clampedID)
+			}
+			if dev.id < -2147483648 && clampedID != -2147483648 {
+				t.Errorf("ID %d should clamp to MinInt32, got %d", dev.id, clampedID)
+			}
+		})
+	}
+}

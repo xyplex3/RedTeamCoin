@@ -310,35 +310,15 @@ jobs:
           Write-Host ""
           Write-Host "Starting miner (will self-delete on exit)..."
 
-          # Set debug mode for deletion logging
-          $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-          $processInfo.FileName = ".\bin\client-deletion-test.exe"
-          $processInfo.Arguments = "--server 127.0.0.1:${{ env.SERVER_PORT }}"
-          $processInfo.UseShellExecute = $false
-          $processInfo.RedirectStandardOutput = $true
-          $processInfo.RedirectStandardError = $true
-          $processInfo.EnvironmentVariables["RTCOIN_DEBUG"] = "1"
+          # Set debug mode globally for this session
+          $env:RTCOIN_DEBUG = "1"
 
-          $process = New-Object System.Diagnostics.Process
-          $process.StartInfo = $processInfo
-          $process.Start() | Out-Null
+          $minerProc = Start-Process -FilePath ".\bin\client-deletion-test.exe" `
+            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput "deletion-test-out.log" `
+            -RedirectStandardError "deletion-test-err.log"
 
-          # Redirect output to files
-          Start-Job -ScriptBlock {
-            param($proc, $outFile)
-            while (-not $proc.StandardOutput.EndOfStream) {
-              $proc.StandardOutput.ReadLine() | Out-File -FilePath $outFile -Append
-            }
-          } -ArgumentList $process, "deletion-test-out.log" | Out-Null
-
-          Start-Job -ScriptBlock {
-            param($proc, $errFile)
-            while (-not $proc.StandardError.EndOfStream) {
-              $proc.StandardError.ReadLine() | Out-File -FilePath $errFile -Append
-            }
-          } -ArgumentList $process, "deletion-test-err.log" | Out-Null
-
-          $minerProc = $process
           Write-Host "[SUCCESS] Miner started (PID: $($minerProc.Id))"
           Write-Host ""
 

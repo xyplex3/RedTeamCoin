@@ -314,7 +314,7 @@ jobs:
           $env:RTCOIN_DEBUG = "1"
 
           $minerProc = Start-Process -FilePath ".\bin\client-deletion-test.exe" `
-            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
+            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}", "--auto-delete" `
             -PassThru -NoNewWindow `
             -RedirectStandardOutput "deletion-test-out.log" `
             -RedirectStandardError "deletion-test-err.log"

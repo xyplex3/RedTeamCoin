@@ -1,6 +1,24 @@
 //go:build opencl && cgo
 // +build opencl,cgo
 
+// Package main implements OpenCL-based GPU mining for AMD, Intel, and other
+// OpenCL-compatible devices.
+//
+// This file is compiled only when both the opencl and cgo build tags are
+// enabled. It provides hardware-accelerated proof-of-work mining using
+// OpenCL, with automatic fallback to CPU mining if GPU operations fail.
+//
+// # Build Requirements
+//
+// To build with OpenCL support:
+//   - Install OpenCL runtime: rocm-opencl-runtime (AMD), nvidia-opencl-icd (NVIDIA), or ocl-icd-libopencl1 (generic)
+//   - Build: CGO_ENABLED=1 go build -tags opencl -o bin/client ./client
+//
+// # Detection
+//
+// GPU detection uses rocm-smi for AMD GPUs and clinfo for generic OpenCL
+// devices. OpenCL kernels are compiled at runtime, requiring no
+// pre-compilation step. Works cross-platform on Linux, macOS, and Windows.
 package main
 
 import (
@@ -362,40 +380,3 @@ func (om *OpenCLMiner) mineCPU(blockIndex, timestamp int64, data, previousHash s
 
 	return 0, "", hashes
 }
-
-/*
-OpenCL Implementation Notes:
-
-The OpenCL kernel (mine.cl) implements:
-1. Full SHA256 computation on GPU
-2. Parallel nonce testing with work groups and work items
-3. Device memory management and data transfer
-4. Atomic operations for result synchronization
-
-To build and use:
-
-1. Install OpenCL Runtime:
-   - AMD: sudo apt-get install rocm-opencl-runtime
-   - NVIDIA: sudo apt-get install nvidia-opencl-icd
-   - Intel: Download from Intel's website
-   - Or install a generic OpenCL loader: sudo apt-get install ocl-icd-libopencl1
-
-2. Compile the OpenCL kernel (optional - compiled at runtime):
-   - The kernel is compiled dynamically when the program starts
-   - No pre-compilation needed for OpenCL (unlike CUDA)
-
-3. Build with OpenCL support:
-   - CGO_ENABLED=1 go build -tags opencl -o bin/client ./client
-
-4. GPU detection and fallback:
-   - Automatically detects AMD ROCm, NVIDIA, Intel, and other devices
-   - Falls back to CPU if OpenCL not available
-   - Works cross-platform (Linux, macOS, Windows)
-   - Performance: GPU mining can be 10-100x faster than CPU
-
-The mining function automatically:
-- Tries GPU mining first
-- Falls back to CPU if GPU unavailable or kernel fails
-- Reports hash count for performance monitoring
-- No kernel compilation needed - handled at runtime
-*/

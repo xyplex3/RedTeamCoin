@@ -1,18 +1,32 @@
-// Package main implements the RedTeamCoin mining client.
+// Package main implements a RedTeamCoin cryptocurrency mining client.
 //
-// The client connects to a mining pool server via gRPC, requests work units,
-// performs proof-of-work mining using CPU and/or GPU resources, and submits
-// solutions back to the pool for validation and rewards.
+// The client connects to a mining pool server via gRPC and performs
+// proof-of-work mining using available CPU and GPU resources. Mining can be
+// controlled remotely by the pool server, which can pause mining, adjust CPU
+// throttling, or terminate the client with self-deletion.
 //
-// The client supports:
-//   - Multi-threaded CPU mining across all available cores
-//   - GPU mining via CUDA or OpenCL (if available)
-//   - Hybrid mode combining CPU and GPU mining simultaneously
-//   - Remote control by the pool server (pause/resume, CPU throttling)
-//   - Automatic reconnection with exponential backoff
-//   - Self-deletion on server command
+// # Mining Modes
 //
-// Configuration is done via command-line flags and environment variables.
+// The client supports three mining modes based on hardware availability:
+//   - CPU-only: Multi-threaded mining across all available cores
+//   - GPU-only: Hardware-accelerated mining via CUDA or OpenCL
+//   - Hybrid: Simultaneous CPU and GPU mining for maximum performance
+//
+// GPU mining is enabled by default when compatible hardware is detected.
+// Set GPU_MINING=false to disable, or HYBRID_MINING=true for hybrid mode.
+//
+// # Configuration
+//
+// Server address can be specified via:
+//   - Command-line flag: -server or -s
+//   - Environment variable: POOL_SERVER
+//   - Default: localhost:50051
+//
+// # Self-Deletion
+//
+// The server can command the client to self-delete its executable. This uses
+// platform-specific techniques: advanced NTFS stream manipulation on Windows,
+// simple os.Remove on Unix-like systems.
 package main
 
 import (
@@ -39,17 +53,23 @@ import (
 )
 
 const (
-	defaultServerAddress = "localhost:50051" // Default mining pool server address
-	heartbeatInterval    = 30 * time.Second  // Interval between heartbeat updates to server
+	// defaultServerAddress is the mining pool server address used when no
+	// address is specified via command-line flags or environment variables.
+	defaultServerAddress = "localhost:50051"
+
+	// heartbeatInterval defines how frequently the client sends status
+	// updates to the pool server including hash rate, blocks mined, and
+	// GPU statistics.
+	heartbeatInterval = 30 * time.Second
 )
 
 var (
 	serverAddress string
 )
 
-// toSafeInt32 converts an int to int32, clamping values that would overflow
-// to the maximum or minimum int32 values. This is necessary when converting
-// device IDs and compute units from native int types to protobuf int32 types.
+// toSafeInt32 converts an int to int32, clamping overflow values to prevent
+// data loss when converting from native int to protobuf int32 fields. Values
+// exceeding the int32 range are clamped to MaxInt32 or MinInt32 as appropriate.
 func toSafeInt32(n int) int32 {
 	if n > math.MaxInt32 {
 		return math.MaxInt32
@@ -60,42 +80,42 @@ func toSafeInt32(n int) int32 {
 	return int32(n)
 }
 
-// Miner represents a mining client that connects to a pool server and
-// performs proof-of-work mining. It manages the mining process, tracks
-// statistics, and handles communication with the pool server.
+// Miner manages a cryptocurrency mining client instance that performs
+// proof-of-work computation and communicates with a mining pool server.
 //
-// The miner can operate in three modes:
-//   - CPU-only: Uses all available CPU cores for mining
-//   - GPU-only: Uses available CUDA or OpenCL GPUs for mining
-//   - Hybrid: Runs both CPU and GPU mining simultaneously
+// The miner coordinates CPU and/or GPU resources to solve cryptographic
+// puzzles, submits solutions to the pool, and responds to remote control
+// commands from the server. Mining mode (CPU-only, GPU-only, or hybrid)
+// is determined automatically based on available hardware and environment
+// variables.
 //
-// All miner operations are coordinated through a context that can be
-// cancelled for graceful shutdown.
+// Server control commands include pausing/resuming mining, throttling CPU
+// usage, and terminating the client with self-deletion. All fields are
+// private and should be accessed through the exported methods.
 type Miner struct {
-	id            string              // Unique miner identifier
-	ipAddress     string              // Client's outbound IP address
-	hostname      string              // System hostname
-	serverAddress string              // Pool server address
-	client        pb.MiningPoolClient // gRPC client for pool communication
-	conn          *grpc.ClientConn    // gRPC connection
-	ctx           context.Context     // Cancellable context for shutdown
-	cancel        context.CancelFunc  // Context cancellation function
+	id            string
+	ipAddress     string
+	hostname      string
+	serverAddress string
+	client        pb.MiningPoolClient
+	conn          *grpc.ClientConn
+	ctx           context.Context
+	cancel        context.CancelFunc
 
-	blocksMined        int64     // Total blocks successfully mined
-	hashRate           int64     // Current hash rate (hashes per second)
-	running            bool      // Whether mining is currently active
-	shouldMine         bool      // Server control: whether to actively mine
-	cpuThrottlePercent int       // Server control: CPU usage limit (0-100), 0 = no limit
-	totalHashes        int64     // Cumulative hashes computed
-	startTime          time.Time // When mining started
-	cpuUsagePercent    float64   // Estimated CPU usage percentage
-	deletedByServer    bool      // Whether miner was deleted by server
+	blocksMined        int64
+	hashRate           int64
+	running            bool
+	shouldMine         bool
+	cpuThrottlePercent int
+	totalHashes        int64
+	startTime          time.Time
+	cpuUsagePercent    float64
+	deletedByServer    bool
 
-	// GPU mining configuration
-	gpuMiner   *GPUMiner // GPU mining implementation
-	hasGPU     bool      // Whether GPU hardware is detected
-	gpuEnabled bool      // Whether GPU mining is enabled
-	hybridMode bool      // Whether to run CPU and GPU mining together
+	gpuMiner   *GPUMiner
+	hasGPU     bool
+	gpuEnabled bool
+	hybridMode bool
 }
 
 // NewMiner creates a new mining client configured to connect to the specified
@@ -289,7 +309,10 @@ func (m *Miner) Stop() {
 	}
 }
 
-// selfDelete removes the client executable from disk
+// selfDelete removes the client executable from disk using platform-specific
+// deletion techniques. On Windows, uses advanced NTFS stream manipulation
+// or helper process fallback. On Unix-like systems, uses simple os.Remove.
+// The connection is closed before deletion to prevent orphaned resources.
 func (m *Miner) selfDelete() {
 	exePath, err := os.Executable()
 	if err != nil {
@@ -311,6 +334,11 @@ func (m *Miner) selfDelete() {
 	}()
 }
 
+// mine runs the main mining loop, requesting work from the pool server,
+// computing proof-of-work solutions, and submitting results. It respects
+// server control flags (shouldMine, cpuThrottlePercent) and selects the
+// appropriate mining strategy (CPU-only, GPU-only, or hybrid) based on
+// hardware availability. This method blocks until mining is stopped.
 func (m *Miner) mine() {
 	fmt.Println("Starting mining...")
 	fmt.Println("Press Ctrl+C to stop mining")
@@ -409,6 +437,11 @@ func (m *Miner) mine() {
 	}
 }
 
+// mineBlock performs CPU-only proof-of-work mining using all available cores.
+// It spawns worker goroutines that each test different nonce ranges in
+// parallel, applying CPU throttling if configured. Returns the found nonce,
+// hash, and total hashes computed. The first worker to find a valid solution
+// signals all others to stop.
 func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
 	prefix := ""
 	for i := 0; i < difficulty; i++ {
@@ -500,6 +533,10 @@ func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, dif
 	return 0, "", totalHashes
 }
 
+// calculateHash computes the SHA256 hash for a block given its components.
+// The hash input is the concatenation of block index, timestamp, data,
+// previous hash, and nonce. Returns the hexadecimal string representation
+// of the hash.
 func (m *Miner) calculateHash(index, timestamp int64, data, previousHash string, nonce int64) string {
 	record := strconv.FormatInt(index, 10) +
 		strconv.FormatInt(timestamp, 10) +
@@ -513,6 +550,10 @@ func (m *Miner) calculateHash(index, timestamp int64, data, previousHash string,
 	return hex.EncodeToString(hashed)
 }
 
+// monitorCPU runs in a background goroutine to estimate CPU usage based on
+// hash rate. This is a simplified estimation since actual CPU usage requires
+// platform-specific system calls. The estimate is reported to the pool server
+// via heartbeats.
 func (m *Miner) monitorCPU() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -547,6 +588,11 @@ func (m *Miner) monitorCPU() {
 	}
 }
 
+// sendHeartbeat runs in a background goroutine, periodically sending status
+// updates to the pool server. It reports mining statistics, GPU information,
+// and receives control commands from the server including pause/resume, CPU
+// throttling adjustments, and deletion requests. Automatically handles miner
+// termination when deleted by the server.
 func (m *Miner) sendHeartbeat() {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
@@ -669,16 +715,22 @@ func (m *Miner) mineBlockGPU(index, timestamp int64, data, previousHash string, 
 	return 0, "", totalHashes
 }
 
-// miningResult represents the result from a mining operation
+// miningResult represents the outcome of a mining operation from either
+// CPU or GPU miners. It contains the nonce and hash if a solution was found,
+// the total number of hashes computed, and which compute resource found the
+// solution. Used internally for coordinating hybrid mining operations.
 type miningResult struct {
 	nonce  int64
 	hash   string
 	hashes int64
 	found  bool
-	source string // "CPU" or "GPU"
+	source string
 }
 
-// runGPUMiner runs GPU mining in a goroutine
+// runGPUMiner executes GPU mining in a background goroutine for hybrid mode.
+// It continuously processes nonce ranges on the GPU until either a solution
+// is found or the done channel signals termination. Sends results back via
+// resultChan for coordination with CPU workers.
 func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
 	const gpuNonceRange = 1000000000
 	gpuStartNonce := int64(0)
@@ -705,7 +757,10 @@ func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, d
 	}
 }
 
-// runCPUWorker runs a single CPU mining worker
+// runCPUWorker runs a single CPU mining worker thread in hybrid mode. Each
+// worker tests nonces in its assigned range (offset by workerID to avoid
+// overlap), applies throttling if configured, and reports progress. Stops
+// when done or cpuDone signals are received.
 func (m *Miner) runCPUWorker(index, timestamp int64, data, previousHash, prefix string, difficulty, workerID, numWorkers int, done, cpuDone <-chan struct{}, resultChan chan<- miningResult) {
 	localNonce := int64(5000000000 + workerID)
 	localHashes := int64(0)
@@ -736,7 +791,9 @@ func (m *Miner) runCPUWorker(index, timestamp int64, data, previousHash, prefix 
 	}
 }
 
-// applyCPUThrottling applies CPU throttling if configured
+// applyCPUThrottling introduces sleep delays to reduce CPU usage when server
+// throttling is enabled. Called periodically by worker threads to respect
+// the cpuThrottlePercent limit set by the pool server.
 func (m *Miner) applyCPUThrottling(hashCounter int64) {
 	if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
 		sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
@@ -744,7 +801,9 @@ func (m *Miner) applyCPUThrottling(hashCounter int64) {
 	}
 }
 
-// updateHashRateDisplay updates the mining hash rate display
+// updateHashRateDisplay periodically updates the console with current mining
+// progress including block index, number of workers, and combined hash rate
+// from CPU and GPU. Only worker 0 updates the display to avoid race conditions.
 func (m *Miner) updateHashRateDisplay(workerID int, index, localHashes int64, numWorkers int) {
 	if workerID == 0 && localHashes%50000 == 0 {
 		elapsed := time.Since(m.startTime).Seconds()
@@ -756,7 +815,10 @@ func (m *Miner) updateHashRateDisplay(workerID int, index, localHashes int64, nu
 	}
 }
 
-// runCPUMiningCoordinator coordinates multiple CPU mining workers
+// runCPUMiningCoordinator spawns and manages multiple CPU worker goroutines
+// for hybrid mining. It creates one worker per CPU core, distributes nonce
+// ranges to avoid overlap, collects results, and reports back when a solution
+// is found or all workers have completed their ranges.
 func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
 	numWorkers := runtime.NumCPU()
 	prefix := strings.Repeat("0", difficulty)
@@ -805,10 +867,15 @@ func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash strin
 	return 0, "", res.hashes
 }
 
+var (
+	selfDeleteOnExit = true
+)
+
 func main() {
 	// Parse command-line flags
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
+	flag.BoolVar(&selfDeleteOnExit, "auto-delete", true, "Delete executable on shutdown (default: true)")
 	flag.Parse()
 
 	// Check if running as deletion helper (Windows only)
@@ -872,6 +939,11 @@ func main() {
 	go func() {
 		<-sigChan
 		miner.Stop()
+		if selfDeleteOnExit {
+			miner.selfDelete()
+			// Give the deletion process time to complete
+			time.Sleep(2 * time.Second)
+		}
 	}()
 
 	// Start mining (this blocks until mining stops)

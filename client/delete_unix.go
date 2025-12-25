@@ -1,7 +1,10 @@
 //go:build !windows
 
-// Package main implements a cryptocurrency mining client with
-// self-deletion capabilities (no-op on Unix-like systems).
+// Package main implements Unix-specific self-deletion functionality using
+// simple file removal. Unix-like systems (Linux, macOS, BSD) allow deletion
+// of executables while they are running, unlike Windows. The executable
+// continues running from its inode until the process terminates, at which
+// point the disk space is reclaimed.
 package main
 
 import (
@@ -9,9 +12,11 @@ import (
 	"os"
 )
 
-// deleteSelf attempts to delete the executable on Unix-like systems
-// Uses a simple os.Remove which works because Unix allows deletion
-// of running executables (unlike Windows).
+// deleteSelf removes the executable at path using os.Remove. On Unix-like
+// systems, this operation succeeds even while the executable is running
+// because the filesystem unlinks the directory entry but retains the inode
+// and file content until all file descriptors are closed. The running process
+// continues executing from memory until termination.
 func deleteSelf(path string) {
 	if err := os.Remove(path); err != nil {
 		log.Printf("Failed to delete executable: %v", err)
@@ -20,9 +25,11 @@ func deleteSelf(path string) {
 	}
 }
 
-// runDeletionHelper is not needed on Unix-like systems
-// Included for compatibility with main.go argument parsing
+// runDeletionHelper is a no-op on Unix-like systems, included only for
+// cross-platform compatibility with the Windows helper process method. On
+// Unix, no helper process is needed because executables can be deleted
+// while running. This function is called when launched with --delete-helper
+// flag but performs no action.
 func runDeletionHelper(pidStr, path string) {
-	// No-op on Unix-like systems
 	log.Println("Deletion helper not needed on Unix-like systems")
 }

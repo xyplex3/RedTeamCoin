@@ -90,14 +90,14 @@ jobs:
           if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
             if ($exitCode -eq 0 -or $exitCode -eq 2) {
-              Write-Host "[OK] Server executable runs (exit code: $exitCode)"
+              Write-Host "[SUCCESS] Server executable runs (exit code: $exitCode)"
             } else {
               Write-Host "[FAIL] Server executable failed with exit code $exitCode"
               exit 1
             }
           } else {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "[OK] Server executable runs (timed out, as expected)"
+            Write-Host "[SUCCESS] Server executable runs (timed out, as expected)"
           }
 
       - name: Test miner executable
@@ -111,14 +111,14 @@ jobs:
           if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
             if ($exitCode -eq 0 -or $exitCode -eq 2) {
-              Write-Host "[OK] Miner executable runs (exit code: $exitCode)"
+              Write-Host "[SUCCESS] Miner executable runs (exit code: $exitCode)"
             } else {
               Write-Host "[FAIL] Miner executable failed with exit code $exitCode"
               exit 1
             }
           } else {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "[OK] Miner executable runs (timed out, as expected)"
+            Write-Host "[SUCCESS] Miner executable runs (timed out, as expected)"
           }
 
       - name: Run miner test with server
@@ -154,7 +154,7 @@ jobs:
             # Check if port is listening on IPv4 (127.0.0.1)
             $connection = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVER_PORT }} -InformationLevel Quiet -WarningAction SilentlyContinue
             if ($connection) {
-              Write-Host "[OK] Server is listening on port ${{ env.SERVER_PORT }} (IPv4)"
+              Write-Host "[SUCCESS] Server is listening on port ${{ env.SERVER_PORT }} (IPv4)"
               $started = $true
               break
             }
@@ -176,7 +176,7 @@ jobs:
           # Give it a bit more time to fully initialize
           Start-Sleep -Seconds 5
 
-          Write-Host "[OK] Server started"
+          Write-Host "[SUCCESS] Server started"
           Write-Host ""
           Write-Host "=== Server startup logs ==="
           Get-Content server-stdout.log -ErrorAction SilentlyContinue | Select-Object -First 20
@@ -255,7 +255,7 @@ jobs:
           Write-Host "Stopping server job..."
           Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
           Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "[OK] Server job stopped"
+          Write-Host "[SUCCESS] Server job stopped"
 
       - name: Test self-deletion functionality
         shell: pwsh
@@ -286,9 +286,9 @@ jobs:
 
           Start-Sleep -Seconds 5
 
-          Write-Host "[OK] Server started (Job ID: $($serverJob.Id))"
+          Write-Host "[SUCCESS] Server started (Job ID: $($serverJob.Id))"
           Write-Host ""
-          Write-Host "Starting miner (will be deleted by server)..."
+          Write-Host "Starting miner (will self-delete on exit)..."
 
           $minerProc = Start-Process -FilePath ".\bin\client-deletion-test.exe" `
             -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
@@ -296,17 +296,16 @@ jobs:
             -RedirectStandardOutput "deletion-test-out.log" `
             -RedirectStandardError "deletion-test-err.log"
 
-          Write-Host "[OK] Miner started (PID: $($minerProc.Id))"
+          Write-Host "[SUCCESS] Miner started (PID: $($minerProc.Id))"
           Write-Host ""
 
           Start-Sleep -Seconds 10
 
-          Write-Host "Triggering server-side deletion command..."
-          Write-Host "(In production, server would send delete command via gRPC)"
+          Write-Host "Triggering self-deletion via graceful shutdown..."
           Write-Host ""
 
-          Stop-Process -Id $minerProc.Id -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 3
+          Stop-Process -Id $minerProc.Id -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
 
           Write-Host "Checking deletion result..."
           Write-Host ""
@@ -318,7 +317,7 @@ jobs:
             Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
             exit 1
           } else {
-            Write-Host "[OK] Executable successfully self-deleted!"
+            Write-Host "[SUCCESS] Executable successfully self-deleted!"
           }
 
           Write-Host ""
@@ -329,7 +328,7 @@ jobs:
 
           Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
           Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "[OK] Server stopped"
+          Write-Host "[SUCCESS] Server stopped"
           Write-Host ""
           Write-Host "=================================================="
           Write-Host "Self-Deletion Test Complete"
@@ -484,14 +483,14 @@ jobs:
           if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
             if ($exitCode -eq 0 -or $exitCode -eq 2) {
-              Write-Host "[OK] Cross-compiled CPU miner executes on Windows! (exit code: $exitCode)"
+              Write-Host "[SUCCESS] Cross-compiled CPU miner executes on Windows! (exit code: $exitCode)"
             } else {
               Write-Host "[FAIL] Cross-compiled miner failed with exit code $exitCode"
               exit 1
             }
           } else {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "[OK] Cross-compiled CPU miner executes on Windows! (timed out, as expected)"
+            Write-Host "[SUCCESS] Cross-compiled CPU miner executes on Windows! (timed out, as expected)"
           }
 
           Write-Host ""
@@ -502,14 +501,14 @@ jobs:
           if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
             if ($exitCode -eq 0 -or $exitCode -eq 2) {
-              Write-Host "[OK] Cross-compiled OpenCL miner executes on Windows! (exit code: $exitCode)"
+              Write-Host "[SUCCESS] Cross-compiled OpenCL miner executes on Windows! (exit code: $exitCode)"
             } else {
               Write-Host "[FAIL] Cross-compiled OpenCL miner failed with exit code $exitCode"
               exit 1
             }
           } else {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "[OK] Cross-compiled OpenCL miner executes on Windows! (timed out, as expected)"
+            Write-Host "[SUCCESS] Cross-compiled OpenCL miner executes on Windows! (timed out, as expected)"
           }
 
           Write-Host ""

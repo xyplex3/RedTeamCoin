@@ -870,6 +870,30 @@ var (
 	selfDeleteOnExit = true
 )
 
+// startShutdownMonitor starts monitoring for shutdown signals and triggers.
+// Returns channels for signal and file-based shutdown, and the shutdown file path.
+func startShutdownMonitor(exePath string) (chan os.Signal, chan struct{}, string) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	shutdownFile := exePath + ".shutdown"
+	shutdownChan := make(chan struct{})
+
+	if selfDeleteOnExit {
+		go func() {
+			for {
+				if _, err := os.Stat(shutdownFile); err == nil {
+					close(shutdownChan)
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}()
+	}
+
+	return sigChan, shutdownChan, shutdownFile
+}
+
 func main() {
 	// Check if running as deletion helper (Windows only)
 	// This must be checked BEFORE flag parsing since --delete-helper is not a registered flag
@@ -931,17 +955,27 @@ func main() {
 		time.Sleep(retryInterval)
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("Failed to get executable path: %v", err)
+	}
+
+	sigChan, shutdownChan, shutdownFile := startShutdownMonitor(exePath)
 
 	go func() {
-		<-sigChan
-		fmt.Println("Signal received, initiating shutdown...")
+		select {
+		case <-sigChan:
+			fmt.Println("Signal received, initiating shutdown...")
+		case <-shutdownChan:
+			fmt.Println("Shutdown file detected, initiating shutdown...")
+		}
+
 		miner.Stop()
 
 		// Self-delete if enabled (after mining stops)
 		if selfDeleteOnExit {
 			fmt.Println("Auto-delete enabled, removing executable...")
+			os.Remove(shutdownFile) // Clean up trigger file
 			miner.selfDelete()
 		}
 

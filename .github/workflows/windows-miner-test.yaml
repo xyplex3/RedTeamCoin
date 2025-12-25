@@ -340,9 +340,10 @@ jobs:
           Write-Host "Miner is running, triggering self-deletion via graceful shutdown..."
           Write-Host ""
 
-          # Use taskkill for graceful termination that allows signal handlers to run
-          taskkill /PID $($minerProc.Id) /T
-          Start-Sleep -Seconds 30
+          # Create shutdown trigger file for graceful termination
+          New-Item -Path ".\bin\client-deletion-test.exe.shutdown" -ItemType File -Force | Out-Null
+          Write-Host "Created shutdown trigger file, waiting for deletion..."
+          Start-Sleep -Seconds 10
 
           Write-Host "Checking deletion result..."
           Write-Host ""
@@ -361,15 +362,16 @@ jobs:
           if (-not $fileExists) {
             Write-Host "[SUCCESS] Executable successfully self-deleted!"
           } else {
-            Write-Host "[INFO] File still exists after 30s, waiting additional 30s for deletion helper..."
-            Start-Sleep -Seconds 30
+            Write-Host "[INFO] File still exists after 10s, waiting additional 10s..."
+            Start-Sleep -Seconds 10
             $fileExists = Test-Path ".\bin\client-deletion-test.exe"
 
             if (-not $fileExists) {
               Write-Host "[SUCCESS] Executable successfully self-deleted (after extended wait)!"
             } else {
-              Write-Host "[FAIL] Executable still exists after 60s - deletion failed"
+              Write-Host "[FAIL] Executable still exists after 20s - deletion failed"
               Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
+              Remove-Item ".\bin\client-deletion-test.exe.shutdown" -Force -ErrorAction SilentlyContinue
               Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
               Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
               exit 1

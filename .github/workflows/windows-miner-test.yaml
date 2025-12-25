@@ -340,7 +340,8 @@ jobs:
           Write-Host "Miner is running, triggering self-deletion via graceful shutdown..."
           Write-Host ""
 
-          Stop-Process -Id $minerProc.Id -ErrorAction SilentlyContinue
+          # Use taskkill for graceful termination that allows signal handlers to run
+          taskkill /PID $($minerProc.Id) /T
           Start-Sleep -Seconds 30
 
           Write-Host "Checking deletion result..."

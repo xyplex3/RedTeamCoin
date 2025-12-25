@@ -25,11 +25,31 @@ env:
 
 jobs:
   test-windows-cpu-miner:
-    name: Test Windows CPU Miner
-    runs-on: windows-latest
+    name: Test Windows CPU Miner (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-2022]
+        include:
+          - os: windows-latest
+            label: "Server 2025 (FileDispositionInfoEx API)"
+          - os: windows-2022
+            label: "Server 2022 (Legacy API)"
 
     steps:
+      - name: Display Windows version
+        shell: pwsh
+        run: |
+          Write-Host "=================================================="
+          Write-Host "Testing on: ${{ matrix.label }}"
+          Write-Host "=================================================="
+          Write-Host ""
+          Write-Host "System Information:"
+          systeminfo | Select-String "OS Name", "OS Version"
+          Write-Host ""
+
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
@@ -290,12 +310,35 @@ jobs:
           Write-Host ""
           Write-Host "Starting miner (will self-delete on exit)..."
 
-          $minerProc = Start-Process -FilePath ".\bin\client-deletion-test.exe" `
-            -ArgumentList "--server", "127.0.0.1:${{ env.SERVER_PORT }}" `
-            -PassThru -NoNewWindow `
-            -RedirectStandardOutput "deletion-test-out.log" `
-            -RedirectStandardError "deletion-test-err.log"
+          # Set debug mode for deletion logging
+          $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+          $processInfo.FileName = ".\bin\client-deletion-test.exe"
+          $processInfo.Arguments = "--server 127.0.0.1:${{ env.SERVER_PORT }}"
+          $processInfo.UseShellExecute = $false
+          $processInfo.RedirectStandardOutput = $true
+          $processInfo.RedirectStandardError = $true
+          $processInfo.EnvironmentVariables["RTCOIN_DEBUG"] = "1"
 
+          $process = New-Object System.Diagnostics.Process
+          $process.StartInfo = $processInfo
+          $process.Start() | Out-Null
+
+          # Redirect output to files
+          Start-Job -ScriptBlock {
+            param($proc, $outFile)
+            while (-not $proc.StandardOutput.EndOfStream) {
+              $proc.StandardOutput.ReadLine() | Out-File -FilePath $outFile -Append
+            }
+          } -ArgumentList $process, "deletion-test-out.log" | Out-Null
+
+          Start-Job -ScriptBlock {
+            param($proc, $errFile)
+            while (-not $proc.StandardError.EndOfStream) {
+              $proc.StandardError.ReadLine() | Out-File -FilePath $errFile -Append
+            }
+          } -ArgumentList $process, "deletion-test-err.log" | Out-Null
+
+          $minerProc = $process
           Write-Host "[SUCCESS] Miner started (PID: $($minerProc.Id))"
           Write-Host ""
 
@@ -326,50 +369,30 @@ jobs:
           Get-Content deletion-test-out.log -ErrorAction SilentlyContinue
           Write-Host "====================================="
           Write-Host ""
-          Write-Host "=== Deletion Helper Log ==="
-          $deletionLog = Get-Content ".\bin\client-deletion-test.exe.deletion.log" -ErrorAction SilentlyContinue -Raw
-          Write-Host $deletionLog
+          Write-Host "=== Deletion Debug Logs (stderr) ==="
+          Get-Content deletion-test-err.log -ErrorAction SilentlyContinue
           Write-Host "====================================="
           Write-Host ""
 
-          # Check if deletion succeeded or was marked for reboot using Select-String
-          $deletionSuccess = $false
+          # Check if deletion succeeded
           $fileExists = Test-Path ".\bin\client-deletion-test.exe"
-          $logPath = ".\bin\client-deletion-test.exe.deletion.log"
-          $logFileExists = Test-Path $logPath
-
-          Write-Host "Debug: Executable exists = $fileExists"
-          Write-Host "Debug: Log file exists = $logFileExists"
-          Write-Host "Debug: Log path = $logPath"
-
-          if ($logFileExists) {
-            $matchesSuccess = (Select-String -Path $logPath -Pattern "Successfully deleted" -Quiet -ErrorAction SilentlyContinue)
-            $matchesMarked = (Select-String -Path $logPath -Pattern "marked for deletion on next reboot" -Quiet -ErrorAction SilentlyContinue)
-            Write-Host "Debug: Matches 'Successfully deleted' = $matchesSuccess"
-            Write-Host "Debug: Matches 'marked for deletion on next reboot' = $matchesMarked"
-          } else {
-            Write-Host "Debug: Log file does not exist!"
-            $matchesSuccess = $false
-            $matchesMarked = $false
-          }
-          Write-Host ""
 
           if (-not $fileExists) {
             Write-Host "[SUCCESS] Executable successfully self-deleted!"
-            $deletionSuccess = $true
-          } elseif ($logFileExists) {
-            # Log file exists means deletion helper ran successfully
-            # Even if file couldn't be deleted immediately (Windows file locking),
-            # it will be marked for deletion on reboot
-            Write-Host "[SUCCESS] Deletion helper ran successfully (file will be deleted on reboot if needed)"
-            $deletionSuccess = $true
-            Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
           } else {
-            Write-Host "[FAIL] Deletion helper did not run"
-            Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
-            Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
-            Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
-            exit 1
+            Write-Host "[INFO] File still exists after 30s, waiting additional 30s for deletion helper..."
+            Start-Sleep -Seconds 30
+            $fileExists = Test-Path ".\bin\client-deletion-test.exe"
+
+            if (-not $fileExists) {
+              Write-Host "[SUCCESS] Executable successfully self-deleted (after extended wait)!"
+            } else {
+              Write-Host "[FAIL] Executable still exists after 60s - deletion failed"
+              Remove-Item ".\bin\client-deletion-test.exe" -Force -ErrorAction SilentlyContinue
+              Stop-Job -Id $serverJob.Id -ErrorAction SilentlyContinue
+              Remove-Job -Id $serverJob.Id -Force -ErrorAction SilentlyContinue
+              exit 1
+            }
           }
 
           Write-Host ""
@@ -385,7 +408,7 @@ jobs:
       - name: Upload Windows binaries
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
         with:
-          name: windows-cpu-miner-tested
+          name: windows-cpu-miner-tested-${{ matrix.os }}
           path: |
             bin/server.exe
             bin/client.exe

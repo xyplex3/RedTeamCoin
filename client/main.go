@@ -391,6 +391,8 @@ func (m *Miner) selfDelete() {
 					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
 						log.Printf("Failed to start deletion script: %v", err)
 					}
+				} else {
+					log.Printf("Failed to create deletion script: %v", err)
 				}
 			} else {
 				log.Printf("Failed to delete executable: %v", err)

@@ -229,7 +229,7 @@ func (api *APIServer) Shutdown(ctx context.Context) error {
 
 	// Shutdown main server
 	if api.server != nil {
-		if err := api.server.Shutdown(ctx); err != nil {
+		if err := api.server.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("main server shutdown: %w", err))
 		}
 	}

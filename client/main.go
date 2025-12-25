@@ -376,8 +376,11 @@ func (m *Miner) selfDelete() {
 				// Escape quotes in path for batch script safety
 				escapedPath := strings.ReplaceAll(realPath, `"`, `""`)
 				script := fmt.Sprintf("@echo off\ntimeout /t 1 /nobreak >nul\ndel /f /q \"%s\"\ndel /f /q \"%%~f0\"", escapedPath)
-				if err := os.WriteFile(scriptPath, []byte(script), 0700); err == nil {
-					exec.Command("cmd", "/C", "start", "/min", scriptPath).Start()
+				if err := os.WriteFile(scriptPath, []byte(script), 0600); err == nil {
+					// #nosec G204 -- scriptPath is constructed from validated realPath
+					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
+						log.Printf("Failed to start deletion script: %v", err)
+					}
 				}
 			} else {
 				log.Printf("Failed to delete executable: %v", err)

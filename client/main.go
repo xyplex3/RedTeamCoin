@@ -484,13 +484,12 @@ func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, dif
 	for workersReporting < numWorkers {
 		res := <-resultChan
 		totalHashes += res.hashes
+		workersReporting++
 
 		if res.found && foundResult.hash == "" {
 			// Found a solution! Signal all workers to stop
 			foundResult = res
 			close(done)
-		} else {
-			workersReporting++
 		}
 	}
 
@@ -786,6 +785,9 @@ func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHa
 		}
 		workersReporting++
 	}
+
+	// Send "not found" result after all workers complete without finding
+	resultChan <- miningResult{nonce: 0, hash: "", hashes: cpuTotalHashes, found: false, source: "CPU"}
 }
 
 // mineBlockHybrid mines a block using both CPU and GPU simultaneously

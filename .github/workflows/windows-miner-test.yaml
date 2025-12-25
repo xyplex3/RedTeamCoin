@@ -288,6 +288,44 @@ jobs:
             bin/client.exe
           retention-days: 7
 
+  # Verify mining functionality (prevent 0 H/s regression)
+  verify-mining-windows:
+    name: Verify Mining Works (CPU Bug Check)
+    needs: test-windows-cpu-miner
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download Windows binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: windows-cpu-miner-tested
+          path: bin/
+
+      - name: Run mining verification
+        uses: ./.github/actions/verify-mining
+        with:
+          server-bin: bin/server.exe
+          client-bin: bin/client.exe
+          server-port: '50051'
+          api-port: '8080'
+          mining-duration: '30'
+
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: mining-verification-windows
+          path: |
+            mining-verification.json
+            server-stdout.log
+            out.log
+            err.log
+          retention-days: 7
+
   # Test cross-compiled Windows miner from Linux
   test-windows-cross-compile:
     name: Test Windows Cross-Compilation
@@ -469,7 +507,7 @@ jobs:
   # Summary job
   windows-test-summary:
     name: Windows Test Summary
-    needs: [test-windows-cpu-miner, test-windows-cross-compile, test-cross-compiled-on-windows]
+    needs: [test-windows-cpu-miner, verify-mining-windows, test-windows-cross-compile, test-cross-compiled-on-windows]
     runs-on: ubuntu-latest
     if: always()
 
@@ -485,6 +523,12 @@ jobs:
             echo "✓ Windows CPU miner (native build): PASSED"
           else
             echo "❌ Windows CPU miner (native build): FAILED"
+          fi
+
+          if [ "${{ needs.verify-mining-windows.result }}" == "success" ]; then
+            echo "✓ Mining verification (0 H/s regression check): PASSED"
+          else
+            echo "❌ Mining verification (0 H/s regression check): FAILED"
           fi
 
           if [ "${{ needs.test-windows-cross-compile.result }}" == "success" ]; then
@@ -503,6 +547,7 @@ jobs:
 
           # Fail if any required job failed
           if [ "${{ needs.test-windows-cpu-miner.result }}" != "success" ] || \
+             [ "${{ needs.verify-mining-windows.result }}" != "success" ] || \
              [ "${{ needs.test-windows-cross-compile.result }}" != "success" ] || \
              [ "${{ needs.test-cross-compiled-on-windows.result }}" != "success" ]; then
             echo "❌ Some Windows miner tests failed. Check the logs above."
@@ -515,6 +560,8 @@ jobs:
           echo "  ✓ Windows binaries build successfully (native)"
           echo "  ✓ Windows binaries execute correctly"
           echo "  ✓ Miner can connect to server and mine"
+          echo "  ✓ Mining produces non-zero hash rate (CPU bug check)"
+          echo "  ✓ Blocks are actually being mined"
           echo "  ✓ Cross-compilation from Linux works"
           echo "  ✓ Cross-compiled binaries run on Windows"
           echo "  ✓ OpenCL GPU miner cross-compiles successfully"

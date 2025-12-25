@@ -57,11 +57,21 @@ jobs:
         shell: bash
 
       - name: Build server
-        run: CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }} ./server
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }}.exe ./server
+          else
+            CGO_ENABLED=0 go build -v -o bin/server-${{ matrix.os }} ./server
+          fi
         shell: bash
 
       - name: Build client (CPU)
-        run: CGO_ENABLED=0 go build -v -o bin/client-${{ matrix.os }} ./client
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            CGO_ENABLED=0 go build -v -o bin/client-${{ matrix.os }}.exe ./client
+          else
+            CGO_ENABLED=0 go build -v -o bin/client-${{ matrix.os }} ./client
+          fi
         shell: bash
 
       - name: Verify binaries exist

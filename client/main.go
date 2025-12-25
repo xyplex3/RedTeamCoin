@@ -43,6 +43,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -932,24 +933,22 @@ func main() {
 		time.Sleep(retryInterval)
 	}
 
-	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	var signalReceived atomic.Bool
 	go func() {
 		<-sigChan
+		signalReceived.Store(true)
 		miner.Stop()
-		if selfDeleteOnExit {
-			miner.selfDelete()
-			// Give the deletion process time to complete
-			time.Sleep(2 * time.Second)
-		}
 	}()
 
-	// Start mining (this blocks until mining stops)
 	miner.Start()
 
-	// Wait a moment for cleanup
-	time.Sleep(1 * time.Second)
+	if signalReceived.Load() && selfDeleteOnExit {
+		miner.selfDelete()
+		time.Sleep(2 * time.Second)
+	}
+
 	fmt.Println("Miner terminated.")
 }

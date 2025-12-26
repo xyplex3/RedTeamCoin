@@ -22,7 +22,7 @@ using an isolated, non-public blockchain.
 
 - [Overview](#overview)
 - [Features](#features)
-- [Why](#Why)
+- [Why](#why)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
 - [Usage](#usage)
@@ -90,7 +90,6 @@ can identify cryptocurrency mining activity that bypasses DNS controls, validati
 that the organization has adequate visibility into resource-intensive mining
 processes running on corporate endpoints even when network-level blocking
 is already implemented.
-
 
 ## Quick Start
 

@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.*;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * RedTeamCoin Java Miner
@@ -84,11 +85,17 @@ public class RedTeamMiner {
             throw new IllegalStateException("Pool URL not set");
         }
 
+        boolean useSSL = poolUrl.startsWith("wss://");
         String[] parts = poolUrl.replace("ws://", "").replace("wss://", "").split(":");
         String host = parts[0];
         int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 50051;
 
-        socket = new Socket(host, port);
+        if (useSSL) {
+            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            socket = factory.createSocket(host, port);
+        } else {
+            socket = new Socket(host, port); // nosemgrep: java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket
+        }
         out = new PrintWriter(socket.getOutputStream(), true);
         in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -114,7 +121,6 @@ public class RedTeamMiner {
 
         log("Mining started with " + threads + " threads");
 
-        // Request work
         requestWork();
 
         // Start hash rate calculator
@@ -151,7 +157,6 @@ public class RedTeamMiner {
         long endNonce = startNonce + nonceRange;
 
         for (long nonce = startNonce; nonce < endNonce && running; nonce++) {
-            // Apply throttle
             if (throttle < 1.0 && localHashes % 1000 == 0) {
                 try {
                     Thread.sleep((long)((1.0 - throttle) * 10));
@@ -189,7 +194,6 @@ public class RedTeamMiner {
             digest.reset();
         }
 
-        // Request more work when done with range
         if (running) {
             requestWork();
         }
@@ -240,14 +244,11 @@ public class RedTeamMiner {
      * Handle incoming message from pool
      */
     private void handleMessage(String message) {
-        // Simple JSON parsing (for demo - use a proper JSON library in production)
         if (message.contains("\"type\":\"work\"")) {
-            // Parse work
             try {
                 currentWork = parseWork(message);
                 log("Received new work: block " + currentWork.blockIndex);
 
-                // Distribute work across threads
                 long noncePerThread = 1000000;
                 for (int i = 0; i < threads; i++) {
                     long startNonce = i * noncePerThread;
@@ -269,7 +270,6 @@ public class RedTeamMiner {
      */
     private MiningWork parseWork(String json) {
         MiningWork work = new MiningWork();
-        // Simple parsing - use proper JSON library in production
         work.blockIndex = extractLong(json, "blockIndex");
         work.previousHash = extractString(json, "previousHash");
         work.data = extractString(json, "data");
@@ -352,13 +352,11 @@ public class RedTeamMiner {
      * Main entry point
      */
     public static void main(String[] args) {
-        // Check for GUI mode
         boolean guiMode = args.length == 0 || contains(args, "--gui");
 
         if (guiMode) {
             SwingUtilities.invokeLater(() -> new MinerGUI().setVisible(true));
         } else {
-            // CLI mode
             String pool = getArg(args, "--pool", "localhost:50051");
             int threads = Integer.parseInt(getArg(args, "--threads", String.valueOf(DEFAULT_THREADS)));
 
@@ -384,7 +382,6 @@ public class RedTeamMiner {
 
                     @Override
                     public void onLog(String message) {
-                        // Already printed
                     }
                 });
 
@@ -392,7 +389,6 @@ public class RedTeamMiner {
                 miner.connect();
                 miner.start();
 
-                // Keep running
                 Runtime.getRuntime().addShutdownHook(new Thread(miner::stop));
                 Thread.currentThread().join();
             } catch (Exception e) {

@@ -23,6 +23,7 @@ import (
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -178,8 +179,8 @@ func main() {
 	pool.SetLogger(logger)
 	logger.Start()
 
-	// Start gRPC server
-	go startGRPCServer(pool)
+	// Start gRPC server with TLS configuration
+	go startGRPCServer(pool, useTLS, certFile, keyFile)
 
 	// Start API server
 	api := NewAPIServer(context.Background(), pool, blockchain, authToken, useTLS, certFile, keyFile)
@@ -251,9 +252,21 @@ func main() {
 // It creates listeners for both IPv4 and IPv6 to accept connections from
 // all network interfaces. If IPv6 is unavailable, it silently continues
 // with IPv4 only. This function blocks until the server stops or encounters
-// a fatal error.
-func startGRPCServer(pool *MiningPool) {
-	grpcServer := grpc.NewServer()
+// a fatal error. If TLS is enabled, the server will use the provided
+// certificate and key files for secure communication.
+func startGRPCServer(pool *MiningPool, useTLS bool, certFile, keyFile string) {
+	var grpcServer *grpc.Server
+	if useTLS {
+		creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)
+		if err != nil {
+			log.Fatalf("Failed to load TLS credentials: %v", err)
+		}
+		grpcServer = grpc.NewServer(grpc.Creds(creds))
+		fmt.Println("gRPC server configured with TLS")
+	} else {
+		grpcServer = grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+		fmt.Println("WARNING: gRPC server running without TLS encryption")
+	}
 	pb.RegisterMiningPoolServer(grpcServer, NewMiningPoolServer(pool))
 
 	// Try to create IPv4 listener

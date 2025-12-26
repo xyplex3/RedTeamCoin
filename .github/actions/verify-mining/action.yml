@@ -1,0 +1,79 @@
+---
+name: 'Verify Mining Functionality'
+description: 'Verifies CPU mining produces non-zero hash rate and mined blocks'
+author: 'RedTeamCoin'
+
+inputs:
+  server-bin:
+    description: 'Path to server binary'
+    required: true
+  client-bin:
+    description: 'Path to client binary'
+    required: true
+  server-port:
+    description: 'Server gRPC port'
+    required: false
+    default: '50051'
+  api-port:
+    description: 'API server port for blockchain queries'
+    required: false
+    default: '8080'
+  mining-duration:
+    description: 'How long to mine in seconds'
+    required: false
+    default: '30'
+
+outputs:
+  hash-rate:
+    description: 'Measured hash rate in H/s'
+    value: ${{ steps.verify.outputs.hash-rate }}
+  blocks-mined:
+    description: 'Number of blocks mined during test'
+    value: ${{ steps.verify.outputs.blocks-mined }}
+  blockchain-height:
+    description: 'Final blockchain height including genesis'
+    value: ${{ steps.verify.outputs.blockchain-height }}
+  verification-passed:
+    description: 'Whether verification passed (true/false)'
+    value: ${{ steps.verify.outputs.verification-passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run mining verification
+      id: verify
+      shell: bash
+      run: |
+        echo "=== Mining Verification Test ==="
+        echo "Server: ${{ inputs.server-bin }}"
+        echo "Client: ${{ inputs.client-bin }}"
+        echo "Duration: ${{ inputs.mining-duration }}s"
+        echo "Platform: $RUNNER_OS"
+        echo ""
+
+        # Choose platform-specific script
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          pwsh -ExecutionPolicy Bypass -File "${{ github.action_path }}/verify.ps1" \
+            -ServerBin "${{ inputs.server-bin }}" \
+            -ClientBin "${{ inputs.client-bin }}" \
+            -ServerPort ${{ inputs.server-port }} \
+            -ApiPort ${{ inputs.api-port }} \
+            -Duration ${{ inputs.mining-duration }}
+        else
+          bash "${{ github.action_path }}/verify.sh" \
+            "${{ inputs.server-bin }}" \
+            "${{ inputs.client-bin }}" \
+            "${{ inputs.server-port }}" \
+            "${{ inputs.api-port }}" \
+            "${{ inputs.mining-duration }}"
+        fi
+
+    - name: Display verification summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f mining-verification.json ]; then
+          echo "=== Verification Results ==="
+          cat mining-verification.json
+          echo ""
+        fi

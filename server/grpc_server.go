@@ -91,7 +91,7 @@ func (s *MiningPoolServer) GetWork(ctx context.Context, req *pb.WorkRequest) (*p
 		BlockIndex:   block.Index,
 		PreviousHash: block.PreviousHash,
 		Data:         block.Data,
-		Difficulty:   int32(s.pool.blockchain.Difficulty),
+		Difficulty:   s.pool.blockchain.Difficulty,
 		Timestamp:    block.Timestamp,
 	}, nil
 }
@@ -192,7 +192,7 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 		Active:             true,
 		Message:            "Heartbeat received",
 		ShouldMine:         shouldMine,
-		CpuThrottlePercent: int32(cpuThrottle),
+		CpuThrottlePercent: cpuThrottle,
 	}, nil
 }
 

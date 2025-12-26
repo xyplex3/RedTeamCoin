@@ -194,7 +194,7 @@ func TestSubmitWork(t *testing.T) {
 
 	for {
 		block.Hash = calculateHash(block)
-		if len(block.Hash) >= bc.Difficulty && block.Hash[:bc.Difficulty] == "0000" {
+		if len(block.Hash) >= int(bc.Difficulty) && block.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		block.Nonce++

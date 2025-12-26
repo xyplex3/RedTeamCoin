@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ func TestNewAPIServer(t *testing.T) {
 	pool := NewMiningPool(bc)
 	authToken := "test-token"
 
-	api := NewAPIServer(pool, bc, authToken, false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, authToken, false, "", "")
 
 	if api == nil {
 		t.Fatal("NewAPIServer returned nil")
@@ -36,7 +37,7 @@ func TestNewAPIServer(t *testing.T) {
 func TestAuthMiddleware(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	handler := api.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -74,7 +75,7 @@ func TestAuthMiddleware(t *testing.T) {
 func TestHandleStats(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	pool.RegisterMiner("miner-1", "192.168.1.100", "host1", "192.168.1.100")
 	pool.UpdateHeartbeat("miner-1", 1000000, 50.0, 5000000, 30*time.Second)
@@ -107,7 +108,7 @@ func TestHandleStats(t *testing.T) {
 func TestHandleMiners(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	pool.RegisterMiner("miner-1", "192.168.1.100", "host1", "192.168.1.100")
 	pool.RegisterMiner("miner-2", "192.168.1.101", "host2", "192.168.1.101")
@@ -136,7 +137,7 @@ func TestHandleMiners(t *testing.T) {
 func TestHandleBlockchain(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/blockchain", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -166,7 +167,7 @@ func TestHandleBlockchain(t *testing.T) {
 func TestHandleBlock(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test valid block
 	req := httptest.NewRequest(http.MethodGet, "/api/blocks/0", nil)
@@ -193,7 +194,7 @@ func TestHandleBlock(t *testing.T) {
 func TestHandleBlockInvalid(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test invalid block index
 	req := httptest.NewRequest(http.MethodGet, "/api/blocks/999", nil)
@@ -210,7 +211,7 @@ func TestHandleBlockInvalid(t *testing.T) {
 func TestHandleValidate(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/validate", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -241,7 +242,7 @@ func TestHandleValidate(t *testing.T) {
 func TestHandleCPUStats(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	pool.RegisterMiner("miner-1", "192.168.1.100", "host1", "192.168.1.100")
 	pool.UpdateHeartbeat("miner-1", 1000000, 50.0, 5000000, 30*time.Second)
@@ -274,7 +275,7 @@ func TestHandleCPUStats(t *testing.T) {
 func TestHandlePauseMiner(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	minerID := "test-miner-1"
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
@@ -310,7 +311,7 @@ func TestHandlePauseMiner(t *testing.T) {
 func TestHandlePauseMinerNotFound(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	reqBody := map[string]string{"miner_id": "nonexistent"}
 	body, _ := json.Marshal(reqBody)
@@ -330,7 +331,7 @@ func TestHandlePauseMinerNotFound(t *testing.T) {
 func TestHandleResumeMiner(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	minerID := "test-miner-1"
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
@@ -367,7 +368,7 @@ func TestHandleResumeMiner(t *testing.T) {
 func TestHandleDeleteMiner(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	minerID := "test-miner-1"
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
@@ -406,7 +407,7 @@ func TestHandleDeleteMiner(t *testing.T) {
 func TestHandleThrottleMiner(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	minerID := "test-miner-1"
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
@@ -445,7 +446,7 @@ func TestHandleThrottleMiner(t *testing.T) {
 func TestHandleThrottleMinerInvalidValue(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	minerID := "test-miner-1"
 	pool.RegisterMiner(minerID, "192.168.1.100", "test-host", "192.168.1.100")
@@ -471,7 +472,7 @@ func TestHandleThrottleMinerInvalidValue(t *testing.T) {
 func TestHandleIndexWithAuth(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test with header auth
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -493,7 +494,7 @@ func TestHandleIndexWithAuth(t *testing.T) {
 func TestHandleIndexWithQueryToken(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test with query parameter auth
 	req := httptest.NewRequest(http.MethodGet, "/?token=test-token", nil)
@@ -509,7 +510,7 @@ func TestHandleIndexWithQueryToken(t *testing.T) {
 func TestHandleIndexNoAuth(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -524,7 +525,7 @@ func TestHandleIndexNoAuth(t *testing.T) {
 func TestHandleMethodNotAllowed(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test pause endpoint with wrong method
 	req := httptest.NewRequest(http.MethodGet, "/api/miner/pause", nil)
@@ -541,7 +542,7 @@ func TestHandleMethodNotAllowed(t *testing.T) {
 func TestHandleInvalidJSON(t *testing.T) {
 	bc := NewBlockchain(4)
 	pool := NewMiningPool(bc)
-	api := NewAPIServer(pool, bc, "test-token", false, "", "")
+	api := NewAPIServer(context.Background(), pool, bc, "test-token", false, "", "")
 
 	// Test with invalid JSON
 	req := httptest.NewRequest(http.MethodPost, "/api/miner/pause", bytes.NewReader([]byte("invalid json")))

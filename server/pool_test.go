@@ -173,7 +173,7 @@ func TestPoolSubmitWork(t *testing.T) {
 	// Mine the block
 	for {
 		block.Hash = calculateHash(block)
-		if len(block.Hash) >= bc.Difficulty && block.Hash[:bc.Difficulty] == "0000" {
+		if len(block.Hash) >= int(bc.Difficulty) && block.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		block.Nonce++
@@ -245,7 +245,7 @@ func TestSubmitWorkStaleBlock(t *testing.T) {
 	// Miner 1 mines and submits first
 	for {
 		block1.Hash = calculateHash(block1)
-		if len(block1.Hash) >= bc.Difficulty && block1.Hash[:bc.Difficulty] == "0000" {
+		if len(block1.Hash) >= int(bc.Difficulty) && block1.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		block1.Nonce++
@@ -256,7 +256,7 @@ func TestSubmitWorkStaleBlock(t *testing.T) {
 	// Miner 2 tries to submit for the same block (now stale)
 	for {
 		block2.Hash = calculateHash(block2)
-		if len(block2.Hash) >= bc.Difficulty && block2.Hash[:bc.Difficulty] == "0000" {
+		if len(block2.Hash) >= int(bc.Difficulty) && block2.Hash[:bc.Difficulty] == "0000" {
 			break
 		}
 		block2.Nonce++

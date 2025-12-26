@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -181,7 +182,7 @@ func main() {
 	go startGRPCServer(pool)
 
 	// Start API server
-	api := NewAPIServer(pool, blockchain, authToken, useTLS, certFile, keyFile)
+	api := NewAPIServer(context.Background(), pool, blockchain, authToken, useTLS, certFile, keyFile)
 
 	// Determine protocol and port
 	protocol := "http"

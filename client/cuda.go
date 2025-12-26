@@ -1,6 +1,13 @@
 //go:build cuda && cgo
 // +build cuda,cgo
 
+// Package main provides NVIDIA CUDA-accelerated proof-of-work mining.
+// Compiled only with cuda and cgo build tags. Falls back to CPU on GPU errors.
+//
+// Build: Install CUDA Toolkit, compile kernel (nvcc -c -m64 -O3 client/mine.cu),
+// then CGO_ENABLED=1 go build -tags cuda -o bin/client ./client
+//
+// GPU detection uses nvidia-smi. Performance: 10-100x faster than CPU mining.
 package main
 
 import (
@@ -252,35 +259,3 @@ func (cm *CUDAMiner) mineCPU(blockIndex, timestamp int64, data, previousHash str
 
 	return 0, "", hashes
 }
-
-/*
-CUDA Implementation Notes:
-
-The CUDA kernel (mine.cu) implements:
-1. Full SHA256 computation on GPU
-2. Parallel nonce testing with kernel grid/block configuration
-3. Device memory management and data transfer
-4. Atomic operations for result synchronization
-
-To build and use:
-
-1. Install NVIDIA CUDA Toolkit:
-   - Download from: https://developer.nvidia.com/cuda-downloads
-   - Install dependencies: sudo apt-get install nvidia-cuda-toolkit
-
-2. Compile the CUDA kernel:
-   - nvcc -c -m64 -O3 client/mine.cu -o client/mine.o
-
-3. Build with CUDA support:
-   - CGO_ENABLED=1 go build -tags cuda -o bin/client ./client
-
-4. GPU detection and fallback:
-   - If CUDA not available or kernel fails, CPU fallback is used
-   - Performance: GPU mining can be 10-100x faster than CPU for large nonce ranges
-   - Energy efficient: Offloads computation to GPU, reducing CPU usage
-
-The mining function automatically:
-- Tries GPU mining first
-- Falls back to CPU if GPU unavailable
-- Reports hash count for performance monitoring
-*/

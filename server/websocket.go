@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -69,11 +70,24 @@ func NewWebSocketHub(pool *MiningPool) *WebSocketHub {
 }
 
 // Run starts the WebSocket hub's main event loop, processing miner
-// registrations, disconnections, and broadcast messages. This method
-// blocks and should be run in a goroutine.
-func (h *WebSocketHub) Run() {
+// registrations, disconnections, and broadcast messages. The context
+// allows graceful shutdown of the hub. This method blocks and should
+// be run in a goroutine.
+func (h *WebSocketHub) Run(ctx context.Context) {
 	for {
 		select {
+		case <-ctx.Done():
+			// Gracefully close all connections
+			h.mu.Lock()
+			for _, miner := range h.miners {
+				if err := miner.Conn.Close(); err != nil {
+					log.Printf("[WebSocket] Error closing connection for %s: %v", miner.ID, err)
+				}
+			}
+			h.mu.Unlock()
+			log.Printf("[WebSocket] Hub shutting down")
+			return
+
 		case miner := <-h.register:
 			h.mu.Lock()
 			h.miners[miner.ID] = miner
@@ -84,7 +98,9 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			if _, ok := h.miners[miner.ID]; ok {
 				delete(h.miners, miner.ID)
-				miner.Conn.Close()
+				if err := miner.Conn.Close(); err != nil {
+					log.Printf("[WebSocket] Error closing connection for %s: %v", miner.ID, err)
+				}
 			}
 			h.mu.Unlock()
 			log.Printf("[WebSocket] Miner disconnected: %s", miner.ID)
@@ -171,6 +187,10 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go h.handleMiner(miner)
 }
 
+// handleMiner processes all WebSocket messages from a connected browser miner
+// until the connection closes. It routes messages to appropriate handlers
+// based on message type (register, getwork, submit, stats). The miner is
+// automatically unregistered when this function returns.
 func (h *WebSocketHub) handleMiner(miner *WebMiner) {
 	defer func() {
 		h.unregist <- miner
@@ -214,6 +234,10 @@ func (h *WebSocketHub) handleMiner(miner *WebMiner) {
 	}
 }
 
+// handleRegister processes miner registration messages from browser clients,
+// extracting miner ID, user agent, thread count, GPU capability, and version
+// information. It registers the miner with the hub and sends back confirmation
+// along with initial mining work.
 func (h *WebSocketHub) handleRegister(miner *WebMiner, msg map[string]interface{}) {
 	if id, ok := msg["minerId"].(string); ok {
 		miner.ID = id
@@ -244,9 +268,15 @@ func (h *WebSocketHub) handleRegister(miner *WebMiner, msg map[string]interface{
 	h.handleGetWork(miner)
 }
 
+// handleGetWork assigns a new mining work unit to a browser miner. It
+// registers the miner with the pool if not already registered, retrieves
+// a work block, and sends it to the miner via WebSocket. Sends an error
+// message if work cannot be retrieved.
 func (h *WebSocketHub) handleGetWork(miner *WebMiner) {
 	// Register web miner with the pool first if not already registered
-	h.pool.RegisterMiner(miner.ID, "web", "browser", "web-client")
+	if err := h.pool.RegisterMiner(miner.ID, "web", "browser", "web-client"); err != nil {
+		log.Printf("[WebSocket] Error registering miner %s: %v", miner.ID, err)
+	}
 
 	// Get work from the pool
 	block, err := h.pool.GetWork(miner.ID)
@@ -270,6 +300,10 @@ func (h *WebSocketHub) handleGetWork(miner *WebMiner) {
 	})
 }
 
+// handleSubmit processes a block solution submission from a browser miner.
+// It validates the solution with the pool, increments the miner's block
+// count if accepted, sends back acceptance status and reward information,
+// and automatically assigns new work if the submission was accepted.
 func (h *WebSocketHub) handleSubmit(miner *WebMiner, msg map[string]interface{}) {
 	blockIndex := int64(msg["blockIndex"].(float64))
 	nonce := int64(msg["nonce"].(float64))
@@ -303,6 +337,9 @@ func (h *WebSocketHub) handleSubmit(miner *WebMiner, msg map[string]interface{})
 	}
 }
 
+// handleStats processes periodic statistics updates from browser miners,
+// updating the miner's hash rate, total hashes computed, and blocks found.
+// These statistics are used for monitoring and dashboard display.
 func (h *WebSocketHub) handleStats(miner *WebMiner, msg map[string]interface{}) {
 	if hashRate, ok := msg["hashRate"].(float64); ok {
 		miner.HashRate = int64(hashRate)
@@ -315,6 +352,10 @@ func (h *WebSocketHub) handleStats(miner *WebMiner, msg map[string]interface{}) 
 	}
 }
 
+// sendToMiner sends a JSON-encoded message to a specific browser miner
+// via WebSocket. It marshals the message to JSON, acquires the miner's
+// connection lock, and writes the message. Logs any marshaling or sending
+// errors.
 func (h *WebSocketHub) sendToMiner(miner *WebMiner, msg interface{}) {
 	data, err := json.Marshal(msg)
 	if err != nil {

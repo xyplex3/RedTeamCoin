@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ type MinerLogInfo struct {
 	LastHeartbeat      time.Time `json:"last_heartbeat"`
 	Active             bool      `json:"active"`
 	ShouldMine         bool      `json:"should_mine"`
-	CPUThrottlePercent int       `json:"cpu_throttle_percent"`
+	CPUThrottlePercent int32     `json:"cpu_throttle_percent"`
 	BlocksMined        int64     `json:"blocks_mined"`
 	HashRate           int64     `json:"hash_rate"`
 	CPUUsagePercent    float64   `json:"cpu_usage_percent"`
@@ -53,7 +54,7 @@ type PoolSnapshot struct {
 	TotalHashRate    int64          `json:"total_hash_rate"`
 	TotalBlocksMined int64          `json:"total_blocks_mined"`
 	BlockchainHeight int64          `json:"blockchain_height"`
-	Difficulty       int            `json:"difficulty"`
+	Difficulty       int32          `json:"difficulty"`
 	Miners           []MinerLogInfo `json:"miners"`
 }
 
@@ -71,7 +72,9 @@ type LogFile struct {
 // PoolLogger handles periodic logging of mining pool state to a JSON file.
 // It maintains an in-memory event buffer and periodically writes complete
 // snapshots to disk for monitoring, debugging, and forensic analysis.
-// All methods are safe for concurrent use.
+//
+// Concurrency Safety: All methods are safe for concurrent use by multiple
+// goroutines. Internal state is protected by a sync.RWMutex.
 type PoolLogger struct {
 	pool           *MiningPool
 	blockchain     *Blockchain
@@ -185,7 +188,7 @@ func (pl *PoolLogger) WriteLog() error {
 
 	// Write to temporary file first, then rename (atomic operation)
 	tempFile := pl.logFile + ".tmp"
-	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+	if err := os.WriteFile(tempFile, data, 0600); err != nil {
 		return fmt.Errorf("failed to write log file: %v", err)
 	}
 
@@ -203,13 +206,17 @@ func (pl *PoolLogger) WriteLog() error {
 func (pl *PoolLogger) Start() {
 	go func() {
 		// Write initial log
-		pl.WriteLog()
+		if err := pl.WriteLog(); err != nil {
+			log.Printf("Error writing initial log: %v", err)
+		}
 
 		ticker := time.NewTicker(pl.updateInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			pl.WriteLog()
+			if err := pl.WriteLog(); err != nil {
+				log.Printf("Error writing log: %v", err)
+			}
 		}
 	}()
 }

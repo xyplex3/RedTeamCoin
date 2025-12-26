@@ -1,0 +1,276 @@
+# Cryptocurrency Mining Impact Assessment Report
+
+**Report Generated:** {{.ReportGeneratedAt.Format "2006-01-02 15:04:05 MST"}}
+
+**Analysis Period:** {{.StartDate.Format "2006-01-02 15:04:05"}} to {{.EndDate.Format "2006-01-02 15:04:05"}} ({{.AnalysisPeriod}})
+
+---
+
+## Executive Summary
+
+This report documents the impact of unauthorized cryptocurrency mining operations on company resources. The analysis covers **{{.TotalMiners}} unique systems** across **{{.UniqueIPs}} unique IP addresses** that were actively participating in mining operations.
+
+### Key Findings
+
+- **Total Mining Time:** {{printf "%.2f" .TotalMiningHours}} hours ({{printf "%.2f" (divf .TotalMiningHours 24.0)}} days)
+- **Total Computational Work:** {{call .FormatNumber .TotalHashes}} hashes computed
+- **Estimated Energy Consumption:** {{printf "%.2f" .TotalEstimatedKWh}} kWh
+- **Estimated Electricity Cost:** ${{printf "%.2f" .TotalEstimatedCost}}
+- **Blocks Mined:** {{.TotalBlocksMined}}
+- **Systems with High CPU Usage (>80%):** {{.MinersWithHighCPU}} of {{.TotalMiners}} ({{printf "%.1f" .HighCPUPercent}}%)
+- **GPU Mining Enabled:** {{.MinersWithGPU}} systems
+- **Hybrid CPU+GPU Mining:** {{.MinersWithHybrid}} systems
+
+---
+
+## 1. Resource Consumption Analysis
+
+### Compute Power Impact
+
+The unauthorized mining operations consumed significant computational resources:
+
+- **Average System CPU Utilization:** {{printf "%.1f" .AvgSystemCPUUsage}}%
+- **Peak CPU Utilization Observed:** {{printf "%.1f" .PeakSystemCPUUsage}}%
+- **Total CPU-Hours Consumed:** {{printf "%.2f" .TotalMiningHours}} hours
+- **Mining Type Distribution:**
+  - CPU Only: {{.CPUOnlySystems}} systems
+  - GPU Accelerated: {{.GPUAcceleratedSystems}} systems
+  - Hybrid CPU+GPU: {{.MinersWithHybrid}} systems
+
+**Impact:** Mining operations typically maximize processor utilization, severely degrading performance for legitimate workloads. Systems experiencing >80% CPU usage would have experienced significant slowdowns, delayed processing times, and poor user experience.
+
+### Electricity Consumption
+
+- **Total Energy Consumed:** {{printf "%.2f" .TotalEstimatedKWh}} kWh
+- **Estimated Cost:** ${{printf "%.2f" .TotalEstimatedCost}} (at ${{printf "%.3f" .ElectricityCostPer}} per kWh)
+- **Daily Average:** {{printf "%.2f" .DailyAvgKWh}} kWh/day (${{printf "%.2f" .DailyAvgCost}}/day)
+
+**Methodology:** Energy estimates based on average CPU power consumption of {{printf "%.0f" .CPUPowerWatts}}W and GPU power consumption of {{printf "%.0f" .GPUPowerWatts}}W under sustained load, adjusted for actual CPU utilization percentages.
+
+**Impact:** Continuous high-utilization operations result in substantial electricity costs. This represents pure waste, as the computational work provided no business value.
+
+### Network Impact
+
+- **Total Blocks Mined:** {{.TotalBlocksMined}}
+- **Mining Pool Connections:** Persistent connections to external mining pool infrastructure
+- **Data Transfer:** Ongoing work requests and solution submissions
+
+**Impact:** While mining is not extremely bandwidth-intensive, it generates persistent outbound connections that may have bypassed security monitoring and created potential data exfiltration channels.
+
+---
+
+## 2. Performance Impact Assessment
+
+### System Degradation
+
+Based on CPU utilization levels, affected systems experienced the following performance impacts:
+
+| Impact Level | Systems | CPU Usage Range | Expected User Experience |
+|--------------|---------|-----------------|--------------------------|
+| **CRITICAL** | {{.Critical}} | 90-100% | System severely degraded, frequent hangs, near-unusable |
+| **HIGH** | {{.High}} | 70-89% | Significant slowdowns, delayed response times |
+| **MODERATE** | {{.Moderate}} | 50-69% | Noticeable performance reduction, slower operations |
+| **LOW** | {{.Low}} | 0-49% | Minor impact, occasional slowdowns |
+
+### Service Availability
+
+**Productivity Loss:** Users on affected systems would have experienced:
+- Increased application load times
+- Slower document processing and file operations
+- Delayed response to user input
+- Potential application timeouts or crashes due to resource starvation
+- Reduced multitasking capability
+
+**Business Impact:** For systems categorized as HIGH or CRITICAL impact ({{add .Critical .High}} systems), productivity loss likely reached 40-70%, representing significant business disruption.
+
+---
+
+## 3. Infrastructure Damage Assessment
+
+### Hardware Wear and Lifespan Impact
+
+Sustained high-utilization mining operations accelerate hardware degradation:
+
+**Component Stress:**
+- **Processors (CPU/GPU):** Running at maximum load for {{printf "%.2f" .TotalMiningHours}} total hours
+- **Cooling Systems:** Fans running at maximum speed to dissipate heat
+- **Power Supplies:** Operating under continuous high load
+- **Motherboards:** Sustained high current draw through VRM components
+
+**Expected Lifespan Reduction:**
+- Normal enterprise hardware lifespan: 5-7 years
+- Estimated lifespan reduction from sustained mining: 20-40%
+- Accelerated replacement costs for {{.TotalMiners}} affected systems
+
+### Thermal Stress
+
+**Risk Factors:**
+- Sustained high temperatures degrade silicon and solder joints
+- Increased risk of thermal shutdowns and component failure
+- Potential for thermal paste degradation requiring maintenance
+- Systems with GPU mining ({{.MinersWithGPU}} systems) face additional thermal stress
+
+**Recommendation:** All affected systems should undergo thermal inspection and preventive maintenance, including thermal paste replacement and cooling system verification.
+
+---
+
+## 4. Security Implications
+
+### Breach Indicators
+
+The presence of cryptocurrency mining software indicates a security compromise:
+
+**Affected Infrastructure:**
+- **Total Compromised Systems:** {{.TotalMiners}}
+- **Unique Hostnames:** {{.UniqueHosts}}
+- **Unique IP Addresses:** {{.UniqueIPs}}
+- **Mining Period:** {{.AnalysisPeriod}}
+
+**Deployment Vectors (Requires Investigation):**
+- Malware infection (trojan, worm, or targeted attack)
+- Compromised credentials (employee accounts or service accounts)
+- Insider threat (authorized user deploying unauthorized software)
+- Supply chain compromise (infected software or updates)
+- Vulnerable services or unpatched systems
+
+### Persistence Mechanisms
+
+**Operational Characteristics:**
+- Mining clients maintained persistent connections to external pool servers
+- Total operational time: {{printf "%.2f" .TotalMiningHours}} hours suggests robust persistence mechanisms
+- Systems likely configured for auto-start and restart after interruption
+
+**Access Level:**
+- Mining software requires sufficient privileges to consume resources
+- Likely has user-level or higher access on all {{.TotalMiners}} affected systems
+- Potential for lateral movement if network credentials were compromised
+
+**Broader Exposure Risk:**
+- If mining software was deployed via compromised credentials, attacker may still have access
+- Systems should be forensically analyzed for additional malware or backdoors
+- Network traffic logs should be reviewed for data exfiltration attempts
+- All affected systems require credential rotation and security hardening
+
+---
+
+## 5. Financial Impact Summary
+
+### Direct Costs
+
+| Cost Category | Estimated Amount | Notes |
+|---------------|------------------|-------|
+| Electricity Costs | ${{printf "%.2f" .TotalEstimatedCost}} | Based on {{printf "%.2f" .TotalEstimatedKWh}} kWh at ${{printf "%.3f" .ElectricityCostPer}}/kWh |
+| Accelerated Hardware Replacement | ${{.HardwareReplacement}} | Estimated 20-40% lifespan reduction |
+| Incident Response | ${{.IncidentResponse}} | Security investigation, forensics, remediation |
+| System Maintenance | ${{.Maintenance}} | Thermal inspection, cleaning, repairs |
+
+### Indirect Costs
+
+**Productivity Loss:**
+- {{add .Critical .High}} systems experienced significant performance degradation
+- Estimated productivity loss: 40-70% on severely affected systems
+- User time wasted on slow systems and rework
+
+**Operational Impact:**
+- IT staff time spent investigating and remediating
+- Potential SLA violations if critical services were affected
+- Management time spent on incident response coordination
+
+**Reputational Risk:**
+- Security breach may require disclosure depending on industry regulations
+- Potential loss of customer confidence
+- Regulatory implications if sensitive data was accessed
+
+---
+
+## 6. Detailed System-by-System Impact Analysis
+
+The following table shows impact metrics for each compromised system, sorted by estimated cost (highest impact first):
+
+| Hostname | IP Address | Mining Type | Mining Time | Avg CPU | Hashes | Blocks | Est. kWh | Est. Cost | Impact Level |
+|----------|------------|-------------|-------------|---------|--------|--------|----------|-----------|--------------|
+{{range .MinerStats}}{{$ipDisplay := .IPAddress}}{{if and .IPAddressActual (ne .IPAddressActual .IPAddress)}}{{$ipDisplay = printf "%s (%s)" .IPAddress .IPAddressActual}}{{end}}| {{call $.Truncate .Hostname 20}} | {{call $.Truncate $ipDisplay 25}} | {{.MiningType}} | {{printf "%.1f" .TotalMiningTime.Hours}}h | {{printf "%.1f" .AvgCPUUsage}}% | {{call $.FormatNumberShort .TotalHashes}} | {{.BlocksMined}} | {{printf "%.2f" .EstimatedKWh}} | ${{printf "%.2f" .EstimatedCost}} | {{call $.GetImpactLevel .AvgCPUUsage}} |
+{{end}}
+
+### Top {{.Top10Count}} Highest Impact Systems
+{{range $i, $stats := (slice .MinerStats 0 .Top10Count)}}
+#### {{add $i 1}}. {{$stats.Hostname}}
+
+- **IP Address:** {{$stats.IPAddress}}{{if and $stats.IPAddressActual (ne $stats.IPAddressActual $stats.IPAddress)}} (Actual: {{$stats.IPAddressActual}}){{end}}
+- **Mining Type:** {{$stats.MiningType}}
+- **First Seen:** {{call $.FormatTime $stats.FirstSeen}}
+- **Last Seen:** {{call $.FormatTime $stats.LastSeen}}
+- **Total Mining Time:** {{call $.FormatDuration $stats.TotalMiningTime}}
+- **Average CPU Usage:** {{printf "%.1f" $stats.AvgCPUUsage}}%
+- **Total Hashes Computed:** {{call $.FormatNumber $stats.TotalHashes}}
+- **Blocks Mined:** {{$stats.BlocksMined}}
+- **Estimated Energy:** {{printf "%.2f" $stats.EstimatedKWh}} kWh
+- **Estimated Cost:** ${{printf "%.2f" $stats.EstimatedCost}}
+- **Impact Assessment:** {{$stats.ComputeImpact}}
+{{end}}
+
+---
+
+## 7. Recommendations and Next Steps
+
+### Immediate Actions (Within 24 Hours)
+
+1. **Isolate affected systems** - Disconnect all {{.TotalMiners}} compromised systems from the network
+2. **Terminate mining processes** - Stop all cryptocurrency mining operations
+3. **Preserve evidence** - Take forensic images of critical systems before remediation
+4. **Reset credentials** - Force password reset for all user accounts on affected systems
+5. **Review network logs** - Analyze traffic for data exfiltration or lateral movement
+
+### Short-Term Actions (Within 1 Week)
+
+1. **Forensic analysis** - Conduct detailed investigation to determine breach vector
+2. **Malware removal** - Clean or reimage all {{.TotalMiners}} affected systems
+3. **Security patching** - Apply all critical security updates across infrastructure
+4. **Deploy EDR/monitoring** - Install endpoint detection and response tools
+5. **Network segmentation** - Review and implement proper network isolation
+6. **User awareness** - Brief employees on the incident and security best practices
+
+### Long-Term Actions (Within 1 Month)
+
+1. **Security audit** - Comprehensive review of all security controls
+2. **Hardware inspection** - Thermal analysis and preventive maintenance on affected systems
+3. **Policy enforcement** - Implement application whitelisting and stricter security policies
+4. **Monitoring enhancement** - Deploy outbound connection monitoring for mining pool traffic
+5. **Backup verification** - Ensure backups are clean and not compromised
+6. **Incident response plan** - Update IR procedures based on lessons learned
+
+### Preventive Measures
+
+- Implement application whitelisting to prevent unauthorized software execution
+- Deploy network monitoring to detect mining pool connections
+- Enable CPU usage alerting to detect abnormal resource consumption
+- Enforce principle of least privilege for user accounts
+- Regular security awareness training for all employees
+- Maintain aggressive patch management schedule
+
+---
+
+## Appendix
+
+### Methodology and Assumptions
+
+**Data Source:** Mining pool server log file (`pool_log.json`)
+
+**Energy Consumption Calculations:**
+- CPU Power Consumption: {{printf "%.0f" .CPUPowerWatts}}W average under full load
+- GPU Power Consumption: {{printf "%.0f" .GPUPowerWatts}}W average under full load
+- Hybrid Mode: Combined CPU + GPU power consumption
+- Adjusted by actual CPU usage percentage for CPU-only systems
+- Electricity rate: ${{printf "%.3f" .ElectricityCostPer}} per kWh
+
+**Impact Level Classifications:**
+- CRITICAL: CPU usage ≥90%
+- HIGH: CPU usage 70-89%
+- MODERATE: CPU usage 50-69%
+- LOW: CPU usage <50%
+
+### Unique Systems Breakdown
+
+- **Total Unique Miners:** {{.TotalMiners}}
+- **Unique Hostnames:** {{.UniqueHosts}}
+- **Unique IP Addresses:** {{.UniqueIPs}}

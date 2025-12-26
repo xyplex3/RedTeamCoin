@@ -77,7 +77,7 @@ Registering miner...
   IP Address: 192.168.1.100
   Hostname:   hostname
   GPUs:       None detected - using CPU only
-✓ Successfully registered with pool: Miner registered successfully
+Successfully registered with pool: Miner registered successfully
 
 Starting mining...
 ```

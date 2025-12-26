@@ -1,22 +1,13 @@
 # RedTeamCoin
 
+A realistic cryptocurrency mining pool for authorized security testing and red team operations.
+
+[![License](https://img.shields.io/github/license/xyplex3/RedTeamCoin?label=License&style=flat&color=blue&logo=github)](https://github.com/xyplex3/RedTeamCoin/blob/main/LICENSE)
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
 [![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
-
-RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed for authorized security testing
-and red team operations. Built in Go with Java client support, it simulates real-world cryptomining attacks to help
-organizations assess their detection capabilities and quantify potential damage from threat actor mining operations.
-
-This tool enables security teams to safely and legally demonstrate cryptomining attack scenarios on corporate
-systems, generate comprehensive impact reports, and validate security controls—all within a controlled environment
-using an isolated, non-public blockchain.
-
-**Created by:**
-
-- Peter Greko, Luciano Krigun, and Jayson Grace [@l50](https://github.com/l50)
 
 ## Table of Contents
 
@@ -33,18 +24,27 @@ using an isolated, non-public blockchain.
 - [API Reference](#api-reference)
 - [Architecture](#architecture)
 - [Development](#development)
+- [Contributing](#contributing)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
 
 ## Overview
 
-RedTeamCoin is a demonstration blockchain cryptocurrency mining pool system
-that simulates a non-Ethereum based cryptocurrency. The system consists of
-three main components:
+**Why use RedTeamCoin?**
 
-1. **Blockchain Server** - Manages the blockchain and mining pool
-2. **Client Miners** - Performs proof-of-work mining (Go and Java implementations)
-3. **Web Dashboard** - Provides administration and monitoring
+- Demonstrate the real-world impact of cryptojacking attacks
+- Test and validate security monitoring and detection systems
+- Generate quantifiable damage assessments for executive reporting
+- Safely simulate mining operations without connecting to public blockchains
+
+**System Components:**
+
+- **Mining Pool Server** - Manages blockchain and coordinates work distribution
+- **Client Miners** - CPU/GPU mining clients (Go and Java implementations)
+- **Web Dashboard** - Real-time monitoring, control, and statistics
+- **Analysis Tools** - Generate comprehensive damage assessment reports
 
 ## Features
 
@@ -70,11 +70,12 @@ three main components:
 
 ## Quick Start
 
+Get RedTeamCoin running in under 5 minutes:
+
 ### Prerequisites
 
-- Go 1.21 or later
-- protoc (Protocol Buffer Compiler)
-- protoc-gen-go and protoc-gen-go-grpc
+- **Go** 1.21 or later
+- **Protocol Buffer Compiler** (protoc)
 
 **Ubuntu/Debian:**
 
@@ -91,8 +92,8 @@ brew install go protobuf
 
 **Windows:**
 
-- Install Go from: https://golang.org/dl/
-- Install protHow oc from: https://github.com/protocolbuffers/protobuf/releases
+- Install Go from https://golang.org/dl/
+- Install protoc from https://github.com/protocolbuffers/protobuf/releases
 
 ### Installation
 
@@ -101,54 +102,102 @@ brew install go protobuf
 git clone https://github.com/xyplex3/RedTeamCoin.git
 cd RedTeamCoin
 
-# Install tools and dependencies
+# Install dependencies
 make install-tools
 make deps
 
-# Build the project
+# Build server and client
 make build
 ```
 
-### Running
+### Verification
 
-**Start the server:**
+Verify the build completed successfully:
+
+```bash
+ls -lh bin/
+# Expected output: server and client binaries (1-5 MB each)
+
+./bin/server --help
+# Expected output: Usage information for the server
+```
+
+### Running Your First Mining Pool
+
+**1. Start the server:**
 
 ```bash
 make run-server
 ```
 
-The server starts on:
+You should see output like:
 
-- gRPC: port **50051**
-- Web dashboard: **http://localhost:8080**
+```text
+RedTeamCoin Mining Pool Server
+Authentication Token: abc123def456...
+Dashboard URL: http://localhost:8080?token=abc123def456...
+gRPC server listening on port 50051
+```
 
-Copy the authentication token URL from the console.
-
-**Start a miner:**
+**2. Start a miner** (in a new terminal):
 
 ```bash
 make run-client
 ```
 
-**Access the dashboard:**
-Navigate to the URL displayed in the server console or:
+You should see mining activity:
+
+```text
+Connected to mining pool at localhost:50051
+Registered as miner: miner-hostname-1234567890
+Mining block #1... Hash rate: 2.5 MH/s
+Block found! Nonce: 98765, Hash: 000000ab1cd...
+```
+
+**3. View the dashboard:**
+
+Open the URL from step 1 in your browser, or navigate to:
 
 ```text
 http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
 ```
 
-**NOTE: This will run on all interfaces of the server and can be used in place of localhost.**
+You'll see real-time statistics including active miners, hash rates, and mined blocks.
+
+**Note:** The server listens on all network interfaces - replace `localhost` with your server's IP for remote access.
 
 ## How It Works
 
-1. **Server starts** and initializes the blockchain with a genesis block
-2. **Miners connect** via gRPC, providing their IP address and hostname
-3. **Server assigns work** to miners (blocks to be mined)
-4. **Miners compute hashes** trying to find a valid nonce that meets the
-   difficulty requirement
-5. **Miners submit solutions** back to the server
-6. **Server validates** and adds accepted blocks to the blockchain
-7. **Web dashboard** displays real-time statistics and blockchain data
+The mining pool operates using a proof-of-work consensus mechanism:
+
+1. Server initializes blockchain with genesis block
+2. Miners connect via gRPC and register with IP/hostname
+3. Server distributes work assignments (block templates)
+4. Miners compute SHA-256 hashes to find valid nonces
+5. Miners submit solutions when difficulty target is met
+6. Server validates and adds blocks to the blockchain
+7. Dashboard displays real-time statistics and miner activity
+
+Each block requires finding a hash with a specific number of leading zeros
+(configurable difficulty). Miners receive 50 RTC per block mined.
+
+### Data Flow
+
+```text
+Client Miner                    Server
+    |                              |
+    |--RegisterMiner(IP,Hostname)->|
+    |<--RegistrationResponse-------|
+    |--GetWork()------------------>|
+    |<--WorkResponse(Block)--------|
+    | [Mining: compute hashes]     |
+    |--SubmitWork(nonce,hash)----->|
+    |                              | [Validate proof-of-work
+    |                              |  and add block to chain]
+    |<--SubmissionResponse---------|
+    |--Heartbeat(stats)----------->|
+    |<--HeartbeatResponse----------|
+```
 
 ## Usage
 
@@ -312,41 +361,38 @@ export POOL_SERVER=192.168.1.100:50051
 
 **Priority:** Command-line flag > Environment variable > Default (localhost:50051)
 
-See [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) for detailed remote configuration.
-
 ## GPU Mining
 
-RedTeamCoin supports GPU-accelerated mining with automatic detection and fallback.
+RedTeamCoin supports GPU-accelerated mining for NVIDIA (CUDA) and AMD/Intel
+(OpenCL) GPUs. GPU mining is 100-400x faster and significantly more energy
+efficient than CPU mining.
 
-### Build Options
+### GPU Installation
 
-```bash
-make build              # CPU-only (default)
-make build-gpu          # Auto-detect and build with available GPU
-make build-cuda         # NVIDIA CUDA support
-make build-opencl       # AMD/Intel OpenCL support
-```
-
-### Installing GPU Dependencies
-
-**NVIDIA GPUs:**
+**NVIDIA CUDA:**
 
 ```bash
 sudo apt install cuda-toolkit
 make build-cuda
 ```
 
-**AMD/Intel GPUs:**
+**AMD/Intel OpenCL:**
 
 ```bash
 sudo apt install ocl-icd-opencl-dev
 make build-opencl
 ```
 
-### Running with GPU
+**Auto-detect:**
 
 ```bash
-# Auto-detect (default)
+make build-gpu  # Automatically detects and builds for available GPU
+```
+
+### GPU Usage
+
+```bash
+# Auto-detect GPU (default)
 ./bin/client
 
 # Force CPU only
@@ -356,7 +402,7 @@ GPU_MINING=false ./bin/client
 HYBRID_MINING=true ./bin/client
 
 # GPU with remote server
-GPU_MINING=true ./bin/client -server mining-pool.example.com:50051
+./bin/client -server mining-pool.example.com:50051
 ```
 
 ### Performance Comparison
@@ -388,24 +434,28 @@ GPU_MINING=true ./bin/client
 HYBRID_MINING=true ./bin/client
 ```
 
-See [GPU_MINING.md](GPU_MINING.md) for complete GPU mining guide.
+See [docs/GPU_MINING.md](docs/GPU_MINING.md) for complete GPU mining guide.
 
 ## Configuration
 
 ### Environment Variables
 
-**Server:**
+**Server Configuration:**
 
-- `RTC_USE_TLS` - Enable HTTPS (default: `false`)
-- `RTC_CERT_FILE` - TLS certificate path (default: `certs/server.crt`)
-- `RTC_KEY_FILE` - TLS private key path (default: `certs/server.key`)
-- `RTC_AUTH_TOKEN` - Custom authentication token (auto-generated if not set)
+| Variable         | Description                 | Required | Default            |
+| ---------------- | --------------------------- | -------- | ------------------ |
+| `RTC_USE_TLS`    | Enable HTTPS/TLS            | No       | `false`            |
+| `RTC_CERT_FILE`  | TLS certificate path        | No       | `certs/server.crt` |
+| `RTC_KEY_FILE`   | TLS private key path        | No       | `certs/server.key` |
+| `RTC_AUTH_TOKEN` | Custom authentication token | No       | Auto-generated     |
 
-**Client:**
+**Client Configuration:**
 
-- `POOL_SERVER` - Remote server address (default: `localhost:50051`)
-- `GPU_MINING` - Enable/disable GPU mining (default: auto-detect)
-- `HYBRID_MINING` - Enable CPU+GPU simultaneous mining (default: `false`)
+| Variable        | Description                        | Required | Default           |
+| --------------- | ---------------------------------- | -------- | ----------------- |
+| `POOL_SERVER`   | Remote server address              | No       | `localhost:50051` |
+| `GPU_MINING`    | Enable/disable GPU mining          | No       | Auto-detect       |
+| `HYBRID_MINING` | Enable CPU+GPU simultaneous mining | No       | `false`           |
 
 ### Authentication
 
@@ -449,6 +499,14 @@ const (
 blockReward = 50  // RTC reward per block
 ```
 
+### Performance
+
+Expected mining times vary by CPU performance and luck:
+
+- **Difficulty 4**: ~1-10 seconds/block (single CPU)
+- **Difficulty 5**: ~10-60 seconds/block
+- **Difficulty 6**: ~1-10 minutes/block
+
 ### HTTPS Configuration
 
 ```bash
@@ -466,7 +524,7 @@ export RTC_KEY_FILE="/path/to/key.pem"
 ./bin/server
 ```
 
-See [TLS_SETUP.md](TLS_SETUP.md) for detailed TLS configuration.
+See [docs/TLS_SETUP.md](docs/TLS_SETUP.md) for detailed TLS configuration.
 
 ## API Reference
 
@@ -559,190 +617,6 @@ service MiningPool {
 - **Web Server**: Go net/http standard library
 - **Dependencies**: google.golang.org/protobuf, google.golang.org/grpc
 
-### Project Structure
-
-```text
-RedTeamCoin/
-├── server/                 # Blockchain and mining pool server
-│   ├── main.go             # Server entry point
-│   ├── blockchain.go       # Blockchain implementation
-│   ├── blockchain_test.go  # Blockchain unit tests
-│   ├── pool.go             # Mining pool management
-│   ├── pool_test.go        # Pool unit tests
-│   ├── grpc_server.go      # gRPC service implementation
-│   ├── grpc_server_test.go # gRPC server unit tests
-│   ├── api.go              # HTTP API and web dashboard
-│   ├── api_test.go         # API unit tests
-│   └── logger.go           # Event logging system
-├── client/                 # Mining client (Go)
-│   ├── main.go             # Client miner implementation
-│   ├── main_test.go        # Client unit tests
-│   ├── gpu.go              # GPU mining coordinator
-│   ├── gpu_test.go         # GPU unit tests
-│   ├── cuda.go             # NVIDIA CUDA implementation
-│   ├── cuda_nocgo.go       # CUDA stub (no CGO)
-│   ├── opencl.go           # AMD/Intel OpenCL implementation
-│   ├── opencl_nocgo.go     # OpenCL stub (no CGO)
-│   ├── mine.cu             # CUDA kernel source
-│   └── mine.cl             # OpenCL kernel source
-├── java-client/            # gRPC mining client (Java - headless)
-│   ├── src/main/java/      # Java source code
-│   │   └── com/redteamcoin/miner/
-│   │       └── MinerClient.java
-│   ├── src/main/proto/     # Protobuf definitions
-│   │   └── mining.proto
-│   ├── pom.xml             # Maven build configuration
-│   ├── README.md           # Java client documentation
-│   ├── QUICKSTART.md       # Quick start guide
-│   └── BUILD_INSTRUCTIONS.md # Build instructions
-├── java-standalone/        # Standalone miner (Java - GUI enabled)
-│   ├── src/main/java/      # Java source code
-│   │   └── com/redteamcoin/miner/
-│   │       └── RedTeamMiner.java
-│   └── pom.xml             # Maven build configuration
-├── web-wasm/               # Browser-based miner (WebAssembly)
-│   ├── miner.go            # Go source (compiles to WASM)
-│   ├── miner.wasm          # Compiled WebAssembly binary
-│   ├── index.html          # Web interface
-│   ├── miner.js            # JavaScript coordinator
-│   ├── worker.js           # Web Worker threads
-│   ├── wasm_exec.js        # Go WASM runtime
-│   └── sha256.wgsl         # WebGPU shader
-├── proto/                  # Protocol buffer definitions
-│   ├── mining.proto        # Service definitions
-│   ├── mining.pb.go        # Generated Go code
-│   └── mining_grpc.pb.go   # Generated gRPC code
-├── tools/                  # Analysis and reporting tools
-│   ├── generate_report.go  # Damage assessment report generator
-│   └── README.md           # Tools documentation
-├── bin/                    # Compiled binaries (generated)
-│   ├── server              # Mining pool server
-│   ├── client              # Go miner client
-│   └── generate_report     # Report generator
-├── certs/                  # TLS certificates (generated)
-│   ├── server.crt          # Server certificate
-│   └── server.key          # Server private key
-├── .github/workflows/      # CI/CD workflows
-│   ├── pre-commit.yaml     # Pre-commit checks
-│   ├── security.yaml       # Security scanning
-│   ├── release.yaml        # Release automation
-│   └── build-verification.yaml # Build & test verification
-├── Makefile                # Build automation
-├── go.mod                  # Go module definition
-├── go.sum                  # Go dependencies
-├── generate_certs.sh       # TLS certificate generator
-└── LICENSE                 # GPL-3.0 license
-```
-
-### Component Details
-
-#### 1. Blockchain (`server/blockchain.go`)
-
-SHA-256 proof-of-work blockchain with configurable difficulty.
-
-**Key Types:**
-
-- `Block` - Block with index, timestamp, data, hash, previous hash, nonce,
-  miner ID
-- `Blockchain` - Thread-safe blockchain with validation
-
-**Key Functions:**
-
-- `NewBlockchain(difficulty)` - Creates blockchain with genesis block
-- `AddBlock(block)` - Validates and adds a block
-- `ValidateChain()` - Validates blockchain integrity
-- `calculateHash(block)` - Computes SHA-256 hash
-
-**Difficulty:** Number of leading zeros in block hash (default: 4)
-
-#### 2. Mining Pool (`server/pool.go`)
-
-Manages miners, distributes work, processes submissions.
-
-**Key Types:**
-
-- `MinerRecord` - Miner info (ID, IP, hostname, stats)
-- `PendingWork` - Work assignments
-- `MiningPool` - Coordinates distribution
-
-**Features:**
-
-- Work queue
-- Stale block detection
-- Real-time statistics
-- 50 RTC block reward
-
-#### 3. gRPC Server (`server/grpc_server.go`)
-
-Protocol Buffer service for miner communication.
-
-**Flow:**
-
-1. Miner registers with IP/hostname
-2. Requests work
-3. Receives block template
-4. Computes hashes
-5. Submits solution
-6. Server validates and rewards
-
-#### 4. Web API (`server/api.go`)
-
-HTTP REST API and dashboard with token authentication.
-
-**Features:**
-
-- Real-time pool statistics
-- Active miner monitoring
-- Recent block history
-- Auto-refresh (5 seconds)
-
-#### 5. Client Miner (`client/main.go`)
-
-Automated mining client.
-
-**Features:**
-
-- Auto IP detection
-- Hostname logging
-- Hash rate calculation
-- Heartbeat (30s intervals)
-- Graceful shutdown
-
-**Hash:** `SHA256(index + timestamp + data + previousHash + nonce)`
-
-### Data Flow
-
-```text
-Client Miner                    Server
-    |                              |
-    |--RegisterMiner(IP,Hostname)->|
-    |<--RegistrationResponse-------|
-    |--GetWork()------------------>|
-    |<--WorkResponse(Block)--------|
-    | [Mining: compute hashes]     |
-    |--SubmitWork(nonce,hash)----->|
-    |                              | [Validate & Add]
-    |<--SubmissionResponse---------|
-    |--Heartbeat(stats)----------->|
-    |<--HeartbeatResponse----------|
-```
-
-### Concurrency
-
-- **Blockchain**: Thread-safe (`sync.RWMutex`)
-- **Mining Pool**: Thread-safe (`sync.RWMutex`)
-- **Work Generator**: Goroutine (30s intervals)
-- **Client Heartbeat**: Goroutine (30s intervals)
-- **Multiple Miners**: Fully supported
-
-### Performance
-
-- **Difficulty 4**: ~1-10 seconds/block (single CPU)
-- **Difficulty 5**: ~10-60 seconds/block
-- **Difficulty 6**: ~1-10 minutes/block
-
-Times vary by CPU performance and luck.
-
 ## Development
 
 ### Build Commands
@@ -801,17 +675,17 @@ cd client && go test -cover
 
 **What's tested:**
 
-- ✅ Blockchain validation and integrity
-- ✅ Block mining and proof-of-work
-- ✅ Mining pool work distribution
-- ✅ Miner registration and management
-- ✅ Server-side miner control (pause/resume/delete/throttle)
-- ✅ gRPC communication protocols
-- ✅ REST API endpoints and authentication
-- ✅ GPU device detection and initialization
-- ✅ Hash rate calculation and statistics
-- ✅ Concurrent operations and thread safety
-- ✅ Error handling and edge cases
+- Blockchain validation and integrity
+- Block mining and proof-of-work
+- Mining pool work distribution
+- Miner registration and management
+- Server-side miner control (pause/resume/delete/throttle)
+- gRPC communication protocols
+- REST API endpoints and authentication
+- GPU device detection and initialization
+- Hash rate calculation and statistics
+- Concurrent operations and thread safety
+- Error handling and edge cases
 
 **CI/CD Testing:**
 
@@ -842,8 +716,7 @@ make build-windows-opencl
 
 Creates `bin/client-windows-opencl.exe`
 
-See [WINDOWS_BUILD.md](WINDOWS_BUILD.md) for complete Windows build
-instructions including:
+See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) for complete Windows build instructions including:
 
 - Native Windows builds with GPU support
 - Cross-compilation setup from Linux
@@ -974,44 +847,87 @@ ss -an | grep 50051
 
 ## Documentation
 
+### User Guides
+
+- [docs/GPU_MINING.md](docs/GPU_MINING.md) - GPU mining with CUDA and OpenCL
+- [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) - Windows build guide (native
+  and cross-compilation)
+- [docs/TLS_SETUP.md](docs/TLS_SETUP.md) - HTTPS/TLS configuration
 - [java-client/README.md](java-client/README.md) - Java gRPC client (headless miner)
-- [WINDOWS_BUILD.md](WINDOWS_BUILD.md) - Windows build guide (native and cross-compilation)
-- [GPU_MINING.md](GPU_MINING.md) - GPU mining with CUDA and OpenCL
-- [REMOTE_SERVER_SETUP.md](REMOTE_SERVER_SETUP.md) - Remote server configuration
-- [TLS_SETUP.md](TLS_SETUP.md) - HTTPS/TLS configuration
-- [tools/README.md](tools/README.md) - Analysis tools and reports
+- [tools/README.md](tools/README.md) - Analysis tools and damage reports
+
+### Technical References
+
+- [docs/WORKFLOWS.md](docs/WORKFLOWS.md) - CI/CD workflows and development processes
+
+### Examples
+
+- [docs/examples/](docs/examples/) - Sample reports and usage examples
+
+## Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and add tests
+4. Run the test suite: `make test`
+5. Commit your changes: `git commit -m 'Add amazing feature'`
+6. Push to the branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/RedTeamCoin.git
+cd RedTeamCoin
+
+# Install dependencies
+make install-tools
+make deps
+
+# Run tests
+make test
+
+# Build and test locally
+make build
+make run-server  # Terminal 1
+make run-client  # Terminal 2
+```
+
+### Code Guidelines
+
+- Follow Go standard formatting (`gofmt`)
+- Add unit tests for new functionality
+- Update documentation for user-facing changes
+- Ensure all CI checks pass before submitting PR
 
 ## Security Note
 
-This is a **demonstration/educational project** for understanding blockchain
-and cryptocurrency concepts. It is not intended for production use and lacks
-many features required for a real cryptocurrency (cryptographic signatures,
-wallets, transaction validation, etc.).
+This is a **demonstration/educational project** for authorized security testing
+and red team operations. It is intended for:
+
+- Authorized penetration testing engagements
+- Security control validation
+- Detection capability assessment
+- Educational and training purposes
+
+This tool is not intended for production use as a real cryptocurrency and
+lacks many features required for a production system (cryptographic signatures,
+wallets, transaction validation, network consensus, etc.).
+
+**Use only with explicit authorization on systems you own or have permission to test.**
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
+This project is licensed under the GNU General Public License v3.0 - see the
+[LICENSE](LICENSE) file for details.
 
-### GNU General Public License v3.0
+## Acknowledgments
 
-Copyright (C) 2024 RedTeamCoin Contributors
+**Created by:**
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-### Educational Purpose
-
-This project is intended for educational and demonstration purposes to
-understand blockchain and cryptocurrency concepts. It is not intended for
-production use and lacks many features required for a real cryptocurrency
-(cryptographic signatures, wallets, transaction validation, etc.).
+- Peter Greko
+- Luciano Krigun
+- Jayson Grace ([@l50](https://github.com/l50))

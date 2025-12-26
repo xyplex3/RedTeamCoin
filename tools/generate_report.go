@@ -14,14 +14,19 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"text/template"
 	"time"
 )
+
+//go:embed templates/report_template.tmpl
+var reportTemplate string
 
 // LogEntry represents a single event logged by the mining pool server.
 // Events include miner registration, blocks mined, and control actions.
@@ -400,110 +405,9 @@ func generateReportFilename(startDate, endDate time.Time) string {
 	return fmt.Sprintf("Report_Miner_Activity_from_%s_to_%s.md", startStr, endStr)
 }
 
-// writeMarkdownReport generates a detailed Markdown-formatted impact
-// assessment report and writes it to the specified file. The report includes
-// executive summary, resource consumption analysis, performance impact,
-// infrastructure damage assessment, security implications, financial impact,
-// and detailed system-by-system analysis with recommendations.
-func writeMarkdownReport(filename string, report *SystemImpactReport) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
-	root, err := os.OpenRoot(cwd)
-	if err != nil {
-		return fmt.Errorf("failed to open root directory: %w", err)
-	}
-	defer root.Close()
-
-	f, err := root.Create(filepath.Base(filename))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Write report header
-	fmt.Fprintf(f, "# Cryptocurrency Mining Impact Assessment Report\n\n")
-	fmt.Fprintf(f, "**Report Generated:** %s\n\n", report.ReportGeneratedAt.Format("2006-01-02 15:04:05 MST"))
-	fmt.Fprintf(f, "**Analysis Period:** %s to %s (%s)\n\n",
-		report.StartDate.Format("2006-01-02 15:04:05"),
-		report.EndDate.Format("2006-01-02 15:04:05"),
-		report.AnalysisPeriod)
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Executive Summary
-	fmt.Fprintf(f, "## Executive Summary\n\n")
-	fmt.Fprintf(f, "This report documents the impact of unauthorized cryptocurrency mining operations on company resources. ")
-	fmt.Fprintf(f, "The analysis covers **%d unique systems** across **%d unique IP addresses** that were actively participating in mining operations.\n\n",
-		report.TotalMiners, report.UniqueIPs)
-
-	// Key Findings
-	fmt.Fprintf(f, "### Key Findings\n\n")
-	fmt.Fprintf(f, "- **Total Mining Time:** %.2f hours (%.2f days)\n", report.TotalMiningHours, report.TotalMiningHours/24.0)
-	fmt.Fprintf(f, "- **Total Computational Work:** %s hashes computed\n", formatNumber(report.TotalHashes))
-	fmt.Fprintf(f, "- **Estimated Energy Consumption:** %.2f kWh\n", report.TotalEstimatedKWh)
-	fmt.Fprintf(f, "- **Estimated Electricity Cost:** $%.2f\n", report.TotalEstimatedCost)
-	fmt.Fprintf(f, "- **Blocks Mined:** %d\n", report.TotalBlocksMined)
-	fmt.Fprintf(f, "- **Systems with High CPU Usage (>80%%):** %d of %d (%.1f%%)\n",
-		report.MinersWithHighCPU, report.TotalMiners,
-		float64(report.MinersWithHighCPU)/float64(report.TotalMiners)*100.0)
-	fmt.Fprintf(f, "- **GPU Mining Enabled:** %d systems\n", report.MinersWithGPU)
-	fmt.Fprintf(f, "- **Hybrid CPU+GPU Mining:** %d systems\n\n", report.MinersWithHybrid)
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Resource Consumption Analysis
-	fmt.Fprintf(f, "## 1. Resource Consumption Analysis\n\n")
-
-	fmt.Fprintf(f, "### Compute Power Impact\n\n")
-	fmt.Fprintf(f, "The unauthorized mining operations consumed significant computational resources:\n\n")
-	fmt.Fprintf(f, "- **Average System CPU Utilization:** %.1f%%\n", report.AvgSystemCPUUsage)
-	fmt.Fprintf(f, "- **Peak CPU Utilization Observed:** %.1f%%\n", report.PeakSystemCPUUsage)
-	fmt.Fprintf(f, "- **Total CPU-Hours Consumed:** %.2f hours\n", report.TotalMiningHours)
-	fmt.Fprintf(f, "- **Mining Type Distribution:**\n")
-	fmt.Fprintf(f, "  - CPU Only: %d systems\n", report.TotalMiners-report.MinersWithGPU)
-	fmt.Fprintf(f, "  - GPU Accelerated: %d systems\n", report.MinersWithGPU-report.MinersWithHybrid)
-	fmt.Fprintf(f, "  - Hybrid CPU+GPU: %d systems\n\n", report.MinersWithHybrid)
-
-	fmt.Fprintf(f, "**Impact:** Mining operations typically maximize processor utilization, severely degrading performance for legitimate workloads. ")
-	fmt.Fprintf(f, "Systems experiencing >80%% CPU usage would have experienced significant slowdowns, delayed processing times, and poor user experience.\n\n")
-
-	fmt.Fprintf(f, "### Electricity Consumption\n\n")
-	fmt.Fprintf(f, "- **Total Energy Consumed:** %.2f kWh\n", report.TotalEstimatedKWh)
-	fmt.Fprintf(f, "- **Estimated Cost:** $%.2f (at $%.3f per kWh)\n", report.TotalEstimatedCost, electricityCostPer)
-	fmt.Fprintf(f, "- **Daily Average:** %.2f kWh/day ($%.2f/day)\n\n",
-		report.TotalEstimatedKWh/(report.TotalMiningHours/24.0),
-		report.TotalEstimatedCost/(report.TotalMiningHours/24.0))
-
-	fmt.Fprintf(f, "**Methodology:** Energy estimates based on average CPU power consumption of %.0fW and GPU power consumption of %.0fW under sustained load, ",
-		avgCPUPowerWatts, avgGPUPowerWatts)
-	fmt.Fprintf(f, "adjusted for actual CPU utilization percentages.\n\n")
-
-	fmt.Fprintf(f, "**Impact:** Continuous high-utilization operations result in substantial electricity costs. This represents pure waste, as the computational work provided no business value.\n\n")
-
-	fmt.Fprintf(f, "### Network Impact\n\n")
-	fmt.Fprintf(f, "- **Total Blocks Mined:** %d\n", report.TotalBlocksMined)
-	fmt.Fprintf(f, "- **Mining Pool Connections:** Persistent connections to external mining pool infrastructure\n")
-	fmt.Fprintf(f, "- **Data Transfer:** Ongoing work requests and solution submissions\n\n")
-
-	fmt.Fprintf(f, "**Impact:** While mining is not extremely bandwidth-intensive, it generates persistent outbound connections that may have bypassed security monitoring and created potential data exfiltration channels.\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Performance Impact
-	fmt.Fprintf(f, "## 2. Performance Impact Assessment\n\n")
-
-	fmt.Fprintf(f, "### System Degradation\n\n")
-	fmt.Fprintf(f, "Based on CPU utilization levels, affected systems experienced the following performance impacts:\n\n")
-
-	// Categorize systems by impact
-	critical := 0
-	high := 0
-	moderate := 0
-	low := 0
-	for _, stats := range report.MinerStats {
+// categorizeImpact categorizes miners by CPU usage impact level and returns counts.
+func categorizeImpact(miners []MinerImpactStats) (critical, high, moderate, low int) {
+	for _, stats := range miners {
 		switch {
 		case stats.AvgCPUUsage >= 90:
 			critical++
@@ -515,243 +419,104 @@ func writeMarkdownReport(filename string, report *SystemImpactReport) error {
 			low++
 		}
 	}
+	return
+}
 
-	fmt.Fprintf(f, "| Impact Level | Systems | CPU Usage Range | Expected User Experience |\n")
-	fmt.Fprintf(f, "|--------------|---------|-----------------|---------------------------|\n")
-	fmt.Fprintf(f, "| **CRITICAL** | %d | 90-100%% | System severely degraded, frequent hangs, near-unusable |\n", critical)
-	fmt.Fprintf(f, "| **HIGH** | %d | 70-89%% | Significant slowdowns, delayed response times |\n", high)
-	fmt.Fprintf(f, "| **MODERATE** | %d | 50-69%% | Noticeable performance reduction, slower operations |\n", moderate)
-	fmt.Fprintf(f, "| **LOW** | %d | 0-49%% | Minor impact, occasional slowdowns |\n\n", low)
-
-	fmt.Fprintf(f, "### Service Availability\n\n")
-	fmt.Fprintf(f, "**Productivity Loss:** Users on affected systems would have experienced:\n")
-	fmt.Fprintf(f, "- Increased application load times\n")
-	fmt.Fprintf(f, "- Slower document processing and file operations\n")
-	fmt.Fprintf(f, "- Delayed response to user input\n")
-	fmt.Fprintf(f, "- Potential application timeouts or crashes due to resource starvation\n")
-	fmt.Fprintf(f, "- Reduced multitasking capability\n\n")
-
-	fmt.Fprintf(f, "**Business Impact:** For systems categorized as HIGH or CRITICAL impact (%d systems), ", critical+high)
-	fmt.Fprintf(f, "productivity loss likely reached 40-70%%, representing significant business disruption.\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Infrastructure Damage
-	fmt.Fprintf(f, "## 3. Infrastructure Damage Assessment\n\n")
-
-	fmt.Fprintf(f, "### Hardware Wear and Lifespan Impact\n\n")
-	fmt.Fprintf(f, "Sustained high-utilization mining operations accelerate hardware degradation:\n\n")
-
-	fmt.Fprintf(f, "**Component Stress:**\n")
-	fmt.Fprintf(f, "- **Processors (CPU/GPU):** Running at maximum load for %.2f total hours\n", report.TotalMiningHours)
-	fmt.Fprintf(f, "- **Cooling Systems:** Fans running at maximum speed to dissipate heat\n")
-	fmt.Fprintf(f, "- **Power Supplies:** Operating under continuous high load\n")
-	fmt.Fprintf(f, "- **Motherboards:** Sustained high current draw through VRM components\n\n")
-
-	fmt.Fprintf(f, "**Expected Lifespan Reduction:**\n")
-	fmt.Fprintf(f, "- Normal enterprise hardware lifespan: 5-7 years\n")
-	fmt.Fprintf(f, "- Estimated lifespan reduction from sustained mining: 20-40%%\n")
-	fmt.Fprintf(f, "- Accelerated replacement costs for %d affected systems\n\n", report.TotalMiners)
-
-	fmt.Fprintf(f, "### Thermal Stress\n\n")
-	fmt.Fprintf(f, "**Risk Factors:**\n")
-	fmt.Fprintf(f, "- Sustained high temperatures degrade silicon and solder joints\n")
-	fmt.Fprintf(f, "- Increased risk of thermal shutdowns and component failure\n")
-	fmt.Fprintf(f, "- Potential for thermal paste degradation requiring maintenance\n")
-	fmt.Fprintf(f, "- Systems with GPU mining (%d systems) face additional thermal stress\n\n", report.MinersWithGPU)
-
-	fmt.Fprintf(f, "**Recommendation:** All affected systems should undergo thermal inspection and preventive maintenance, including thermal paste replacement and cooling system verification.\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Security Implications
-	fmt.Fprintf(f, "## 4. Security Implications\n\n")
-
-	fmt.Fprintf(f, "### Breach Indicators\n\n")
-	fmt.Fprintf(f, "The presence of cryptocurrency mining software indicates a security compromise:\n\n")
-
-	fmt.Fprintf(f, "**Affected Infrastructure:**\n")
-	fmt.Fprintf(f, "- **Total Compromised Systems:** %d\n", report.TotalMiners)
-	fmt.Fprintf(f, "- **Unique Hostnames:** %d\n", report.UniqueHosts)
-	fmt.Fprintf(f, "- **Unique IP Addresses:** %d\n", report.UniqueIPs)
-	fmt.Fprintf(f, "- **Mining Period:** %s\n\n", report.AnalysisPeriod)
-
-	fmt.Fprintf(f, "**Deployment Vectors (Requires Investigation):**\n")
-	fmt.Fprintf(f, "- Malware infection (trojan, worm, or targeted attack)\n")
-	fmt.Fprintf(f, "- Compromised credentials (employee accounts or service accounts)\n")
-	fmt.Fprintf(f, "- Insider threat (authorized user deploying unauthorized software)\n")
-	fmt.Fprintf(f, "- Supply chain compromise (infected software or updates)\n")
-	fmt.Fprintf(f, "- Vulnerable services or unpatched systems\n\n")
-
-	fmt.Fprintf(f, "### Persistence Mechanisms\n\n")
-	fmt.Fprintf(f, "**Operational Characteristics:**\n")
-	fmt.Fprintf(f, "- Mining clients maintained persistent connections to external pool servers\n")
-	fmt.Fprintf(f, "- Total operational time: %.2f hours suggests robust persistence mechanisms\n", report.TotalMiningHours)
-	fmt.Fprintf(f, "- Systems likely configured for auto-start and restart after interruption\n\n")
-
-	fmt.Fprintf(f, "**Access Level:**\n")
-	fmt.Fprintf(f, "- Mining software requires sufficient privileges to consume resources\n")
-	fmt.Fprintf(f, "- Likely has user-level or higher access on all %d affected systems\n", report.TotalMiners)
-	fmt.Fprintf(f, "- Potential for lateral movement if network credentials were compromised\n\n")
-
-	fmt.Fprintf(f, "**Broader Exposure Risk:**\n")
-	fmt.Fprintf(f, "- If mining software was deployed via compromised credentials, attacker may still have access\n")
-	fmt.Fprintf(f, "- Systems should be forensically analyzed for additional malware or backdoors\n")
-	fmt.Fprintf(f, "- Network traffic logs should be reviewed for data exfiltration attempts\n")
-	fmt.Fprintf(f, "- All affected systems require credential rotation and security hardening\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Financial Impact Summary
-	fmt.Fprintf(f, "## 5. Financial Impact Summary\n\n")
-
-	fmt.Fprintf(f, "### Direct Costs\n\n")
-	fmt.Fprintf(f, "| Cost Category | Estimated Amount | Notes |\n")
-	fmt.Fprintf(f, "|---------------|------------------|-------|\n")
-	fmt.Fprintf(f, "| Electricity Costs | $%.2f | Based on %.2f kWh at $%.3f/kWh |\n",
-		report.TotalEstimatedCost, report.TotalEstimatedKWh, electricityCostPer)
-	fmt.Fprintf(f, "| Accelerated Hardware Replacement | $%s | Estimated 20-40%% lifespan reduction |\n",
-		estimateHardwareReplacement(report.TotalMiners))
-	fmt.Fprintf(f, "| Incident Response | $%s | Security investigation, forensics, remediation |\n",
-		estimateIncidentResponse(report.TotalMiners))
-	fmt.Fprintf(f, "| System Maintenance | $%s | Thermal inspection, cleaning, repairs |\n",
-		estimateMaintenance(report.TotalMiners))
-
-	fmt.Fprintf(f, "\n### Indirect Costs\n\n")
-	fmt.Fprintf(f, "**Productivity Loss:**\n")
-	fmt.Fprintf(f, "- %d systems experienced significant performance degradation\n", critical+high)
-	fmt.Fprintf(f, "- Estimated productivity loss: 40-70%% on severely affected systems\n")
-	fmt.Fprintf(f, "- User time wasted on slow systems and rework\n\n")
-
-	fmt.Fprintf(f, "**Operational Impact:**\n")
-	fmt.Fprintf(f, "- IT staff time spent investigating and remediating\n")
-	fmt.Fprintf(f, "- Potential SLA violations if critical services were affected\n")
-	fmt.Fprintf(f, "- Management time spent on incident response coordination\n\n")
-
-	fmt.Fprintf(f, "**Reputational Risk:**\n")
-	fmt.Fprintf(f, "- Security breach may require disclosure depending on industry regulations\n")
-	fmt.Fprintf(f, "- Potential loss of customer confidence\n")
-	fmt.Fprintf(f, "- Regulatory implications if sensitive data was accessed\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Detailed System-by-System Analysis
-	fmt.Fprintf(f, "## 6. Detailed System-by-System Impact Analysis\n\n")
-	fmt.Fprintf(f, "The following table shows impact metrics for each compromised system, sorted by estimated cost (highest impact first):\n\n")
-
-	fmt.Fprintf(f, "| Hostname | IP Address | Mining Type | Mining Time | Avg CPU | Hashes | Blocks | Est. kWh | Est. Cost | Impact Level |\n")
-	fmt.Fprintf(f, "|----------|------------|-------------|-------------|---------|--------|--------|----------|-----------|---------------|\n")
-
-	for _, stats := range report.MinerStats {
-		ipDisplay := stats.IPAddress
-		if stats.IPAddressActual != "" && stats.IPAddressActual != stats.IPAddress {
-			ipDisplay = fmt.Sprintf("%s (%s)", stats.IPAddress, stats.IPAddressActual)
-		}
-
-		fmt.Fprintf(f, "| %s | %s | %s | %.1fh | %.1f%% | %s | %d | %.2f | $%.2f | %s |\n",
-			truncate(stats.Hostname, 20),
-			truncate(ipDisplay, 25),
-			stats.MiningType,
-			stats.TotalMiningTime.Hours(),
-			stats.AvgCPUUsage,
-			formatNumberShort(stats.TotalHashes),
-			stats.BlocksMined,
-			stats.EstimatedKWh,
-			stats.EstimatedCost,
-			getImpactLevel(stats.AvgCPUUsage))
+// writeMarkdownReport generates a detailed Markdown-formatted impact
+// assessment report and writes it to the specified file using Go templates.
+func writeMarkdownReport(filename string, report *SystemImpactReport) error {
+	// Validate that filename is a simple basename without path separators
+	cleanName := filepath.Clean(filename)
+	if cleanName == "." || cleanName == ".." || cleanName != filepath.Base(cleanName) {
+		return fmt.Errorf("invalid report filename %q: must be a simple filename without path separators", filename)
 	}
 
-	fmt.Fprintf(f, "\n")
-
-	fmt.Fprintf(f, "### Top 10 Highest Impact Systems\n\n")
-	count := 10
-	if len(report.MinerStats) < 10 {
-		count = len(report.MinerStats)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	for i := 0; i < count; i++ {
-		stats := report.MinerStats[i]
-		fmt.Fprintf(f, "#### %d. %s\n\n", i+1, stats.Hostname)
-		fmt.Fprintf(f, "- **IP Address:** %s", stats.IPAddress)
-		if stats.IPAddressActual != "" && stats.IPAddressActual != stats.IPAddress {
-			fmt.Fprintf(f, " (Actual: %s)", stats.IPAddressActual)
-		}
-		fmt.Fprintf(f, "\n")
-		fmt.Fprintf(f, "- **Mining Type:** %s\n", stats.MiningType)
-		fmt.Fprintf(f, "- **First Seen:** %s\n", stats.FirstSeen.Format("2006-01-02 15:04:05"))
-		fmt.Fprintf(f, "- **Last Seen:** %s\n", stats.LastSeen.Format("2006-01-02 15:04:05"))
-		fmt.Fprintf(f, "- **Total Mining Time:** %s\n", formatDuration(stats.TotalMiningTime))
-		fmt.Fprintf(f, "- **Average CPU Usage:** %.1f%%\n", stats.AvgCPUUsage)
-		fmt.Fprintf(f, "- **Total Hashes Computed:** %s\n", formatNumber(stats.TotalHashes))
-		fmt.Fprintf(f, "- **Blocks Mined:** %d\n", stats.BlocksMined)
-		fmt.Fprintf(f, "- **Estimated Energy:** %.2f kWh\n", stats.EstimatedKWh)
-		fmt.Fprintf(f, "- **Estimated Cost:** $%.2f\n", stats.EstimatedCost)
-		fmt.Fprintf(f, "- **Impact Assessment:** %s\n\n", stats.ComputeImpact)
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("failed to open root directory: %w", err)
+	}
+	defer root.Close()
+
+	f, err := root.Create(cleanName)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Categorize systems by impact
+	critical, high, moderate, low := categorizeImpact(report.MinerStats)
+
+	// Prepare template data
+	data := struct {
+		*SystemImpactReport
+		Critical              int
+		High                  int
+		Moderate              int
+		Low                   int
+		CPUPowerWatts         float64
+		GPUPowerWatts         float64
+		ElectricityCostPer    float64
+		HardwareReplacement   string
+		IncidentResponse      string
+		Maintenance           string
+		HighCPUPercent        float64
+		CPUOnlySystems        int
+		GPUAcceleratedSystems int
+		DailyAvgKWh           float64
+		DailyAvgCost          float64
+		Top10Count            int
+		FormatNumber          func(int64) string
+		FormatNumberShort     func(int64) string
+		FormatDuration        func(time.Duration) string
+		Truncate              func(string, int) string
+		GetImpactLevel        func(float64) string
+		FormatTime            func(time.Time) string
+	}{
+		SystemImpactReport:    report,
+		Critical:              critical,
+		High:                  high,
+		Moderate:              moderate,
+		Low:                   low,
+		CPUPowerWatts:         avgCPUPowerWatts,
+		GPUPowerWatts:         avgGPUPowerWatts,
+		ElectricityCostPer:    electricityCostPer,
+		HardwareReplacement:   estimateHardwareReplacement(report.TotalMiners),
+		IncidentResponse:      estimateIncidentResponse(report.TotalMiners),
+		Maintenance:           estimateMaintenance(report.TotalMiners),
+		HighCPUPercent:        float64(report.MinersWithHighCPU) / float64(report.TotalMiners) * 100.0,
+		CPUOnlySystems:        report.TotalMiners - report.MinersWithGPU,
+		GPUAcceleratedSystems: report.MinersWithGPU - report.MinersWithHybrid,
+		DailyAvgKWh:           report.TotalEstimatedKWh / (report.TotalMiningHours / 24.0),
+		DailyAvgCost:          report.TotalEstimatedCost / (report.TotalMiningHours / 24.0),
+		Top10Count:            min(10, len(report.MinerStats)),
+		FormatNumber:          formatNumber,
+		FormatNumberShort:     formatNumberShort,
+		FormatDuration:        formatDuration,
+		Truncate:              truncate,
+		GetImpactLevel:        getImpactLevel,
+		FormatTime:            func(t time.Time) string { return t.Format("2006-01-02 15:04:05") },
 	}
 
-	fmt.Fprintf(f, "---\n\n")
+	// Create template with custom functions
+	funcMap := template.FuncMap{
+		"add":   func(a, b int) int { return a + b },
+		"divf":  func(a, b float64) float64 { return a / b },
+		"slice": func(s []MinerImpactStats, start, end int) []MinerImpactStats { return s[start:end] },
+	}
 
-	// Recommendations
-	fmt.Fprintf(f, "## 7. Recommendations and Next Steps\n\n")
+	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
 
-	fmt.Fprintf(f, "### Immediate Actions (Within 24 Hours)\n\n")
-	fmt.Fprintf(f, "1. **Isolate affected systems** - Disconnect all %d compromised systems from the network\n", report.TotalMiners)
-	fmt.Fprintf(f, "2. **Terminate mining processes** - Stop all cryptocurrency mining operations\n")
-	fmt.Fprintf(f, "3. **Preserve evidence** - Take forensic images of critical systems before remediation\n")
-	fmt.Fprintf(f, "4. **Reset credentials** - Force password reset for all user accounts on affected systems\n")
-	fmt.Fprintf(f, "5. **Review network logs** - Analyze traffic for data exfiltration or lateral movement\n\n")
-
-	fmt.Fprintf(f, "### Short-Term Actions (Within 1 Week)\n\n")
-	fmt.Fprintf(f, "1. **Forensic analysis** - Conduct detailed investigation to determine breach vector\n")
-	fmt.Fprintf(f, "2. **Malware removal** - Clean or reimage all %d affected systems\n", report.TotalMiners)
-	fmt.Fprintf(f, "3. **Security patching** - Apply all critical security updates across infrastructure\n")
-	fmt.Fprintf(f, "4. **Deploy EDR/monitoring** - Install endpoint detection and response tools\n")
-	fmt.Fprintf(f, "5. **Network segmentation** - Review and implement proper network isolation\n")
-	fmt.Fprintf(f, "6. **User awareness** - Brief employees on the incident and security best practices\n\n")
-
-	fmt.Fprintf(f, "### Long-Term Actions (Within 1 Month)\n\n")
-	fmt.Fprintf(f, "1. **Security audit** - Comprehensive review of all security controls\n")
-	fmt.Fprintf(f, "2. **Hardware inspection** - Thermal analysis and preventive maintenance on affected systems\n")
-	fmt.Fprintf(f, "3. **Policy enforcement** - Implement application whitelisting and stricter security policies\n")
-	fmt.Fprintf(f, "4. **Monitoring enhancement** - Deploy outbound connection monitoring for mining pool traffic\n")
-	fmt.Fprintf(f, "5. **Backup verification** - Ensure backups are clean and not compromised\n")
-	fmt.Fprintf(f, "6. **Incident response plan** - Update IR procedures based on lessons learned\n\n")
-
-	fmt.Fprintf(f, "### Preventive Measures\n\n")
-	fmt.Fprintf(f, "- Implement application whitelisting to prevent unauthorized software execution\n")
-	fmt.Fprintf(f, "- Deploy network monitoring to detect mining pool connections\n")
-	fmt.Fprintf(f, "- Enable CPU usage alerting to detect abnormal resource consumption\n")
-	fmt.Fprintf(f, "- Enforce principle of least privilege for user accounts\n")
-	fmt.Fprintf(f, "- Regular security awareness training for all employees\n")
-	fmt.Fprintf(f, "- Maintain aggressive patch management schedule\n\n")
-
-	fmt.Fprintf(f, "---\n\n")
-
-	// Appendix
-	fmt.Fprintf(f, "## Appendix\n\n")
-
-	fmt.Fprintf(f, "### Methodology and Assumptions\n\n")
-	fmt.Fprintf(f, "**Data Source:** Mining pool server log file (`pool_log.json`)\n\n")
-	fmt.Fprintf(f, "**Energy Consumption Calculations:**\n")
-	fmt.Fprintf(f, "- CPU Power Consumption: %.0fW average under full load\n", avgCPUPowerWatts)
-	fmt.Fprintf(f, "- GPU Power Consumption: %.0fW average under full load\n", avgGPUPowerWatts)
-	fmt.Fprintf(f, "- Hybrid Mode: Combined CPU + GPU power consumption\n")
-	fmt.Fprintf(f, "- Adjusted by actual CPU usage percentage for CPU-only systems\n")
-	fmt.Fprintf(f, "- Electricity rate: $%.3f per kWh\n\n", electricityCostPer)
-
-	fmt.Fprintf(f, "**Impact Level Classifications:**\n")
-	fmt.Fprintf(f, "- CRITICAL: CPU usage ≥90%%\n")
-	fmt.Fprintf(f, "- HIGH: CPU usage 70-89%%\n")
-	fmt.Fprintf(f, "- MODERATE: CPU usage 50-69%%\n")
-	fmt.Fprintf(f, "- LOW: CPU usage <50%%\n\n")
-
-	fmt.Fprintf(f, "### Unique Systems Breakdown\n\n")
-	fmt.Fprintf(f, "- **Total Unique Miners:** %d\n", report.TotalMiners)
-	fmt.Fprintf(f, "- **Unique Hostnames:** %d\n", report.UniqueHosts)
-	fmt.Fprintf(f, "- **Unique IP Addresses:** %d\n\n", report.UniqueIPs)
-
-	fmt.Fprintf(f, "---\n\n")
-	fmt.Fprintf(f, "*End of Report*\n")
+	if err := tmpl.Execute(f, data); err != nil {
+		return fmt.Errorf("failed to execute template: %w", err)
+	}
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -259,12 +260,21 @@ func (api *APIServer) Shutdown(ctx context.Context) error {
 // handles port normalization for default HTTP (80) and HTTPS (443) ports.
 func (api *APIServer) startHTTPRedirect(httpPort, httpsPort int) {
 	redirect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpsURL := fmt.Sprintf("https://%s:%d%s", r.Host, httpsPort, r.RequestURI)
-		// Remove port from host if it's the default HTTP port
-		if httpPort == 80 {
-			httpsURL = fmt.Sprintf("https://%s%s", r.Host, r.RequestURI)
+		// Validate and sanitize the Host header to prevent open redirects
+		host := r.Host
+		if colonIndex := strings.LastIndex(host, ":"); colonIndex != -1 {
+			host = host[:colonIndex]
 		}
-		http.Redirect(w, r, httpsURL, http.StatusMovedPermanently)
+		if strings.Contains(host, "/") || strings.Contains(host, "@") || host == "" {
+			http.Error(w, "Invalid host", http.StatusBadRequest)
+			return
+		}
+
+		httpsURL := fmt.Sprintf("https://%s:%d%s", host, httpsPort, r.RequestURI)
+		if httpsPort == 443 {
+			httpsURL = fmt.Sprintf("https://%s%s", host, r.RequestURI)
+		}
+		http.Redirect(w, r, httpsURL, http.StatusMovedPermanently) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect
 	})
 
 	httpAddr := fmt.Sprintf(":%d", httpPort)

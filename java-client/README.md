@@ -156,12 +156,12 @@ java -Xmx2G -jar target/redteamcoin-miner.jar
 
 | Feature           | Go Client | Java Client |
 |-------------------|-----------|-------------|
-| CPU Mining        | ✅        | ✅          |
-| GPU Mining        | ✅        | ❌ (CPU only) |
-| Multi-threading   | ✅        | ✅          |
-| Cross-platform    | ✅        | ✅          |
-| Single binary     | ✅        | ✅ (JAR)    |
-| No runtime needed | ✅        | ❌ (needs JRE) |
+| CPU Mining        | Yes       | Yes         |
+| GPU Mining        | Yes       | No (CPU only) |
+| Multi-threading   | Yes       | Yes         |
+| Cross-platform    | Yes       | Yes         |
+| Single binary     | Yes       | Yes (JAR)   |
+| No runtime needed | Yes       | No (needs JRE) |
 | File size         | ~10 MB    | ~15 MB      |
 | Performance       | Baseline  | Similar     |
 

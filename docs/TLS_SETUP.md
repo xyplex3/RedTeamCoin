@@ -227,13 +227,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 The included certificate generation script creates **self-signed certificates**:
 
-**✓ Pros:**
+**Pros:**
 
 - Free and easy to generate
 - Provides encryption for development/testing
 - No external dependencies
 
-**✗ Cons:**
+**Cons:**
 
 - Not trusted by browsers (shows warnings)
 - Not suitable for production

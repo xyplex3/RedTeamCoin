@@ -22,7 +22,7 @@ using an isolated, non-public blockchain.
 
 - [Overview](#overview)
 - [Features](#features)
-- [Why Should I Run This Simulation](#Why-Should-I-Run-This-Simulation)
+- [Why](#Why)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
 - [Usage](#usage)
@@ -69,7 +69,7 @@ three main components:
 - **Auto-Termination**: Miners automatically shut down and self-delete when
   removed from the server
 
-## Why Should I Run This Simulation
+## Why
 
 Organizations typically use several methods to detect and prevent cryptocurrency
 mining on their networks, with traffic monitoring and blocking being a primary

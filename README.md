@@ -16,7 +16,7 @@ using an isolated, non-public blockchain.
 
 **Created by:**
 
-- Peter Greko, Luciano Krigun, and Jayson Grace (@l50)
+- Peter Greko, Luciano Krigun, and Jayson Grace [@l50](https://github.com/l50)
 
 ## Table of Contents
 

@@ -1,13 +1,18 @@
 # RedTeamCoin
 
-A realistic cryptocurrency mining pool for authorized security testing and red team operations.
-
 [![License](https://img.shields.io/github/license/xyplex3/RedTeamCoin?label=License&style=flat&color=blue&logo=github)](https://github.com/xyplex3/RedTeamCoin/blob/main/LICENSE)
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
-[![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
+[![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml
+
+RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed for authorized security testing and red team operations. Built in Go with Java client support, it simulates real-world cryptomining attacks to help organizations assess their detection capabilities and quantify potential damage from threat actor mining operations.
+
+This tool enables security teams to safely and legally demonstrate cryptomining attack scenarios on corporate systems, generate comprehensive impact reports, and validate security controls—all within a controlled environment using an isolated, non-public blockchain.
+
+**Created by:**
+- Peter Greko (Xyplex2), Luciano Krigun, and Jayson Grace (@l50).
 
 ## Table of Contents
 

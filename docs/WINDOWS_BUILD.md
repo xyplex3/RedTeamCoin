@@ -231,11 +231,11 @@ client.exe -s mining-pool.example.com:50051
 
 ```powershell
 # PowerShell
-$env:POOL_SERVER = "192.168.1.100:50051"
+$env:RTC_CLIENT_SERVER_ADDRESS = "192.168.1.100:50051"
 client.exe
 
 # Command Prompt
-set POOL_SERVER=192.168.1.100:50051
+set RTC_CLIENT_SERVER_ADDRESS=192.168.1.100:50051
 client.exe
 ```
 
@@ -250,16 +250,16 @@ client.exe
 
 ```powershell
 # Connect to remote server with GPU mining enabled
-$env:GPU_MINING = "true"
+$env:RTC_CLIENT_MINING_GPU_ENABLED = "true"
 client.exe -server mining-pool.example.com:50051
 
 # Connect with hybrid CPU+GPU mode
-$env:HYBRID_MINING = "true"
-$env:GPU_MINING = "true"
+$env:RTC_CLIENT_MINING_HYBRID_MODE = "true"
+$env:RTC_CLIENT_MINING_GPU_ENABLED = "true"
 client.exe -s 192.168.1.100:50051
 
 # Connect with CPU only (disable GPU)
-$env:GPU_MINING = "false"
+$env:RTC_CLIENT_MINING_GPU_ENABLED = "false"
 client.exe -server 192.168.1.100:50051
 ```
 
@@ -347,23 +347,23 @@ export RTC_AUTH_TOKEN="your-strong-custom-token-here"
 
 **Client Configuration:**
 
-- `POOL_SERVER` - Server address (default: `localhost:50051`)
-- `GPU_MINING` - Enable GPU mining (`true`/`false`, default: auto-detect)
-- `HYBRID_MINING` - Enable CPU+GPU hybrid mode (`true`/`false`, default: `false`)
+- `RTC_CLIENT_SERVER_ADDRESS` - Server address (default: `localhost:50051`)
+- `RTC_CLIENT_MINING_GPU_ENABLED` - Enable GPU mining (`true`/`false`, default: `true`)
+- `RTC_CLIENT_MINING_HYBRID_MODE` - Enable CPU+GPU hybrid mode (`true`/`false`, default: `false`)
 
 **Examples:**
 
 ```powershell
 # Disable GPU mining
-$env:GPU_MINING = "false"
+$env:RTC_CLIENT_MINING_GPU_ENABLED = "false"
 client.exe
 
 # Enable hybrid mode
-$env:HYBRID_MINING = "true"
+$env:RTC_CLIENT_MINING_HYBRID_MODE = "true"
 client.exe
 
 # Connect to specific server
-$env:POOL_SERVER = "192.168.1.100:50051"
+$env:RTC_CLIENT_SERVER_ADDRESS = "192.168.1.100:50051"
 client.exe
 ```
 
@@ -437,14 +437,14 @@ client.exe -server 192.168.1.100:50051
 
 **Low hash rate:**
 
-- Ensure GPU mining is enabled: `$env:GPU_MINING = "true"`
+- Ensure GPU mining is enabled: `$env:RTC_CLIENT_MINING_GPU_ENABLED = "true"`
 - Check GPU is being used (Task Manager → Performance → GPU)
-- Try hybrid mode: `$env:HYBRID_MINING = "true"`
+- Try hybrid mode: `$env:RTC_CLIENT_MINING_HYBRID_MODE = "true"`
 - Update GPU drivers
 
 **High CPU usage:**
 
-- Use GPU-only mode (don't enable HYBRID_MINING)
+- Use GPU-only mode (don't enable RTC_CLIENT_MINING_HYBRID_MODE)
 - Check CPU throttling is not set on server dashboard
 
 ## Building from Source - Complete Example
@@ -476,8 +476,8 @@ nvcc -c -m64 -O3 client/mine.cu -o client/mine.o
 go build -tags cuda -o bin/client.exe ./client
 
 # 5. Run client
-$env:POOL_SERVER = "192.168.1.100:50051"
-$env:GPU_MINING = "true"
+$env:RTC_CLIENT_SERVER_ADDRESS = "192.168.1.100:50051"
+$env:RTC_CLIENT_MINING_GPU_ENABLED = "true"
 .\bin\client.exe
 ```
 
@@ -490,7 +490,7 @@ $env:GPU_MINING = "true"
 - [ ] Server IP address known
 - [ ] Authentication token obtained from server console
 - [ ] Firewall rules allow port 50051 (gRPC)
-- [ ] GPU_MINING environment variable set (if using GPU)
+- [ ] RTC_CLIENT_MINING_GPU_ENABLED environment variable set (if using GPU)
 - [ ] Client built successfully
 - [ ] Connection tested to server
 

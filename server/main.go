@@ -125,25 +125,51 @@ func main() {
 
 	authToken := getAuthToken()
 
-	if cfg.TLS.Enabled {
-		if !fileExists(cfg.TLS.CertFile) || !fileExists(cfg.TLS.KeyFile) {
-			fmt.Printf("ERROR: TLS is enabled but certificates not found!\n")
-			fmt.Printf("  Certificate: %s (exists: %v)\n", cfg.TLS.CertFile, fileExists(cfg.TLS.CertFile))
-			fmt.Printf("  Private Key: %s (exists: %v)\n", cfg.TLS.KeyFile, fileExists(cfg.TLS.KeyFile))
-			fmt.Printf("\nGenerate certificates by running:\n")
-			fmt.Printf("  ./generate_certs.sh\n")
-			fmt.Printf("\nOr disable TLS in server-config.yaml\n")
-			os.Exit(1)
-		}
-	}
+	checkTLSCertificates(cfg)
 
+	blockchain, pool := initializeBlockchainAndPool(cfg)
+	initializeLogger(pool, blockchain, cfg)
+
+	go startGRPCServer(pool, cfg.Network.GRPCPort, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
+
+	api := NewAPIServer(context.Background(), pool, blockchain, authToken, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
+
+	protocol, port, redirectPort := determineServerPorts(cfg)
+
+	displayServerInfo(cfg, authToken, protocol, port)
+
+	setupConfigWatcher(cfg)
+
+	if err := api.Start(port, redirectPort); err != nil {
+		log.Fatalf("Failed to start API server: %v", err)
+	}
+}
+
+func checkTLSCertificates(cfg *config.ServerConfig) {
+	if !cfg.TLS.Enabled {
+		return
+	}
+	if fileExists(cfg.TLS.CertFile) && fileExists(cfg.TLS.KeyFile) {
+		return
+	}
+	fmt.Printf("ERROR: TLS is enabled but certificates not found!\n")
+	fmt.Printf("  Certificate: %s (exists: %v)\n", cfg.TLS.CertFile, fileExists(cfg.TLS.CertFile))
+	fmt.Printf("  Private Key: %s (exists: %v)\n", cfg.TLS.KeyFile, fileExists(cfg.TLS.KeyFile))
+	fmt.Printf("\nGenerate certificates by running:\n")
+	fmt.Printf("  ./generate_certs.sh\n")
+	fmt.Printf("\nOr disable TLS in server-config.yaml\n")
+	os.Exit(1)
+}
+
+func initializeBlockchainAndPool(cfg *config.ServerConfig) (*Blockchain, *MiningPool) {
 	fmt.Printf("Initializing blockchain with difficulty: %d\n", cfg.Mining.Difficulty)
 	blockchain := NewBlockchain(int32(cfg.Mining.Difficulty))
-
-	// Initialize mining pool
 	fmt.Println("Initializing mining pool...")
 	pool := NewMiningPool(blockchain)
+	return blockchain, pool
+}
 
+func initializeLogger(pool *MiningPool, blockchain *Blockchain, cfg *config.ServerConfig) {
 	exePath, err := os.Executable()
 	if err != nil {
 		log.Fatalf("Failed to get executable path: %v", err)
@@ -153,25 +179,35 @@ func main() {
 	logger := NewPoolLogger(pool, blockchain, logFile, cfg.Logging.UpdateInterval)
 	pool.SetLogger(logger)
 	logger.Start()
+}
 
-	go startGRPCServer(pool, cfg.Network.GRPCPort, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
-
-	api := NewAPIServer(context.Background(), pool, blockchain, authToken, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
-
-	protocol := "http"
-	port := cfg.Network.APIPort
-	redirectPort := 0
+func determineServerPorts(cfg *config.ServerConfig) (protocol string, port, redirectPort int) {
+	protocol = "http"
+	port = cfg.Network.HTTPPort
+	redirectPort = 0
 
 	if cfg.TLS.Enabled {
 		protocol = "https"
+		port = cfg.Network.APIPort
 		redirectPort = cfg.Network.HTTPPort
-	} else {
-		port = cfg.Network.HTTPPort
 	}
+	return
+}
 
+func displayServerInfo(cfg *config.ServerConfig, authToken, protocol string, port int) {
 	networkIPs := getNetworkIPs()
 
 	fmt.Printf("\nServer started successfully!\n")
+	displayGRPCInfo(cfg, networkIPs)
+	displayDashboardInfo(cfg, authToken, protocol, port, networkIPs)
+	displayAuthInfo(authToken)
+	displayTLSInfo(cfg)
+	fmt.Printf("================================\n")
+	fmt.Println("\nWaiting for miners to connect...")
+	fmt.Println()
+}
+
+func displayGRPCInfo(cfg *config.ServerConfig, networkIPs []string) {
 	fmt.Printf("- gRPC Server: Port %d (all network interfaces)\n", cfg.Network.GRPCPort)
 	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", cfg.Network.GRPCPort, cfg.Network.GRPCPort)
 	if len(networkIPs) > 0 {
@@ -184,6 +220,9 @@ func main() {
 		}
 		fmt.Printf("\n")
 	}
+}
+
+func displayDashboardInfo(cfg *config.ServerConfig, authToken, protocol string, port int, networkIPs []string) {
 	fmt.Printf("- Web Dashboard: %s://localhost:%d?token=%s\n", protocol, port, authToken)
 	if len(networkIPs) > 0 {
 		for _, ip := range networkIPs {
@@ -193,29 +232,110 @@ func main() {
 	if cfg.TLS.Enabled {
 		fmt.Printf("- HTTP Redirect: http://localhost:%d (redirects to HTTPS)\n", cfg.Network.HTTPPort)
 	}
+}
 
+func displayAuthInfo(authToken string) {
 	fmt.Printf("\n=== API Authentication Token ===\n")
 	fmt.Printf("Token: %s\n", authToken)
 	fmt.Printf("\nUse this token in the Authorization header:\n")
 	fmt.Printf("  Authorization: Bearer %s\n", authToken)
 	fmt.Printf("\nOr access the dashboard with the token in the URL (shown above)\n")
+}
 
+func displayTLSInfo(cfg *config.ServerConfig) {
 	if cfg.TLS.Enabled {
 		fmt.Printf("\n=== TLS/HTTPS Configuration ===\n")
 		fmt.Printf("TLS Enabled: Yes\n")
 		fmt.Printf("Note: Using self-signed certificate. Browsers will show a warning.\n")
 		fmt.Printf("To accept: Click 'Advanced' -> 'Proceed to localhost or the server IP address. '\n")
 	} else {
-		fmt.Printf("\nWARNING: TLS is disabled. Enable with: export RTC_USE_TLS=true\n")
+		fmt.Printf("\nWARNING: TLS is disabled. Enable with: export RTC_SERVER_TLS_ENABLED=true\n")
+	}
+}
+
+func setupConfigWatcher(cfg *config.ServerConfig) {
+	// Start config file watcher for hot-reload (non-blocking)
+	// Monitors the config file for changes and reports detected changes.
+	// Note: Most settings require a server restart to take full effect:
+	//   - Network ports (grpc_port, api_port, http_port)
+	//   - TLS settings (enabled, cert_file, key_file)
+	//   - Mining parameters (difficulty, block_reward)
+	//   - Logging configuration (update_interval, file_path)
+	//
+	// Future enhancement: Add runtime update support for non-critical settings.
+	go config.WatchServerConfig(configPath, func(newCfg *config.ServerConfig) {
+		handleConfigChange(cfg, newCfg)
+	})
+}
+
+func handleConfigChange(cfg, newCfg *config.ServerConfig) {
+	fmt.Println("\n=== Configuration File Changed ===")
+	changed := false
+
+	changed = checkPortChanges(cfg, newCfg) || changed
+	changed = checkMiningChanges(cfg, newCfg) || changed
+	changed = checkTLSChanges(cfg, newCfg) || changed
+	changed = checkLoggingChanges(cfg, newCfg) || changed
+
+	if changed {
+		fmt.Println("To apply changes, restart the server with: systemctl restart rtc-server")
+	} else {
+		fmt.Println("No relevant configuration changes detected")
 	}
 
-	fmt.Printf("================================\n")
-	fmt.Println("\nWaiting for miners to connect...")
+	fmt.Println("=====================================")
 	fmt.Println()
+}
 
-	if err := api.Start(port, redirectPort); err != nil {
-		log.Fatalf("Failed to start API server: %v", err)
+func checkPortChanges(cfg, newCfg *config.ServerConfig) bool {
+	changed := false
+	if newCfg.Network.GRPCPort != cfg.Network.GRPCPort {
+		fmt.Printf("GRPC port changed: %d -> %d (requires restart)\n", cfg.Network.GRPCPort, newCfg.Network.GRPCPort)
+		changed = true
 	}
+	if newCfg.Network.APIPort != cfg.Network.APIPort {
+		fmt.Printf("API port changed: %d -> %d (requires restart)\n", cfg.Network.APIPort, newCfg.Network.APIPort)
+		changed = true
+	}
+	if newCfg.Network.HTTPPort != cfg.Network.HTTPPort {
+		fmt.Printf("HTTP port changed: %d -> %d (requires restart)\n", cfg.Network.HTTPPort, newCfg.Network.HTTPPort)
+		changed = true
+	}
+	return changed
+}
+
+func checkMiningChanges(cfg, newCfg *config.ServerConfig) bool {
+	changed := false
+	if newCfg.Mining.Difficulty != cfg.Mining.Difficulty {
+		fmt.Printf("Mining difficulty changed: %d -> %d (requires restart)\n", cfg.Mining.Difficulty, newCfg.Mining.Difficulty)
+		changed = true
+	}
+	if newCfg.Mining.BlockReward != cfg.Mining.BlockReward {
+		fmt.Printf("Block reward changed: %d -> %d (requires restart)\n", cfg.Mining.BlockReward, newCfg.Mining.BlockReward)
+		changed = true
+	}
+	return changed
+}
+
+func checkTLSChanges(cfg, newCfg *config.ServerConfig) bool {
+	if newCfg.TLS.Enabled != cfg.TLS.Enabled {
+		fmt.Printf("TLS enabled changed: %v -> %v (requires restart)\n", cfg.TLS.Enabled, newCfg.TLS.Enabled)
+		return true
+	}
+	return false
+}
+
+func checkLoggingChanges(cfg, newCfg *config.ServerConfig) bool {
+	changed := false
+	if newCfg.Logging.UpdateInterval != cfg.Logging.UpdateInterval {
+		fmt.Printf("Logging update interval changed: %v -> %v (requires restart)\n", cfg.Logging.UpdateInterval, newCfg.Logging.UpdateInterval)
+		changed = true
+	}
+	if newCfg.Logging.FilePath != cfg.Logging.FilePath {
+		fmt.Printf("Log file path changed: %s -> %s (requires restart)\n", cfg.Logging.FilePath, newCfg.Logging.FilePath)
+		changed = true
+	}
+	return changed
 }
 
 // startGRPCServer starts the gRPC server for miner connections.

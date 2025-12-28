@@ -29,14 +29,14 @@ This creates:
 ### 2. Start Server with HTTPS
 
 ```bash
-export RTC_USE_TLS=true
+export RTC_SERVER_TLS_ENABLED=true
 ./bin/server
 ```
 
 Or in one command:
 
 ```bash
-RTC_USE_TLS=true ./bin/server
+RTC_SERVER_TLS_ENABLED=true ./bin/server
 ```
 
 ### 3. Access the Dashboard
@@ -59,9 +59,9 @@ https://localhost:8443?token=YOUR_TOKEN_HERE
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RTC_USE_TLS` | Enable HTTPS/TLS | `false` |
-| `RTC_CERT_FILE` | Path to TLS certificate | `certs/server.crt` |
-| `RTC_KEY_FILE` | Path to TLS private key | `certs/server.key` |
+| `RTC_SERVER_TLS_ENABLED` | Enable HTTPS/TLS | `false` |
+| `RTC_SERVER_TLS_CERT_FILE` | Path to TLS certificate | `certs/server.crt` |
+| `RTC_SERVER_TLS_KEY_FILE` | Path to TLS private key | `certs/server.key` |
 | `RTC_AUTH_TOKEN` | API authentication token | Auto-generated |
 
 ### Using Custom Certificates
@@ -69,19 +69,19 @@ https://localhost:8443?token=YOUR_TOKEN_HERE
 If you have your own TLS certificates:
 
 ```bash
-export RTC_USE_TLS=true
-export RTC_CERT_FILE="/path/to/your/certificate.crt"
-export RTC_KEY_FILE="/path/to/your/private.key"
+export RTC_SERVER_TLS_ENABLED=true
+export RTC_SERVER_TLS_CERT_FILE="/path/to/your/certificate.crt"
+export RTC_SERVER_TLS_KEY_FILE="/path/to/your/private.key"
 ./bin/server
 ```
 
 ### Combined Configuration
 
 ```bash
-export RTC_USE_TLS=true
+export RTC_SERVER_TLS_ENABLED=true
 export RTC_AUTH_TOKEN="my-secure-token-here"
-export RTC_CERT_FILE="certs/server.crt"
-export RTC_KEY_FILE="certs/server.key"
+export RTC_SERVER_TLS_CERT_FILE="certs/server.crt"
+export RTC_SERVER_TLS_KEY_FILE="certs/server.key"
 ./bin/server
 ```
 
@@ -148,7 +148,7 @@ fetch('https://localhost:8443/api/stats', { headers })
 ### Bash Script
 
 ```bash
-export RTC_USE_TLS=true
+export RTC_SERVER_TLS_ENABLED=true
 export RTC_AUTH_TOKEN="your-token-here"
 ./examples/api_test.sh
 ```
@@ -156,7 +156,7 @@ export RTC_AUTH_TOKEN="your-token-here"
 ### Python Script
 
 ```bash
-export RTC_USE_TLS=true
+export RTC_SERVER_TLS_ENABLED=true
 export RTC_AUTH_TOKEN="your-token-here"
 ./examples/api_test.py
 ```
@@ -190,7 +190,7 @@ chmod 600 certs/server.key
 
 **Solutions**:
 
-1. Verify server is running with `RTC_USE_TLS=true`
+1. Verify server is running with `RTC_SERVER_TLS_ENABLED=true`
 2. Check you're using the correct port (8443 for HTTPS)
 3. Try using the HTTP redirect URL first (http://localhost:8080)
 

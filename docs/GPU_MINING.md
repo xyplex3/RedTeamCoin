@@ -88,10 +88,10 @@ Control GPU mining behavior:
 
 ```bash
 # Disable GPU mining (use CPU only)
-export GPU_MINING=false
+export RTC_CLIENT_MINING_GPU_ENABLED=false
 
 # Enable hybrid mode (CPU + GPU simultaneously)
-export HYBRID_MINING=true
+export RTC_CLIENT_MINING_HYBRID_MODE=true
 
 # Run the client
 ./client
@@ -104,15 +104,15 @@ export HYBRID_MINING=true
 #### 1. CPU Only (Default - Current)
 
 ```bash
-# No GPUs detected or GPU_MINING=false
-export GPU_MINING=false
+# No GPUs detected or GPU disabled
+export RTC_CLIENT_MINING_GPU_ENABLED=false
 ./client
 ```
 
 #### 2. GPU Only (Future - After Production Setup)
 
 ```bash
-# GPUs detected and GPU_MINING=true (default)
+# GPUs detected and GPU enabled (default)
 ./client
 ```
 
@@ -120,7 +120,7 @@ export GPU_MINING=false
 
 ```bash
 # Simultaneous CPU and GPU mining
-export HYBRID_MINING=true
+export RTC_CLIENT_MINING_HYBRID_MODE=true
 ./client
 ```
 
@@ -479,7 +479,7 @@ GPU mining is in framework mode. To enable actual GPU mining:
 **Hybrid mode slower than GPU-only:**
 
 - CPU overhead may exceed benefit
-- Try GPU-only mode: `export HYBRID_MINING=false`
+- Try GPU-only mode: `export RTC_CLIENT_MINING_HYBRID_MODE=false`
 
 **Thermal throttling:**
 

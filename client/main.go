@@ -13,13 +13,13 @@
 //   - Hybrid: Simultaneous CPU and GPU mining for maximum performance
 //
 // GPU mining is enabled by default when compatible hardware is detected.
-// Set GPU_MINING=false to disable, or HYBRID_MINING=true for hybrid mode.
+// Set RTC_CLIENT_MINING_GPU_ENABLED=false to disable, or RTC_CLIENT_MINING_HYBRID_MODE=true for hybrid mode.
 //
 // # Configuration
 //
 // Server address can be specified via:
 //   - Command-line flag: -server or -s
-//   - Environment variable: POOL_SERVER
+//   - Environment variable: RTC_CLIENT_SERVER_ADDRESS
 //   - Default: localhost:50051
 //
 // # Self-Deletion
@@ -211,7 +211,7 @@ func (m *Miner) Connect() error {
 			fmt.Printf("  Mode:       GPU only\n")
 		}
 	case m.hasGPU && !m.gpuEnabled:
-		fmt.Printf("  GPUs:       Detected but disabled (set GPU_MINING=true to enable)\n")
+		fmt.Printf("  GPUs:       Detected but disabled (set RTC_CLIENT_MINING_GPU_ENABLED=true to enable)\n")
 	default:
 		fmt.Printf("  GPUs:       None detected - using CPU only\n")
 	}
@@ -988,12 +988,10 @@ func main() {
 
 	selfDeleteOnExit.Store(autoDelete)
 
+	// Use config value if no command-line flag provided
+	// Config already handles env vars (RTC_CLIENT_SERVER_ADDRESS) via Viper
 	if serverAddress == "" {
-		if envServer := os.Getenv("POOL_SERVER"); envServer != "" {
-			serverAddress = envServer
-		} else {
-			serverAddress = cfg.Server.Address
-		}
+		serverAddress = cfg.Server.Address
 	}
 
 	fmt.Println("=== RedTeamCoin Miner ===")

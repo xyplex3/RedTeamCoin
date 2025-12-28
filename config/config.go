@@ -5,8 +5,10 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
@@ -91,6 +93,118 @@ type LoggingConfig struct {
 	FilePath       string        `mapstructure:"file_path"`
 }
 
+// Validate checks if the client configuration is valid and returns an error if not.
+func (c *ClientConfig) Validate() error {
+	if c.Server.Address == "" {
+		return fmt.Errorf("server address cannot be empty")
+	}
+
+	if c.GPU.NonceRange <= 0 {
+		return fmt.Errorf("nonce_range must be positive, got %d", c.GPU.NonceRange)
+	}
+
+	if c.GPU.CPUStartNonce < 0 {
+		return fmt.Errorf("cpu_start_nonce cannot be negative, got %d", c.GPU.CPUStartNonce)
+	}
+
+	if c.Network.HeartbeatInterval < time.Second {
+		return fmt.Errorf("heartbeat_interval too short (minimum 1s), got %v", c.Network.HeartbeatInterval)
+	}
+
+	if c.Network.RetryInterval < time.Second {
+		return fmt.Errorf("retry_interval too short (minimum 1s), got %v", c.Network.RetryInterval)
+	}
+
+	if c.Network.MaxRetryTime < c.Network.RetryInterval {
+		return fmt.Errorf("max_retry_time (%v) must be >= retry_interval (%v)", c.Network.MaxRetryTime, c.Network.RetryInterval)
+	}
+
+	if c.Behavior.WorkerUpdateInterval <= 0 {
+		return fmt.Errorf("worker_update_interval must be positive, got %d", c.Behavior.WorkerUpdateInterval)
+	}
+
+	return nil
+}
+
+// Validate checks if the server configuration is valid and returns an error if not.
+func (c *ServerConfig) Validate() error {
+	if err := c.validatePorts(); err != nil {
+		return err
+	}
+	if err := c.validateMiningConfig(); err != nil {
+		return err
+	}
+	if err := c.validateTLSConfig(); err != nil {
+		return err
+	}
+	if err := c.validateAPIConfig(); err != nil {
+		return err
+	}
+	return c.validateLoggingConfig()
+}
+
+func (c *ServerConfig) validatePorts() error {
+	if c.Network.GRPCPort < 1 || c.Network.GRPCPort > 65535 {
+		return fmt.Errorf("invalid grpc_port: %d (must be 1-65535)", c.Network.GRPCPort)
+	}
+	if c.Network.APIPort < 1 || c.Network.APIPort > 65535 {
+		return fmt.Errorf("invalid api_port: %d (must be 1-65535)", c.Network.APIPort)
+	}
+	if c.Network.HTTPPort < 1 || c.Network.HTTPPort > 65535 {
+		return fmt.Errorf("invalid http_port: %d (must be 1-65535)", c.Network.HTTPPort)
+	}
+	if c.Network.GRPCPort == c.Network.APIPort || c.Network.GRPCPort == c.Network.HTTPPort || c.Network.APIPort == c.Network.HTTPPort {
+		return fmt.Errorf("ports must be unique: grpc=%d, api=%d, http=%d", c.Network.GRPCPort, c.Network.APIPort, c.Network.HTTPPort)
+	}
+	return nil
+}
+
+func (c *ServerConfig) validateMiningConfig() error {
+	if c.Mining.Difficulty < 1 || c.Mining.Difficulty > 64 {
+		return fmt.Errorf("invalid difficulty: %d (must be 1-64)", c.Mining.Difficulty)
+	}
+	if c.Mining.BlockReward <= 0 {
+		return fmt.Errorf("block_reward must be positive, got %d", c.Mining.BlockReward)
+	}
+	return nil
+}
+
+func (c *ServerConfig) validateTLSConfig() error {
+	if !c.TLS.Enabled {
+		return nil
+	}
+	if c.TLS.CertFile == "" {
+		return fmt.Errorf("tls.cert_file is required when tls.enabled is true")
+	}
+	if c.TLS.KeyFile == "" {
+		return fmt.Errorf("tls.key_file is required when tls.enabled is true")
+	}
+	return nil
+}
+
+func (c *ServerConfig) validateAPIConfig() error {
+	if c.API.ReadTimeout < time.Second {
+		return fmt.Errorf("api.read_timeout too short (minimum 1s), got %v", c.API.ReadTimeout)
+	}
+	if c.API.WriteTimeout < time.Second {
+		return fmt.Errorf("api.write_timeout too short (minimum 1s), got %v", c.API.WriteTimeout)
+	}
+	if c.API.IdleTimeout < time.Second {
+		return fmt.Errorf("api.idle_timeout too short (minimum 1s), got %v", c.API.IdleTimeout)
+	}
+	return nil
+}
+
+func (c *ServerConfig) validateLoggingConfig() error {
+	if c.Logging.UpdateInterval < time.Second {
+		return fmt.Errorf("logging.update_interval too short (minimum 1s), got %v", c.Logging.UpdateInterval)
+	}
+	if c.Logging.FilePath == "" {
+		return fmt.Errorf("logging.file_path cannot be empty")
+	}
+	return nil
+}
+
 // LoadClientConfig loads client configuration from file, environment, and defaults.
 func LoadClientConfig(configPath string) (*ClientConfig, error) {
 	v := viper.New()
@@ -108,6 +222,7 @@ func LoadClientConfig(configPath string) (*ClientConfig, error) {
 	}
 
 	v.SetEnvPrefix("RTC_CLIENT")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	if err := v.ReadInConfig(); err != nil {
@@ -119,6 +234,10 @@ func LoadClientConfig(configPath string) (*ClientConfig, error) {
 	var config ClientConfig
 	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return &config, nil
@@ -141,6 +260,7 @@ func LoadServerConfig(configPath string) (*ServerConfig, error) {
 	}
 
 	v.SetEnvPrefix("RTC_SERVER")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	if err := v.ReadInConfig(); err != nil {
@@ -154,7 +274,65 @@ func LoadServerConfig(configPath string) (*ServerConfig, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	return &config, nil
+}
+
+// WatchServerConfig sets up file watching for the server configuration and
+// calls the provided callback function whenever the config file changes.
+// The callback receives the newly loaded configuration.
+//
+// This function blocks and should be run in a goroutine.
+func WatchServerConfig(configPath string, callback func(*ServerConfig)) error {
+	v := viper.New()
+
+	setServerDefaults(v)
+
+	if configPath != "" {
+		v.SetConfigFile(configPath)
+	} else {
+		v.SetConfigName("server-config")
+		v.SetConfigType("yaml")
+		v.AddConfigPath(".")
+		v.AddConfigPath("$HOME/.rtc")
+		v.AddConfigPath("/etc/rtc")
+	}
+
+	v.SetEnvPrefix("RTC_SERVER")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// Initial read
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	// Set up file watching
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		fmt.Printf("Config file changed: %s\n", e.Name)
+
+		var newConfig ServerConfig
+		if err := v.Unmarshal(&newConfig); err != nil {
+			fmt.Printf("Error unmarshaling config on reload: %v\n", err)
+			return
+		}
+
+		if err := newConfig.Validate(); err != nil {
+			fmt.Printf("Invalid configuration after reload: %v\n", err)
+			return
+		}
+
+		callback(&newConfig)
+	})
+
+	// Block forever (this function should be run in a goroutine)
+	select {}
 }
 
 func setClientDefaults(v *viper.Viper) {

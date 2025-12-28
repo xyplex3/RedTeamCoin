@@ -55,3 +55,10 @@ test-goreleaser-docker.sh
 *.tar.gz.*
 *.zip
 *.rpm
+
+# Configuration files (keep examples, ignore actual configs)
+*-config.yaml
+!*-config.example.yaml
+.env
+!.env.example
+!.env.*.example

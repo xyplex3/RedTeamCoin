@@ -5,16 +5,18 @@
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
-[![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml
+[![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
 
-RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation designed
-for authorized security testing and red team operations. Built in Go with Java client
-support, it simulates real-world cryptomining attacks to help organizations assess their
-detection capabilities and quantify potential damage from threat actor mining operations.
+RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation
+designed for authorized security testing and red team operations. Built in Go
+with Java client support, it simulates real-world cryptomining attacks to help
+organizations assess their detection capabilities and quantify potential damage
+from threat actor mining operations.
 
-This tool enables security teams to safely and legally demonstrate cryptomining attack
-scenarios on corporate systems, generate comprehensive impact reports, and validate
-security controls—all within a controlled environment using an isolated, non-public blockchain.
+This tool enables security teams to safely and legally demonstrate cryptomining
+attack scenarios on corporate systems, generate comprehensive impact reports,
+and validate security controls—all within a controlled environment using an
+isolated, non-public blockchain.
 
 **Created by:**
 
@@ -62,7 +64,8 @@ security controls—all within a controlled environment using an isolated, non-p
 - **Blockchain Implementation**: Custom proof-of-work blockchain with
   configurable difficulty
 - **Mining Pool Server**: Manages multiple miners and work distribution via gRPC
-- **Client Miners**: Automated mining clients (Go and Java) with IP address and hostname logging
+- **Client Miners**: Automated mining clients (Go and Java) with IP address and
+  hostname logging
 - **Java Standalone Miner**: GUI-enabled desktop miner with visual interface
 - **Java gRPC Client**: Headless gRPC client for servers and automation
 - **Server-Side Miner Control**: Pause, resume, throttle CPU usage, and delete
@@ -175,7 +178,8 @@ http://localhost:8080?token=YOUR_AUTH_TOKEN_HERE
 
 You'll see real-time statistics including active miners, hash rates, and mined blocks.
 
-**Note:** The server listens on all network interfaces - replace `localhost` with your server's IP for remote access.
+**Note:** The server listens on all network interfaces - replace `localhost`
+with your server's IP for remote access.
 
 ## How It Works
 
@@ -239,7 +243,8 @@ RTC_USE_TLS=true ./bin/server
 
 **Note:** With HTTPS, browsers will show a security warning for self-signed
 certificates. Click "Advanced" → "Proceed to localhost".
-**NOTE:** The web dashboard and gRPC server will run on all interfaces of the server and can be used in place of localhost.
+**NOTE:** The web dashboard and gRPC server will run on all interfaces of the
+server and can be used in place of localhost.
 
 ### Running a Miner
 
@@ -350,7 +355,8 @@ make build-java-all
 - No compilation needed on target systems
 - Just requires Java Runtime (JRE)
 
-See [java-client/README.md](java-client/README.md) for complete Java gRPC client documentation.
+See [java-client/README.md](java-client/README.md) for complete Java gRPC
+client documentation.
 
 ### Connecting to Remote Servers
 
@@ -673,7 +679,8 @@ cd client && go test -cover
 
 - **Server**: 76 tests, 66.3% coverage
 
-  - `blockchain_test.go`: 15 tests - Blockchain validation, hash calculation, concurrent access
+  - `blockchain_test.go`: 15 tests - Blockchain validation, hash calculation,
+    concurrent access
   - `pool_test.go`: 26 tests - Miner management, work distribution, statistics
   - `grpc_server_test.go`: 17 tests - gRPC endpoints, miner control, heartbeats
   - `api_test.go`: 18 tests - REST API, authentication, miner operations
@@ -706,7 +713,8 @@ All tests run automatically on:
 - Commits to main branch
 - Release builds
 
-See [.github/workflows/build-verification.yaml](.github/workflows/build-verification.yaml) for CI configuration.
+See [.github/workflows/build-verification.yaml](.github/workflows/build-verification.yaml)
+for CI configuration.
 
 ### Cross-Compilation
 
@@ -727,7 +735,8 @@ make build-windows-opencl
 
 Creates `bin/client-windows-opencl.exe`
 
-See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) for complete Windows build instructions including:
+See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) for complete Windows build
+instructions including:
 
 - Native Windows builds with GPU support
 - Cross-compilation setup from Linux
@@ -928,7 +937,8 @@ This tool is not intended for production use as a real cryptocurrency and
 lacks many features required for a production system (cryptographic signatures,
 wallets, transaction validation, network consensus, etc.).
 
-**Use only with explicit authorization on systems you own or have permission to test.**
+**Use only with explicit authorization on systems you own or have permission to
+test.**
 
 ## License
 

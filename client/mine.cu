@@ -151,21 +151,21 @@ __device__ bool check_difficulty(const uint8_t* hash, int difficulty) {
     // Each byte has 2 hex digits
     int full_bytes = difficulty / 2;  // Full bytes that must be 0
     int extra_nibble = difficulty % 2; // 1 if we need to check high nibble of next byte
-    
+
     // Check full zero bytes
     for (int i = 0; i < full_bytes && i < 32; i++) {
         if (hash[i] != 0) {
             return false;
         }
     }
-    
+
     // Check high nibble of next byte if needed
     if (extra_nibble && full_bytes < 32) {
         if ((hash[full_bytes] & 0xF0) != 0) {
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -191,7 +191,7 @@ __global__ void sha256_mine_kernel(
     // Prepare message: block_data + nonce (as decimal string, like Go does)
     uint8_t message[256];
     memcpy(message, block_data, data_len);
-    
+
     // Convert nonce to decimal string
     char nonce_str[32];
     int nonce_len = 0;
@@ -210,7 +210,7 @@ __global__ void sha256_mine_kernel(
             nonce_str[nonce_len++] = digits[i];
         }
     }
-    
+
     // Append nonce string to message
     for (int i = 0; i < nonce_len; i++) {
         message[data_len + i] = nonce_str[i];
@@ -235,8 +235,9 @@ __global__ void sha256_mine_kernel(
 }
 
 // Wrapper function for Go CGo
+// Returns 0 on success, non-zero on CUDA error
 extern "C" {
-    void cuda_mine(
+    int cuda_mine(
         const uint8_t* block_data,
         int data_len,
         int difficulty,
@@ -247,7 +248,7 @@ extern "C" {
         bool* found
     ) {
         cudaError_t err;
-        
+
         // Allocate device memory
         uint8_t* d_block_data;
         uint64_t* d_result_nonce;
@@ -258,26 +259,26 @@ extern "C" {
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMalloc d_block_data failed: %s\n", cudaGetErrorString(err));
             fflush(stderr);
-            return;
+            return -1;
         }
-        
+
         err = cudaMalloc(&d_result_nonce, sizeof(uint64_t));
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMalloc d_result_nonce failed: %s\n", cudaGetErrorString(err));
             fflush(stderr);
             cudaFree(d_block_data);
-            return;
+            return -1;
         }
-        
+
         err = cudaMalloc(&d_result_hash, 32);
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMalloc d_result_hash failed: %s\n", cudaGetErrorString(err));
             fflush(stderr);
             cudaFree(d_block_data);
             cudaFree(d_result_nonce);
-            return;
+            return -1;
         }
-        
+
         err = cudaMalloc(&d_found, sizeof(bool));
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMalloc d_found failed: %s\n", cudaGetErrorString(err));
@@ -285,7 +286,7 @@ extern "C" {
             cudaFree(d_block_data);
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
-            return;
+            return -1;
         }
 
         // Copy data to device
@@ -297,9 +298,9 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
-        
+
         err = cudaMemcpy(d_result_nonce, result_nonce, sizeof(uint64_t), cudaMemcpyHostToDevice);
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMemcpy d_result_nonce failed: %s\n", cudaGetErrorString(err));
@@ -308,9 +309,9 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
-        
+
         err = cudaMemcpy(d_found, found, sizeof(bool), cudaMemcpyHostToDevice);
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMemcpy d_found failed: %s\n", cudaGetErrorString(err));
@@ -319,7 +320,7 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
 
         // Launch kernel
@@ -340,7 +341,7 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
 
         // Wait for kernel and check for errors
@@ -352,7 +353,7 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
 
         // Copy results back
@@ -364,9 +365,9 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
-        
+
         err = cudaMemcpy(result_hash, d_result_hash, 32, cudaMemcpyDeviceToHost);
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMemcpy result_hash failed: %s\n", cudaGetErrorString(err));
@@ -375,9 +376,9 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
-        
+
         err = cudaMemcpy(found, d_found, sizeof(bool), cudaMemcpyDeviceToHost);
         if (err != cudaSuccess) {
             fprintf(stderr, "CUDA ERROR: cudaMemcpy found failed: %s\n", cudaGetErrorString(err));
@@ -386,7 +387,7 @@ extern "C" {
             cudaFree(d_result_nonce);
             cudaFree(d_result_hash);
             cudaFree(d_found);
-            return;
+            return -1;
         }
 
         // Free device memory
@@ -394,5 +395,7 @@ extern "C" {
         cudaFree(d_result_nonce);
         cudaFree(d_result_hash);
         cudaFree(d_found);
+
+        return 0;
     }
 }

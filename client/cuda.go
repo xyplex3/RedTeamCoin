@@ -31,7 +31,7 @@ import (
 // #include <stdint.h>
 // #include <stdbool.h>
 // #include <cuda_runtime.h>
-// extern void cuda_mine(
+// extern int cuda_mine(
 //     const uint8_t* block_data,
 //     int data_len,
 //     int difficulty,
@@ -179,20 +179,22 @@ func (cm *CUDAMiner) MineBlock(blockIndex, timestamp int64, data, previousHash s
 	blockBytes := []byte(blockData)
 
 	// Try GPU mining first
-	gpuNonce, gpuHash, found := cm.tryGPUMining(blockBytes, difficulty, startNonce, nonceRange)
-	if found {
-		return gpuNonce, gpuHash, nonceRange, true
+	gpuNonce, gpuHash, found, err := cm.tryGPUMining(blockBytes, difficulty, startNonce, nonceRange)
+	if err != nil {
+		// GPU error - fallback to CPU mining
+		log.Printf("GPU mining error, falling back to CPU: %v", err)
+		n, h, hc := cm.mineCPU(blockIndex, timestamp, data, previousHash, difficulty, startNonce, nonceRange)
+		return n, h, hc, h != ""
 	}
 
-	// Fallback to CPU mining if GPU not available or kernel compilation failed
-	n, h, hc := cm.mineCPU(blockIndex, timestamp, data, previousHash, difficulty, startNonce, nonceRange)
-	return n, h, hc, h != ""
+	// GPU searched successfully - return result even if not found
+	return gpuNonce, gpuHash, nonceRange, found
 }
 
 // tryGPUMining attempts to mine using the CUDA kernel by calling the
 // C/CUDA interface. It prepares block data, invokes the GPU kernel, and
-// returns results. Returns nonce, hash, and found status.
-func (cm *CUDAMiner) tryGPUMining(blockData []byte, difficulty int, startNonce, nonceRange int64) (int64, string, bool) {
+// returns results. Returns nonce, hash, found status, and error.
+func (cm *CUDAMiner) tryGPUMining(blockData []byte, difficulty int, startNonce, nonceRange int64) (int64, string, bool, error) {
 	// Allocate result buffers
 	var resultNonce uint64
 	resultHash := make([]byte, 32)
@@ -209,7 +211,7 @@ func (cm *CUDAMiner) tryGPUMining(blockData []byte, difficulty int, startNonce, 
 	foundPtr := (*C._Bool)(unsafe.Pointer(&foundFlag))
 
 	// Call CUDA kernel
-	C.cuda_mine(
+	ret := C.cuda_mine(
 		blockDataPtr,
 		blockDataLen,
 		difficultyC,
@@ -220,12 +222,16 @@ func (cm *CUDAMiner) tryGPUMining(blockData []byte, difficulty int, startNonce, 
 		foundPtr,
 	)
 
-	if foundFlag {
-		hashStr := hex.EncodeToString(resultHash)
-		return int64(resultNonce), hashStr, true
+	if ret != 0 {
+		return 0, "", false, fmt.Errorf("CUDA mining failed with error code %d", ret)
 	}
 
-	return 0, "", false
+	if foundFlag {
+		hashStr := hex.EncodeToString(resultHash)
+		return int64(resultNonce), hashStr, true, nil
+	}
+
+	return 0, "", false, nil
 }
 
 // mineCPU provides CPU-based proof-of-work mining as a fallback when CUDA

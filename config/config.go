@@ -69,8 +69,8 @@ type ServerNetwork struct {
 
 // ServerMining defines pool mining parameters.
 type ServerMining struct {
-	Difficulty  int `mapstructure:"difficulty"`
-	BlockReward int `mapstructure:"block_reward"`
+	Difficulty  int32 `mapstructure:"difficulty"`
+	BlockReward int   `mapstructure:"block_reward"`
 }
 
 // TLSConfig defines TLS/HTTPS settings.

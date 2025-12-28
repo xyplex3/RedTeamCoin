@@ -163,7 +163,7 @@ func checkTLSCertificates(cfg *config.ServerConfig) {
 
 func initializeBlockchainAndPool(cfg *config.ServerConfig) (*Blockchain, *MiningPool) {
 	fmt.Printf("Initializing blockchain with difficulty: %d\n", cfg.Mining.Difficulty)
-	blockchain := NewBlockchain(int32(cfg.Mining.Difficulty))
+	blockchain := NewBlockchain(cfg.Mining.Difficulty)
 	fmt.Println("Initializing mining pool...")
 	pool := NewMiningPool(blockchain)
 	return blockchain, pool

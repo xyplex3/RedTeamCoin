@@ -241,9 +241,10 @@ RTC_USE_TLS=true ./bin/server
 - Web dashboard: **https://localhost:8443**
 - HTTP redirect: **http://localhost:8080**
 
-**Note:** With HTTPS, browsers will show a security warning for self-signed
+**Note #1:** With HTTPS, browsers will show a security warning for self-signed
 certificates. Click "Advanced" → "Proceed to localhost".
-**NOTE:** The web dashboard and gRPC server will run on all interfaces of the
+
+**Note #2:** The web dashboard and gRPC server will run on all interfaces of the
 server and can be used in place of localhost.
 
 ### Running a Miner

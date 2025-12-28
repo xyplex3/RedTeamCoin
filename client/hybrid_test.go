@@ -131,7 +131,11 @@ func TestCPUWorkerDistribution(t *testing.T) {
 // TestGPUResponsivenessToEarlyCPUWin tests that when CPU finds a solution
 // quickly, the GPU mining goroutine terminates promptly via the done channel.
 func TestGPUResponsivenessToEarlyCPUWin(t *testing.T) {
-	miner, err := NewMiner("localhost:50051")
+	cfg, err := config.LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	miner, err := NewMiner("localhost:50051", cfg)
 	if err != nil {
 		t.Fatalf("Failed to create miner: %v", err)
 	}

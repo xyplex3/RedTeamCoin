@@ -19,7 +19,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"time"
 
 	"redteamcoin/config"
 	pb "redteamcoin/proto"
@@ -201,7 +200,7 @@ func main() {
 	fmt.Printf("  Authorization: Bearer %s\n", authToken)
 	fmt.Printf("\nOr access the dashboard with the token in the URL (shown above)\n")
 
-	if useTLS {
+	if cfg.TLS.Enabled {
 		fmt.Printf("\n=== TLS/HTTPS Configuration ===\n")
 		fmt.Printf("TLS Enabled: Yes\n")
 		fmt.Printf("Note: Using self-signed certificate. Browsers will show a warning.\n")

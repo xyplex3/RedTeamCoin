@@ -50,6 +50,7 @@ import (
 	"time"
 
 	"redteamcoin/config"
+	"redteamcoin/logger"
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
@@ -59,6 +60,10 @@ import (
 var (
 	serverAddress string
 	configPath    string
+	logLevel      string
+	logFormat     string
+	quiet         bool
+	verbose       bool
 )
 
 // clampToInt32 converts an int to int32, clamping overflow values to prevent
@@ -180,15 +185,25 @@ func getOutboundIP() string {
 // registers the miner. It displays connection information including detected
 // GPU hardware. Returns an error if connection or registration fails.
 func (m *Miner) Connect() error {
+	logger.Get().Info("connecting to mining pool",
+		"server", m.serverAddress)
+
 	fmt.Printf("Connecting to mining pool at %s...\n", m.serverAddress)
 
 	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		logger.Get().Error("failed to establish gRPC connection",
+			"server", m.serverAddress,
+			"error", err)
 		return fmt.Errorf("failed to connect: %v", err)
 	}
 
 	m.conn = conn
 	m.client = pb.NewMiningPoolClient(conn)
+
+	logger.Get().Info("registering miner with pool",
+		"miner_id", m.id,
+		"hostname", m.hostname)
 
 	// Register with the pool
 	fmt.Printf("Registering miner...\n")
@@ -224,12 +239,22 @@ func (m *Miner) Connect() error {
 	})
 
 	if err != nil {
+		logger.Get().Error("miner registration request failed",
+			"miner_id", m.id,
+			"error", err)
 		return fmt.Errorf("failed to register: %v", err)
 	}
 
 	if !resp.Success {
+		logger.Get().Warn("miner registration rejected by server",
+			"miner_id", m.id,
+			"message", resp.Message)
 		return fmt.Errorf("registration failed: %s", resp.Message)
 	}
+
+	logger.Get().Info("miner registered successfully with pool",
+		"miner_id", m.id,
+		"message", resp.Message)
 
 	fmt.Printf("✓ Successfully registered with pool: %s\n\n", resp.Message)
 	return nil
@@ -243,10 +268,17 @@ func (m *Miner) Start() {
 	m.startTime = time.Now()
 	m.totalHashes = 0
 
+	logger.Get().Info("starting mining operations",
+		"miner_id", m.id,
+		"gpu_enabled", m.gpuEnabled,
+		"hybrid_mode", m.hybridMode)
+
 	// Start GPU miner if available
 	if m.hasGPU && m.gpuEnabled {
 		if err := m.gpuMiner.Start(); err != nil {
-			log.Printf("Warning: Failed to start GPU miner: %v", err)
+			logger.Get().Warn("failed to start GPU miner",
+				"miner_id", m.id,
+				"error", err)
 		}
 	}
 
@@ -269,6 +301,9 @@ func (m *Miner) Stop() {
 	}
 
 	m.running = false
+	logger.Get().Info("stopping miner",
+		"miner_id", m.id,
+		"blocks_mined", m.blocksMined)
 	fmt.Println("\nStopping miner...")
 
 	// Stop GPU miner if running
@@ -286,8 +321,13 @@ func (m *Miner) Stop() {
 		})
 
 		if err != nil {
-			log.Printf("Error stopping miner: %v", err)
+			logger.Get().Warn("error notifying server of miner stop",
+				"miner_id", m.id,
+				"error", err)
 		} else {
+			logger.Get().Info("miner stopped successfully",
+				"miner_id", m.id,
+				"blocks_mined", resp.TotalBlocksMined)
 			fmt.Printf("Miner stopped. Total blocks mined: %d\n", resp.TotalBlocksMined)
 		}
 	}
@@ -295,7 +335,9 @@ func (m *Miner) Stop() {
 	m.cancel()
 	if m.conn != nil {
 		if err := m.conn.Close(); err != nil {
-			log.Printf("Error closing connection: %v", err)
+			logger.Get().Warn("error closing gRPC connection",
+				"miner_id", m.id,
+				"error", err)
 		}
 	}
 }
@@ -308,14 +350,19 @@ func (m *Miner) Stop() {
 func (m *Miner) selfDelete() {
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("Failed to get executable path: %v", err)
+		logger.Get().Error("failed to get executable path for self-deletion",
+			"miner_id", m.id,
+			"error", err)
 		return
 	}
 
 	// Resolve symlinks to get actual file path
 	realPath, err := filepath.EvalSymlinks(exePath)
 	if err != nil {
-		log.Printf("Failed to resolve symlink: %v", err)
+		logger.Get().Error("failed to resolve symlink for self-deletion",
+			"miner_id", m.id,
+			"path", exePath,
+			"error", err)
 		return
 	}
 
@@ -324,15 +371,22 @@ func (m *Miner) selfDelete() {
 
 	// Validate path is absolute
 	if !filepath.IsAbs(realPath) {
-		log.Printf("Refusing to delete relative path: %s", realPath)
+		logger.Get().Error("refusing to delete relative path",
+			"miner_id", m.id,
+			"path", realPath)
 		return
 	}
 
+	logger.Get().Warn("initiating self-deletion",
+		"miner_id", m.id,
+		"executable_path", realPath)
 	fmt.Printf("Deleting executable: %s\n", realPath)
 
 	if m.conn != nil {
 		if err := m.conn.Close(); err != nil {
-			log.Printf("Error closing connection: %v", err)
+			logger.Get().Warn("error closing connection before self-deletion",
+				"miner_id", m.id,
+				"error", err)
 		}
 	}
 
@@ -340,7 +394,10 @@ func (m *Miner) selfDelete() {
 		// Capture file stats before sleep to detect tampering
 		stat1, err := os.Stat(realPath)
 		if err != nil {
-			log.Printf("Failed to stat executable before deletion: %v", err)
+			logger.Get().Error("failed to stat executable before deletion",
+				"miner_id", m.id,
+				"path", realPath,
+				"error", err)
 			return
 		}
 
@@ -349,12 +406,17 @@ func (m *Miner) selfDelete() {
 		// Verify file hasn't been modified during sleep window
 		stat2, err := os.Stat(realPath)
 		if err != nil {
-			log.Printf("Failed to stat executable after sleep: %v", err)
+			logger.Get().Error("failed to stat executable after sleep",
+				"miner_id", m.id,
+				"path", realPath,
+				"error", err)
 			return
 		}
 
 		if stat1.ModTime() != stat2.ModTime() || stat1.Size() != stat2.Size() {
-			log.Printf("Executable was modified, aborting deletion")
+			logger.Get().Error("executable was modified during deletion window, aborting",
+				"miner_id", m.id,
+				"path", realPath)
 			return
 		}
 
@@ -365,7 +427,9 @@ func (m *Miner) selfDelete() {
 				// should never contain double quotes on Windows; if they do,
 				// refuse to generate a deletion script.
 				if strings.Contains(realPath, `"`) {
-					log.Printf("Executable path contains unsupported quote character, aborting deletion script: %s", realPath)
+					logger.Get().Error("executable path contains unsupported quote character",
+						"miner_id", m.id,
+						"path", realPath)
 					return
 				}
 
@@ -376,15 +440,27 @@ func (m *Miner) selfDelete() {
 				if err := os.WriteFile(scriptPath, []byte(script), 0600); err == nil {
 					// #nosec G204 -- scriptPath is constructed from validated realPath
 					if err := exec.Command("cmd", "/C", "start", "/min", scriptPath).Start(); err != nil {
-						log.Printf("Failed to start deletion script: %v", err)
+						logger.Get().Error("failed to start deletion script",
+							"miner_id", m.id,
+							"script_path", scriptPath,
+							"error", err)
 					}
 				} else {
-					log.Printf("Failed to create deletion script: %v", err)
+					logger.Get().Error("failed to create deletion script",
+						"miner_id", m.id,
+						"script_path", scriptPath,
+						"error", err)
 				}
 			} else {
-				log.Printf("Failed to delete executable: %v", err)
+				logger.Get().Error("failed to delete executable",
+					"miner_id", m.id,
+					"path", realPath,
+					"error", err)
 			}
 		} else {
+			logger.Get().Info("executable deleted successfully",
+				"miner_id", m.id,
+				"path", realPath)
 			fmt.Println("Executable deleted successfully")
 		}
 	}()
@@ -408,7 +484,9 @@ func (m *Miner) mine() {
 		})
 
 		if err != nil {
-			log.Printf("Error getting work: %v", err)
+			logger.Get().Warn("error getting work from pool",
+				"miner_id", m.id,
+				"error", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -483,15 +561,28 @@ func (m *Miner) mine() {
 		})
 
 		if err != nil {
-			log.Printf("Error submitting work: %v", err)
+			logger.Get().Warn("error submitting work to pool",
+				"miner_id", m.id,
+				"block_index", workResp.BlockIndex,
+				"error", err)
 			continue
 		}
 
 		if submitResp.Accepted {
 			m.blocksMined++
+			logger.Get().Info("block mined and accepted",
+				"miner_id", m.id,
+				"block_index", workResp.BlockIndex,
+				"nonce", nonce,
+				"reward", submitResp.Reward,
+				"total_blocks", m.blocksMined)
 			fmt.Printf("✓ BLOCK MINED! Block %d accepted! Reward: %d RTC (Total blocks: %d, Hash rate: %d H/s)\n\n",
 				workResp.BlockIndex, submitResp.Reward, m.blocksMined, m.hashRate)
 		} else {
+			logger.Get().Warn("block submission rejected by pool",
+				"miner_id", m.id,
+				"block_index", workResp.BlockIndex,
+				"reason", submitResp.Message)
 			fmt.Printf("✗ Block %d rejected: %s\n\n", workResp.BlockIndex, submitResp.Message)
 		}
 	}
@@ -673,6 +764,11 @@ func (m *Miner) sendHeartbeat() {
 				gpuHashRate = m.gpuMiner.GetHashCount()
 			}
 
+			logger.Get().Debug("sending heartbeat to server",
+				"miner_id", m.id,
+				"hash_rate", m.hashRate,
+				"blocks_mined", m.blocksMined)
+
 			resp, err := m.client.Heartbeat(m.ctx, &pb.MinerStatus{
 				MinerId:           m.id,
 				HashRate:          m.hashRate,
@@ -687,10 +783,20 @@ func (m *Miner) sendHeartbeat() {
 			})
 
 			if err != nil {
-				log.Printf("Error sending heartbeat: %v", err)
+				logger.Get().Warn("heartbeat request failed",
+					"miner_id", m.id,
+					"error", err)
 			} else {
+				logger.Get().Debug("heartbeat response received",
+					"miner_id", m.id,
+					"active", resp.Active,
+					"should_mine", resp.ShouldMine)
+
 				// Check if miner was deleted from the server
 				if !resp.Active {
+					logger.Get().Warn("miner deleted by server, shutting down",
+						"miner_id", m.id,
+						"message", resp.Message)
 					fmt.Println("\n" + resp.Message)
 					fmt.Println("Shutting down miner...")
 					m.deletedByServer = true
@@ -706,8 +812,12 @@ func (m *Miner) sendHeartbeat() {
 				if m.shouldMine != resp.ShouldMine {
 					m.shouldMine = resp.ShouldMine
 					if m.shouldMine {
+						logger.Get().Info("mining resumed by server",
+							"miner_id", m.id)
 						fmt.Println("Server resumed mining")
 					} else {
+						logger.Get().Info("mining paused by server",
+							"miner_id", m.id)
 						fmt.Println("Server paused mining")
 					}
 				}
@@ -715,8 +825,13 @@ func (m *Miner) sendHeartbeat() {
 				if m.cpuThrottlePercent != int(resp.CpuThrottlePercent) {
 					m.cpuThrottlePercent = int(resp.CpuThrottlePercent)
 					if m.cpuThrottlePercent == 0 {
+						logger.Get().Info("CPU throttle removed by server",
+							"miner_id", m.id)
 						fmt.Println("Server removed CPU throttle (unlimited)")
 					} else {
+						logger.Get().Info("CPU throttle adjusted by server",
+							"miner_id", m.id,
+							"throttle_percent", m.cpuThrottlePercent)
 						fmt.Printf("Server set CPU throttle to %d%%\n", m.cpuThrottlePercent)
 					}
 				}
@@ -980,6 +1095,10 @@ func parseFlags() bool {
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
 	flag.StringVar(&configPath, "config", "", "Path to config file")
 	flag.BoolVar(&autoDelete, "auto-delete", true, "Delete executable on shutdown (default: true)")
+	flag.StringVar(&logLevel, "log-level", "", "Log level (debug, info, warn, error)")
+	flag.StringVar(&logFormat, "log-format", "", "Log format (text, color, json)")
+	flag.BoolVar(&quiet, "quiet", false, "Quiet mode (errors only)")
+	flag.BoolVar(&verbose, "verbose", false, "Verbose mode (enable debug)")
 	flag.Parse()
 	return autoDelete
 }
@@ -997,6 +1116,68 @@ func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
 		return cfg.Mining.AutoDelete
 	}
 	return autoDelete
+}
+
+// applyLoggingOverrides applies CLI logging flag overrides to the config
+func applyLoggingOverrides(cfg *config.ClientConfig) {
+	if logLevel != "" {
+		cfg.Logging.Level = logLevel
+	}
+	if logFormat != "" {
+		cfg.Logging.Format = logFormat
+	}
+	if quiet {
+		cfg.Logging.Quiet = true
+	}
+	if verbose {
+		cfg.Logging.Verbose = true
+	}
+}
+
+// setupMiner creates and connects a new miner instance
+func setupMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
+	miner, err := NewMiner(serverAddr, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := connectWithRetry(miner, cfg); err != nil {
+		return nil, err
+	}
+
+	return miner, nil
+}
+
+// handleShutdown sets up shutdown monitoring and cleanup
+func handleShutdown(miner *Miner, shutdownFile string, sigChan chan os.Signal, shutdownChan chan struct{}) {
+	go func() {
+		select {
+		case <-sigChan:
+			fmt.Println("Signal received, initiating shutdown...")
+		case <-shutdownChan:
+			fmt.Println("Shutdown file detected, initiating shutdown...")
+		}
+
+		var shutdownErrs []error
+
+		miner.Stop()
+
+		if selfDeleteOnExit.Load() {
+			fmt.Println("Auto-delete enabled, removing executable...")
+			if err := os.Remove(shutdownFile); err != nil {
+				shutdownErrs = append(shutdownErrs, fmt.Errorf("remove shutdown file: %w", err))
+			}
+			miner.selfDelete()
+		}
+
+		if len(shutdownErrs) > 0 {
+			for _, err := range shutdownErrs {
+				logger.Get().Error("shutdown error", "error", err)
+			}
+		}
+
+		os.Exit(0)
+	}()
 }
 
 // connectWithRetry attempts to connect to the pool with retries
@@ -1032,59 +1213,35 @@ func main() {
 	autoDelete = resolveAutoDeleteSetting(autoDelete, cfg)
 	selfDeleteOnExit.Store(autoDelete)
 
-	// Use config value if no command-line flag provided
-	// Config already handles env vars (RTC_CLIENT_SERVER_ADDRESS) via Viper
+	applyLoggingOverrides(cfg)
+	logger.Set(logger.NewFromClientConfig(cfg))
+
 	if serverAddress == "" {
 		serverAddress = cfg.Server.Address
 	}
 
+	logger.Get().Info("starting RedTeamCoin mining client",
+		"server", serverAddress,
+		"gpu_enabled", cfg.Mining.GPUEnabled,
+		"hybrid_mode", cfg.Mining.HybridMode)
+
 	fmt.Println("=== RedTeamCoin Miner ===")
 	fmt.Println()
 
-	miner, err := NewMiner(serverAddress, cfg)
+	miner, err := setupMiner(serverAddress, cfg)
 	if err != nil {
-		log.Fatalf("Failed to create miner: %v", err)
-	}
-
-	if err := connectWithRetry(miner, cfg); err != nil {
-		log.Fatal(err)
+		logger.Get().Error("failed to setup miner", "error", err)
+		os.Exit(1)
 	}
 
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Fatalf("Failed to get executable path: %v", err)
+		logger.Get().Error("failed to get executable path", "error", err)
+		os.Exit(1)
 	}
 
 	sigChan, shutdownChan, shutdownFile := startShutdownMonitor(miner.ctx, exePath)
-
-	go func() {
-		select {
-		case <-sigChan:
-			fmt.Println("Signal received, initiating shutdown...")
-		case <-shutdownChan:
-			fmt.Println("Shutdown file detected, initiating shutdown...")
-		}
-
-		var shutdownErrs []error
-
-		miner.Stop()
-
-		if selfDeleteOnExit.Load() {
-			fmt.Println("Auto-delete enabled, removing executable...")
-			if err := os.Remove(shutdownFile); err != nil {
-				shutdownErrs = append(shutdownErrs, fmt.Errorf("remove shutdown file: %w", err))
-			}
-			miner.selfDelete()
-		}
-
-		if len(shutdownErrs) > 0 {
-			for _, err := range shutdownErrs {
-				log.Printf("Shutdown error: %v", err)
-			}
-		}
-
-		os.Exit(0)
-	}()
+	handleShutdown(miner, shutdownFile, sigChan, shutdownChan)
 
 	miner.Start()
 }

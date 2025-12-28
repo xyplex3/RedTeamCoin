@@ -16,20 +16,35 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 
 	"redteamcoin/config"
+	"redteamcoin/logger"
 	pb "redteamcoin/proto"
 
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
 var (
 	configPath string
+	logLevel   string
+	logFormat  string
+	quiet      bool
+	verbose    bool
 )
+
+func init() {
+	flag.StringVar(&configPath, "config", "", "Path to configuration file")
+	flag.StringVar(&logLevel, "log-level", "", "Log level (debug, info, warn, error)")
+	flag.StringVar(&logFormat, "log-format", "", "Log format (text, color, json)")
+	flag.BoolVar(&quiet, "quiet", false, "Quiet mode (errors only)")
+	flag.BoolVar(&verbose, "verbose", false, "Verbose mode (enable debug)")
+}
 
 // generateAuthToken generates a cryptographically secure random 32-byte
 // authentication token encoded as a hexadecimal string. The function
@@ -37,7 +52,8 @@ var (
 func generateAuthToken() string {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
-		log.Fatalf("Failed to generate auth token: %v", err)
+		logger.Get().Error("failed to generate auth token", "error", err)
+		os.Exit(1)
 	}
 	return hex.EncodeToString(bytes)
 }
@@ -112,7 +128,6 @@ func getNetworkIPs() []string {
 }
 
 func main() {
-	flag.StringVar(&configPath, "config", "", "Path to config file")
 	flag.Parse()
 
 	fmt.Println("=== RedTeamCoin Mining Pool Server ===")
@@ -123,38 +138,87 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Apply CLI flag overrides to logging config
+	if logLevel != "" {
+		cfg.Logging.Level = logLevel
+	}
+	if logFormat != "" {
+		cfg.Logging.Format = logFormat
+	}
+	if quiet {
+		cfg.Logging.Quiet = true
+	}
+	if verbose {
+		cfg.Logging.Verbose = true
+	}
+
+	// Initialize application logger
+	logger.Set(logger.NewFromServerConfig(cfg))
+	logger.Get().Info("starting RedTeamCoin mining pool server",
+		"grpc_port", cfg.Network.GRPCPort,
+		"api_port", cfg.Network.APIPort,
+		"tls_enabled", cfg.TLS.Enabled,
+		"difficulty", cfg.Mining.Difficulty)
+
 	authToken := getAuthToken()
 
 	checkTLSCertificates(cfg)
 
 	blockchain, pool := initializeBlockchainAndPool(cfg)
-	initializeLogger(pool, blockchain, cfg)
+	initializePoolLogger(pool, blockchain, cfg)
 
-	go startGRPCServer(pool, cfg.Network.GRPCPort, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
+	// Create errgroup for coordinated server startup and shutdown
+	ctx := context.Background()
+	g, gCtx := errgroup.WithContext(ctx)
 
-	api := NewAPIServer(context.Background(), pool, blockchain, authToken, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
+	// Start gRPC server in errgroup
+	g.Go(func() error {
+		return startGRPCServer(gCtx, pool, cfg.Network.GRPCPort, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
+	})
 
+	// Start API server in errgroup
+	api := NewAPIServer(gCtx, pool, blockchain, authToken, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
 	protocol, port, redirectPort := determineServerPorts(cfg)
+
+	g.Go(func() error {
+		return api.Start(port, redirectPort)
+	})
 
 	displayServerInfo(cfg, authToken, protocol, port)
 
+	// Setup config watcher (non-blocking, uses its own context lifecycle)
 	setupConfigWatcher(cfg)
 
-	if err := api.Start(port, redirectPort); err != nil {
-		log.Fatalf("Failed to start API server: %v", err)
+	// Wait for all servers to complete or for an error
+	if err := g.Wait(); err != nil {
+		logger.Get().Error("server error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func checkTLSCertificates(cfg *config.ServerConfig) {
 	if !cfg.TLS.Enabled {
+		logger.Get().Debug("TLS disabled, skipping certificate check")
 		return
 	}
-	if fileExists(cfg.TLS.CertFile) && fileExists(cfg.TLS.KeyFile) {
+
+	certExists := fileExists(cfg.TLS.CertFile)
+	keyExists := fileExists(cfg.TLS.KeyFile)
+
+	if certExists && keyExists {
+		logger.Get().Info("TLS certificates verified",
+			"cert_file", cfg.TLS.CertFile,
+			"key_file", cfg.TLS.KeyFile)
 		return
 	}
-	fmt.Printf("ERROR: TLS is enabled but certificates not found!\n")
-	fmt.Printf("  Certificate: %s (exists: %v)\n", cfg.TLS.CertFile, fileExists(cfg.TLS.CertFile))
-	fmt.Printf("  Private Key: %s (exists: %v)\n", cfg.TLS.KeyFile, fileExists(cfg.TLS.KeyFile))
+
+	logger.Get().Error("TLS is enabled but certificates not found",
+		"cert_file", cfg.TLS.CertFile,
+		"cert_exists", certExists,
+		"key_file", cfg.TLS.KeyFile,
+		"key_exists", keyExists)
+
+	// Still use fmt for user instructions (UI output)
 	fmt.Printf("\nGenerate certificates by running:\n")
 	fmt.Printf("  ./generate_certs.sh\n")
 	fmt.Printf("\nOr disable TLS in server-config.yaml\n")
@@ -169,16 +233,20 @@ func initializeBlockchainAndPool(cfg *config.ServerConfig) (*Blockchain, *Mining
 	return blockchain, pool
 }
 
-func initializeLogger(pool *MiningPool, blockchain *Blockchain, cfg *config.ServerConfig) {
+func initializePoolLogger(pool *MiningPool, blockchain *Blockchain, cfg *config.ServerConfig) {
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Fatalf("Failed to get executable path: %v", err)
+		logger.Get().Error("failed to get executable path", "error", err)
+		os.Exit(1)
 	}
 	exeDir := filepath.Dir(exePath)
 	logFile := filepath.Join(exeDir, cfg.Logging.FilePath)
-	logger := NewPoolLogger(pool, blockchain, logFile, cfg.Logging.UpdateInterval)
-	pool.SetLogger(logger)
-	logger.Start()
+	poolLogger := NewPoolLogger(pool, blockchain, logFile, cfg.Logging.UpdateInterval)
+	pool.SetLogger(poolLogger)
+	poolLogger.Start()
+	logger.Get().Info("pool logger initialized",
+		"file_path", logFile,
+		"update_interval", cfg.Logging.UpdateInterval)
 }
 
 func determineServerPorts(cfg *config.ServerConfig) (protocol string, port, redirectPort int) {
@@ -256,17 +324,19 @@ func displayTLSInfo(cfg *config.ServerConfig) {
 func setupConfigWatcher(cfg *config.ServerConfig) {
 	// Start config file watcher for hot-reload (non-blocking)
 	// Monitors the config file for changes and reports detected changes.
-	// Note: Most settings require a server restart to take full effect:
+	// Note: Application logging settings (level, format, quiet, verbose) are
+	// hot-reloaded automatically. Other settings require a server restart:
 	//   - Network ports (grpc_port, api_port, http_port)
 	//   - TLS settings (enabled, cert_file, key_file)
 	//   - Mining parameters (difficulty, block_reward)
-	//   - Logging configuration (update_interval, file_path)
-	//
-	// Future enhancement: Add runtime update support for non-critical settings.
+	//   - PoolLogger configuration (update_interval, file_path)
+	configWatcherLogger := slog.Default()
 	if err := config.WatchServerConfig(context.Background(), configPath, func(newCfg *config.ServerConfig) {
 		handleConfigChange(cfg, newCfg)
-	}); err != nil {
-		fmt.Printf("Warning: Failed to start config watcher: %v\n", err)
+	}, configWatcherLogger); err != nil {
+		logger.Get().Warn("failed to start config watcher", "error", err)
+	} else {
+		logger.Get().Info("config file watcher started", "config_path", configPath)
 	}
 }
 
@@ -337,36 +407,71 @@ func checkTLSChanges(cfg, newCfg *config.ServerConfig) bool {
 }
 
 func checkLoggingChanges(cfg, newCfg *config.ServerConfig) bool {
-	changed := false
+	restartRequired := false
+
+	// Check PoolLogger settings (require restart)
 	if newCfg.Logging.UpdateInterval != cfg.Logging.UpdateInterval {
 		fmt.Printf("Logging update interval changed: %v -> %v (requires restart)\n", cfg.Logging.UpdateInterval, newCfg.Logging.UpdateInterval)
-		changed = true
+		restartRequired = true
 	}
 	if newCfg.Logging.FilePath != cfg.Logging.FilePath {
 		fmt.Printf("Log file path changed: %s -> %s (requires restart)\n", cfg.Logging.FilePath, newCfg.Logging.FilePath)
-		changed = true
+		restartRequired = true
 	}
-	return changed
+
+	// Check application logging settings (hot-reloadable!)
+	if newCfg.Logging.Level != cfg.Logging.Level ||
+		newCfg.Logging.Format != cfg.Logging.Format ||
+		newCfg.Logging.Quiet != cfg.Logging.Quiet ||
+		newCfg.Logging.Verbose != cfg.Logging.Verbose {
+
+		fmt.Printf("Application logging changed: level=%s format=%s quiet=%v verbose=%v (hot-reloading...)\n",
+			newCfg.Logging.Level, newCfg.Logging.Format, newCfg.Logging.Quiet, newCfg.Logging.Verbose)
+
+		// Hot-reload the logger with new settings
+		logger.Set(logger.NewFromServerConfig(newCfg))
+		logger.Get().Info("logging configuration reloaded",
+			"level", newCfg.Logging.Level,
+			"format", newCfg.Logging.Format,
+			"quiet", newCfg.Logging.Quiet,
+			"verbose", newCfg.Logging.Verbose)
+
+		// Update the config reference
+		cfg.Logging.Level = newCfg.Logging.Level
+		cfg.Logging.Format = newCfg.Logging.Format
+		cfg.Logging.Quiet = newCfg.Logging.Quiet
+		cfg.Logging.Verbose = newCfg.Logging.Verbose
+
+		// No restart required for application logging changes
+	}
+
+	return restartRequired
 }
 
 // startGRPCServer starts the gRPC server for miner connections.
 // It creates listeners for both IPv4 and IPv6 to accept connections from
 // all network interfaces. If IPv6 is unavailable, it silently continues
-// with IPv4 only. This function blocks until the server stops or encounters
-// a fatal error. If TLS is enabled, the server will use the provided
-// certificate and key files for secure communication.
-func startGRPCServer(pool *MiningPool, grpcPort int, useTLS bool, certFile, keyFile string) {
+// with IPv4 only. This function blocks until the server stops, the context
+// is cancelled, or an error occurs. If TLS is enabled, the server will use
+// the provided certificate and key files for secure communication.
+func startGRPCServer(ctx context.Context, pool *MiningPool, grpcPort int, useTLS bool, certFile, keyFile string) error {
 	var grpcServer *grpc.Server
 	if useTLS {
 		creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)
 		if err != nil {
-			log.Fatalf("Failed to load TLS credentials: %v", err)
+			logger.Get().Error("failed to load TLS credentials for gRPC",
+				"cert_file", certFile,
+				"key_file", keyFile,
+				"error", err)
+			return fmt.Errorf("failed to load TLS credentials: %w", err)
 		}
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
-		fmt.Println("gRPC server configured with TLS")
+		logger.Get().Info("gRPC server configured with TLS",
+			"cert_file", certFile,
+			"key_file", keyFile)
 	} else {
 		grpcServer = grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
-		fmt.Println("WARNING: gRPC server running without TLS encryption")
+		logger.Get().Warn("gRPC server running without TLS encryption")
 	}
 	pb.RegisterMiningPoolServer(grpcServer, NewMiningPoolServer(pool))
 
@@ -374,25 +479,43 @@ func startGRPCServer(pool *MiningPool, grpcPort int, useTLS bool, certFile, keyF
 	ipv4Addr := fmt.Sprintf("0.0.0.0:%d", grpcPort)
 	lis4, err := net.Listen("tcp4", ipv4Addr)
 	if err != nil {
-		log.Fatalf("Failed to listen on IPv4 port %d: %v", grpcPort, err)
+		logger.Get().Error("failed to listen on IPv4 port",
+			"port", grpcPort,
+			"address", ipv4Addr,
+			"error", err)
+		return fmt.Errorf("failed to listen on IPv4 port %d: %w", grpcPort, err)
 	}
-	fmt.Printf("gRPC server listening on %s (IPv4)\n", lis4.Addr().String())
+	logger.Get().Info("gRPC server listening on IPv4",
+		"address", lis4.Addr().String())
 
 	// Try to create IPv6 listener (silently skip if unavailable)
 	ipv6Addr := fmt.Sprintf("[::]:%d", grpcPort)
 	lis6, err := net.Listen("tcp6", ipv6Addr)
 	if err == nil {
-		fmt.Printf("gRPC server listening on %s (IPv6)\n", lis6.Addr().String())
+		logger.Get().Info("gRPC server listening on IPv6",
+			"address", lis6.Addr().String())
 		// Serve IPv6 in a separate goroutine
 		go func() {
 			if err := grpcServer.Serve(lis6); err != nil {
-				log.Fatalf("Failed to serve gRPC on IPv6: %v", err)
+				logger.Get().Error("failed to serve gRPC on IPv6", "error", err)
 			}
 		}()
+	} else {
+		logger.Get().Debug("IPv6 listener unavailable, using IPv4 only", "error", err)
 	}
 
-	// Serve IPv4 in the main goroutine
+	// Handle graceful shutdown when context is cancelled
+	go func() {
+		<-ctx.Done()
+		logger.Get().Info("shutting down gRPC server")
+		grpcServer.GracefulStop()
+	}()
+
+	// Serve IPv4 in the main goroutine (this blocks)
 	if err := grpcServer.Serve(lis4); err != nil {
-		log.Fatalf("Failed to serve gRPC on IPv4: %v", err)
+		logger.Get().Error("failed to serve gRPC on IPv4", "error", err)
+		return fmt.Errorf("gRPC server error: %w", err)
 	}
+
+	return nil
 }

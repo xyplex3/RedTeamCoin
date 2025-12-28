@@ -1,4 +1,4 @@
-.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools build-wasm build-java serve-web clean install-gpu-deps init-config init-client-config init-server-config test
+.PHONY: all proto build run-server run-client build-cuda build-opencl build-gpu build-windows build-all-platforms build-tools build-wasm build-java serve-web clean install-gpu-deps init-config init-client-config init-server-config validate-config validate-client-config validate-server-config test
 
 # Ensure Go bin is in PATH
 export PATH := $(PATH):$(HOME)/go/bin
@@ -182,6 +182,19 @@ init-server-config:
 		echo "server-config.yaml created"; \
 	fi
 
+# Validate configuration files
+validate-config:
+	@echo "Validating configuration files..."
+	@go run -tags tools ./tools/validate_config.go
+
+validate-client-config:
+	@echo "Validating client configuration..."
+	@go run -tags tools ./tools/validate_config.go -client client-config.yaml
+
+validate-server-config:
+	@echo "Validating server configuration..."
+	@go run -tags tools ./tools/validate_config.go -server server-config.yaml
+
 # Run server (checks for config first)
 run-server: build
 	@if [ ! -f server-config.yaml ]; then \
@@ -291,6 +304,9 @@ help:
 	@echo "  make init-config        - Initialize all configuration files"
 	@echo "  make init-client-config - Initialize client configuration only"
 	@echo "  make init-server-config - Initialize server configuration only"
+	@echo "  make validate-config    - Validate all configuration files"
+	@echo "  make validate-client-config - Validate client configuration only"
+	@echo "  make validate-server-config - Validate server configuration only"
 	@echo ""
 	@echo "Building:"
 	@echo "  make build              - Build server and client (CPU only)"

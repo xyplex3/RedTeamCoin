@@ -62,3 +62,7 @@ test-goreleaser-docker.sh
 .env
 !.env.example
 !.env.*.example
+
+# Binary artifacts
+client/client
+server/server

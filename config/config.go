@@ -6,6 +6,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,13 +14,53 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Default client configuration values.
+const (
+	DefaultClientServerAddress        = "localhost:50051"
+	DefaultClientGPUEnabled           = true
+	DefaultClientHybridMode           = false
+	DefaultClientAutoDelete           = true
+	DefaultClientGPUNonceRange        = 500000000
+	DefaultClientGPUCPUStartNonce     = 5000000000
+	DefaultClientHeartbeatInterval    = 30 * time.Second
+	DefaultClientRetryInterval        = 10 * time.Second
+	DefaultClientMaxRetryTime         = 5 * time.Minute
+	DefaultClientWorkerUpdateInterval = 100000
+	DefaultClientLoggingLevel         = "info"
+	DefaultClientLoggingFormat        = "color"
+	DefaultClientLoggingQuiet         = false
+	DefaultClientLoggingVerbose       = false
+)
+
+// Default server configuration values.
+const (
+	DefaultServerGRPCPort              = 50051
+	DefaultServerAPIPort               = 8443
+	DefaultServerHTTPPort              = 8080
+	DefaultServerMiningDifficulty      = 6
+	DefaultServerBlockReward           = 50
+	DefaultServerTLSEnabled            = false
+	DefaultServerTLSCertFile           = "certs/server.crt"
+	DefaultServerTLSKeyFile            = "certs/server.key"
+	DefaultServerAPIReadTimeout        = 15 * time.Second
+	DefaultServerAPIWriteTimeout       = 15 * time.Second
+	DefaultServerAPIIdleTimeout        = 60 * time.Second
+	DefaultServerLoggingUpdateInterval = 30 * time.Second
+	DefaultServerLoggingFilePath       = "pool_log.json"
+	DefaultServerLoggingLevel          = "info"
+	DefaultServerLoggingFormat         = "color"
+	DefaultServerLoggingQuiet          = false
+	DefaultServerLoggingVerbose        = false
+)
+
 // ClientConfig contains all configuration options for the mining client.
 type ClientConfig struct {
-	Server   ServerConnection `mapstructure:"server"`
-	Mining   MiningConfig     `mapstructure:"mining"`
-	GPU      GPUConfig        `mapstructure:"gpu"`
-	Network  NetworkConfig    `mapstructure:"network"`
-	Behavior BehaviorConfig   `mapstructure:"behavior"`
+	Server   ServerConnection    `mapstructure:"server"`
+	Mining   MiningConfig        `mapstructure:"mining"`
+	GPU      GPUConfig           `mapstructure:"gpu"`
+	Network  NetworkConfig       `mapstructure:"network"`
+	Behavior BehaviorConfig      `mapstructure:"behavior"`
+	Logging  ClientLoggingConfig `mapstructure:"logging"`
 }
 
 // ServerConnection defines pool server connection settings.
@@ -50,6 +91,14 @@ type NetworkConfig struct {
 // BehaviorConfig defines client operational behavior.
 type BehaviorConfig struct {
 	WorkerUpdateInterval int64 `mapstructure:"worker_update_interval"`
+}
+
+// ClientLoggingConfig defines logging behavior for the mining client.
+type ClientLoggingConfig struct {
+	Level   string `mapstructure:"level"`   // debug, info, warn, error
+	Format  string `mapstructure:"format"`  // text, color, json
+	Quiet   bool   `mapstructure:"quiet"`   // suppress all but errors
+	Verbose bool   `mapstructure:"verbose"` // enable debug logs
 }
 
 // ServerConfig contains all configuration options for the pool server.
@@ -88,10 +137,17 @@ type APIConfig struct {
 	IdleTimeout  time.Duration `mapstructure:"idle_timeout"`
 }
 
-// LoggingConfig defines logging behavior.
+// LoggingConfig defines logging behavior for the pool server.
 type LoggingConfig struct {
+	// PoolLogger fields (existing - for JSON event analytics)
 	UpdateInterval time.Duration `mapstructure:"update_interval"`
 	FilePath       string        `mapstructure:"file_path"`
+
+	// Application logging fields (new - for operational logs)
+	Level   string `mapstructure:"level"`   // debug, info, warn, error
+	Format  string `mapstructure:"format"`  // text, color, json
+	Quiet   bool   `mapstructure:"quiet"`   // suppress all but errors
+	Verbose bool   `mapstructure:"verbose"` // enable debug logs
 }
 
 // Validate checks if the client configuration is valid and returns an error if not.
@@ -122,6 +178,17 @@ func (c *ClientConfig) Validate() error {
 
 	if c.Behavior.WorkerUpdateInterval <= 0 {
 		return fmt.Errorf("worker_update_interval must be positive, got %d", c.Behavior.WorkerUpdateInterval)
+	}
+
+	// Validate logging configuration
+	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "warning": true, "error": true}
+	if c.Logging.Level != "" && !validLevels[c.Logging.Level] {
+		return fmt.Errorf("invalid logging.level: %q (must be debug, info, warn, or error)", c.Logging.Level)
+	}
+
+	validFormats := map[string]bool{"text": true, "color": true, "json": true}
+	if c.Logging.Format != "" && !validFormats[c.Logging.Format] {
+		return fmt.Errorf("invalid logging.format: %q (must be text, color, or json)", c.Logging.Format)
 	}
 
 	return nil
@@ -197,16 +264,56 @@ func (c *ServerConfig) validateAPIConfig() error {
 }
 
 func (c *ServerConfig) validateLoggingConfig() error {
+	// Validate PoolLogger fields
 	if c.Logging.UpdateInterval < time.Second {
 		return fmt.Errorf("logging.update_interval too short (minimum 1s), got %v", c.Logging.UpdateInterval)
 	}
 	if c.Logging.FilePath == "" {
 		return fmt.Errorf("logging.file_path cannot be empty")
 	}
+
+	// Validate application logging fields
+	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "warning": true, "error": true}
+	if c.Logging.Level != "" && !validLevels[c.Logging.Level] {
+		return fmt.Errorf("invalid logging.level: %q (must be debug, info, warn, or error)", c.Logging.Level)
+	}
+
+	validFormats := map[string]bool{"text": true, "color": true, "json": true}
+	if c.Logging.Format != "" && !validFormats[c.Logging.Format] {
+		return fmt.Errorf("invalid logging.format: %q (must be text, color, or json)", c.Logging.Format)
+	}
+
 	return nil
 }
 
 // LoadClientConfig loads client configuration from file, environment, and defaults.
+//
+// Configuration sources are applied in the following precedence order (highest to lowest):
+//  1. Command-line flags (handled by caller, not by this function)
+//  2. Environment variables (RTC_CLIENT_* prefix, e.g., RTC_CLIENT_SERVER_ADDRESS)
+//  3. Configuration file (client-config.yaml or specified path)
+//  4. Default values (built-in sensible defaults)
+//
+// Environment Variable Naming:
+// Environment variables use the prefix RTC_CLIENT_ followed by the nested config key
+// with dots replaced by underscores. Examples:
+//   - server.address        → RTC_CLIENT_SERVER_ADDRESS
+//   - mining.gpu_enabled    → RTC_CLIENT_MINING_GPU_ENABLED
+//   - gpu.nonce_range       → RTC_CLIENT_GPU_NONCE_RANGE
+//   - network.retry_interval → RTC_CLIENT_NETWORK_RETRY_INTERVAL
+//
+// Configuration File Search Paths:
+// If configPath is empty, the function searches for "client-config.yaml" in:
+//  1. Current directory (.)
+//  2. User config directory (~/.rtc)
+//  3. System config directory (/etc/rtc)
+//
+// If no config file is found in the search paths, defaults are used without error.
+// If configPath is specified but the file doesn't exist or can't be read, an error is returned.
+//
+// Validation:
+// The loaded configuration is validated before being returned. Invalid values
+// (e.g., empty server address, negative timeouts) will cause an error to be returned.
 func LoadClientConfig(configPath string) (*ClientConfig, error) {
 	v := viper.New()
 
@@ -245,6 +352,36 @@ func LoadClientConfig(configPath string) (*ClientConfig, error) {
 }
 
 // LoadServerConfig loads server configuration from file, environment, and defaults.
+//
+// Configuration sources are applied in the following precedence order (highest to lowest):
+//  1. Command-line flags (handled by caller, not by this function)
+//  2. Environment variables (RTC_SERVER_* prefix, e.g., RTC_SERVER_NETWORK_GRPC_PORT)
+//  3. Configuration file (server-config.yaml or specified path)
+//  4. Default values (built-in sensible defaults)
+//
+// Environment Variable Naming:
+// Environment variables use the prefix RTC_SERVER_ followed by the nested config key
+// with dots replaced by underscores. Examples:
+//   - network.grpc_port     → RTC_SERVER_NETWORK_GRPC_PORT
+//   - mining.difficulty     → RTC_SERVER_MINING_DIFFICULTY
+//   - tls.enabled           → RTC_SERVER_TLS_ENABLED
+//   - tls.cert_file         → RTC_SERVER_TLS_CERT_FILE
+//   - api.read_timeout      → RTC_SERVER_API_READ_TIMEOUT
+//   - logging.file_path     → RTC_SERVER_LOGGING_FILE_PATH
+//
+// Configuration File Search Paths:
+// If configPath is empty, the function searches for "server-config.yaml" in:
+//  1. Current directory (.)
+//  2. User config directory (~/.rtc)
+//  3. System config directory (/etc/rtc)
+//
+// If no config file is found in the search paths, defaults are used without error.
+// If configPath is specified but the file doesn't exist or can't be read, an error is returned.
+//
+// Validation:
+// The loaded configuration is validated before being returned. Invalid values
+// (e.g., out-of-range ports, invalid difficulty, missing TLS files when enabled)
+// will cause an error to be returned.
 func LoadServerConfig(configPath string) (*ServerConfig, error) {
 	v := viper.New()
 
@@ -286,7 +423,8 @@ func LoadServerConfig(configPath string) (*ServerConfig, error) {
 // configuration file and calls the callback when changes are detected.
 // The watcher stops when the context is cancelled. Returns immediately after
 // starting the watcher, or an error if initial config read fails.
-func WatchServerConfig(ctx context.Context, configPath string, callback func(*ServerConfig)) error {
+// If logger is nil, logging is disabled.
+func WatchServerConfig(ctx context.Context, configPath string, callback func(*ServerConfig), logger *slog.Logger) error {
 	v := viper.New()
 
 	setServerDefaults(v)
@@ -315,17 +453,34 @@ func WatchServerConfig(ctx context.Context, configPath string, callback func(*Se
 	// Set up file watching
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
-		fmt.Printf("Config file changed: %s\n", e.Name)
+		if logger != nil {
+			logger.Info("configuration file changed",
+				"file", e.Name,
+				"operation", e.Op.String())
+		}
 
 		var newConfig ServerConfig
 		if err := v.Unmarshal(&newConfig); err != nil {
-			fmt.Printf("Error unmarshaling config on reload: %v\n", err)
+			if logger != nil {
+				logger.Error("failed to unmarshal config on reload",
+					"error", err,
+					"file", e.Name)
+			}
 			return
 		}
 
 		if err := newConfig.Validate(); err != nil {
-			fmt.Printf("Invalid configuration after reload: %v\n", err)
+			if logger != nil {
+				logger.Error("invalid configuration after reload",
+					"error", err,
+					"file", e.Name)
+			}
 			return
+		}
+
+		if logger != nil {
+			logger.Info("configuration reloaded successfully",
+				"file", e.Name)
 		}
 
 		callback(&newConfig)
@@ -334,7 +489,10 @@ func WatchServerConfig(ctx context.Context, configPath string, callback func(*Se
 	// Start goroutine to block until context cancellation
 	go func() {
 		<-ctx.Done()
-		// Watcher cleanup happens automatically when function exits
+		if logger != nil {
+			logger.Debug("config watcher stopped",
+				"reason", "context cancelled")
+		}
 	}()
 
 	return nil
@@ -351,6 +509,10 @@ func setClientDefaults(v *viper.Viper) {
 	v.SetDefault("network.retry_interval", 10*time.Second)
 	v.SetDefault("network.max_retry_time", 5*time.Minute)
 	v.SetDefault("behavior.worker_update_interval", 100000)
+	v.SetDefault("logging.level", "info")
+	v.SetDefault("logging.format", "color")
+	v.SetDefault("logging.quiet", false)
+	v.SetDefault("logging.verbose", false)
 }
 
 func setServerDefaults(v *viper.Viper) {
@@ -365,6 +527,12 @@ func setServerDefaults(v *viper.Viper) {
 	v.SetDefault("api.read_timeout", 15*time.Second)
 	v.SetDefault("api.write_timeout", 15*time.Second)
 	v.SetDefault("api.idle_timeout", 60*time.Second)
+	// PoolLogger defaults (existing)
 	v.SetDefault("logging.update_interval", 30*time.Second)
 	v.SetDefault("logging.file_path", "pool_log.json")
+	// Application logging defaults (new)
+	v.SetDefault("logging.level", "info")
+	v.SetDefault("logging.format", "color")
+	v.SetDefault("logging.quiet", false)
+	v.SetDefault("logging.verbose", false)
 }

@@ -583,3 +583,284 @@ func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && (s[0:len(substr)] == substr || contains(s[1:], substr))))
 }
+
+// TestClientConfigPrecedenceIntegration tests the complete precedence hierarchy:
+// Command-line flags > Environment variables > Config file > Defaults
+func TestClientConfigPrecedenceIntegration(t *testing.T) {
+	// Create a config file with custom values
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "precedence-test.yaml")
+
+	configContent := `
+server:
+  address: "file.example.com:5555"
+
+mining:
+  gpu_enabled: false
+  hybrid_mode: false
+
+gpu:
+  nonce_range: 100000000
+  cpu_start_nonce: 1000000000
+
+network:
+  heartbeat_interval: "45s"
+  retry_interval: "15s"
+  max_retry_time: "8m"
+
+behavior:
+  worker_update_interval: 150000
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	// Set environment variables that should override file values
+	os.Setenv("RTC_CLIENT_SERVER_ADDRESS", "env.example.com:6666")
+	os.Setenv("RTC_CLIENT_MINING_GPU_ENABLED", "true")
+	os.Setenv("RTC_CLIENT_GPU_NONCE_RANGE", "200000000")
+	defer func() {
+		os.Unsetenv("RTC_CLIENT_SERVER_ADDRESS")
+		os.Unsetenv("RTC_CLIENT_MINING_GPU_ENABLED")
+		os.Unsetenv("RTC_CLIENT_GPU_NONCE_RANGE")
+	}()
+
+	cfg, err := LoadClientConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify precedence: env var > file > defaults
+	// Server address: env var should win
+	if cfg.Server.Address != "env.example.com:6666" {
+		t.Errorf("Expected env var address 'env.example.com:6666', got '%s'", cfg.Server.Address)
+	}
+
+	// GPU enabled: env var should win (true) over file (false)
+	if !cfg.Mining.GPUEnabled {
+		t.Error("Expected GPU enabled from env var (true)")
+	}
+
+	// Nonce range: env var should win (200000000) over file (100000000)
+	if cfg.GPU.NonceRange != 200000000 {
+		t.Errorf("Expected nonce range 200000000 from env, got %d", cfg.GPU.NonceRange)
+	}
+
+	// CPU start nonce: file should win over default (no env var set)
+	if cfg.GPU.CPUStartNonce != 1000000000 {
+		t.Errorf("Expected cpu start nonce 1000000000 from file, got %d", cfg.GPU.CPUStartNonce)
+	}
+
+	// Heartbeat interval: file should win (45s) over default (30s)
+	if cfg.Network.HeartbeatInterval != 45*time.Second {
+		t.Errorf("Expected heartbeat interval 45s from file, got %v", cfg.Network.HeartbeatInterval)
+	}
+
+	// Hybrid mode: file should win (false) since no env var set
+	if cfg.Mining.HybridMode {
+		t.Error("Expected hybrid mode disabled from file")
+	}
+}
+
+// TestServerConfigPrecedenceIntegration tests the complete precedence hierarchy for server config.
+func TestServerConfigPrecedenceIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "server-precedence-test.yaml")
+
+	configContent := `
+network:
+  grpc_port: 60051
+  api_port: 9443
+  http_port: 9080
+
+mining:
+  difficulty: 8
+  block_reward: 100
+
+tls:
+  enabled: false
+  cert_file: "file-cert.crt"
+  key_file: "file-key.key"
+
+api:
+  read_timeout: "25s"
+  write_timeout: "25s"
+  idle_timeout: "90s"
+
+logging:
+  update_interval: "45s"
+  file_path: "file-pool.json"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	// Set environment variables
+	os.Setenv("RTC_SERVER_NETWORK_GRPC_PORT", "55555")
+	os.Setenv("RTC_SERVER_MINING_DIFFICULTY", "12")
+	os.Setenv("RTC_SERVER_TLS_CERT_FILE", "env-cert.crt")
+	defer func() {
+		os.Unsetenv("RTC_SERVER_NETWORK_GRPC_PORT")
+		os.Unsetenv("RTC_SERVER_MINING_DIFFICULTY")
+		os.Unsetenv("RTC_SERVER_TLS_CERT_FILE")
+	}()
+
+	cfg, err := LoadServerConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadServerConfig failed: %v", err)
+	}
+
+	// Verify precedence: env var > file > defaults
+	// GRPC port: env var should win (55555) over file (60051)
+	if cfg.Network.GRPCPort != 55555 {
+		t.Errorf("Expected GRPC port 55555 from env, got %d", cfg.Network.GRPCPort)
+	}
+
+	// API port: file should win (9443) over default (8443)
+	if cfg.Network.APIPort != 9443 {
+		t.Errorf("Expected API port 9443 from file, got %d", cfg.Network.APIPort)
+	}
+
+	// Difficulty: env var should win (12) over file (8)
+	if cfg.Mining.Difficulty != 12 {
+		t.Errorf("Expected difficulty 12 from env, got %d", cfg.Mining.Difficulty)
+	}
+
+	// Block reward: file should win (100) over default (50)
+	if cfg.Mining.BlockReward != 100 {
+		t.Errorf("Expected block reward 100 from file, got %d", cfg.Mining.BlockReward)
+	}
+
+	// Cert file: env var should win over file
+	if cfg.TLS.CertFile != "env-cert.crt" {
+		t.Errorf("Expected cert file 'env-cert.crt' from env, got '%s'", cfg.TLS.CertFile)
+	}
+
+	// Key file: file should win (no env var set)
+	if cfg.TLS.KeyFile != "file-key.key" {
+		t.Errorf("Expected key file 'file-key.key' from file, got '%s'", cfg.TLS.KeyFile)
+	}
+
+	// Read timeout: file should win (25s) over default (15s)
+	if cfg.API.ReadTimeout != 25*time.Second {
+		t.Errorf("Expected read timeout 25s from file, got %v", cfg.API.ReadTimeout)
+	}
+}
+
+// TestClientConfigFileAndEnvCombination tests realistic scenarios with partial config coverage.
+func TestClientConfigFileAndEnvCombination(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "partial-config.yaml")
+
+	// Config file only specifies some values
+	configContent := `
+server:
+  address: "custom.pool.com:50051"
+
+gpu:
+  nonce_range: 750000000
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	// Environment only specifies some values
+	os.Setenv("RTC_CLIENT_MINING_HYBRID_MODE", "true")
+	os.Setenv("RTC_CLIENT_NETWORK_HEARTBEAT_INTERVAL", "25s")
+	defer func() {
+		os.Unsetenv("RTC_CLIENT_MINING_HYBRID_MODE")
+		os.Unsetenv("RTC_CLIENT_NETWORK_HEARTBEAT_INTERVAL")
+	}()
+
+	cfg, err := LoadClientConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify each value source
+	// From file
+	if cfg.Server.Address != "custom.pool.com:50051" {
+		t.Errorf("Expected address from file, got '%s'", cfg.Server.Address)
+	}
+	if cfg.GPU.NonceRange != 750000000 {
+		t.Errorf("Expected nonce range from file, got %d", cfg.GPU.NonceRange)
+	}
+
+	// From environment
+	if !cfg.Mining.HybridMode {
+		t.Error("Expected hybrid mode from env to be true")
+	}
+	if cfg.Network.HeartbeatInterval != 25*time.Second {
+		t.Errorf("Expected heartbeat interval 25s from env, got %v", cfg.Network.HeartbeatInterval)
+	}
+
+	// From defaults (not in file or env)
+	if !cfg.Mining.GPUEnabled {
+		t.Error("Expected GPU enabled from default")
+	}
+	if cfg.GPU.CPUStartNonce != 5000000000 {
+		t.Errorf("Expected CPU start nonce from default, got %d", cfg.GPU.CPUStartNonce)
+	}
+	if cfg.Network.RetryInterval != 10*time.Second {
+		t.Errorf("Expected retry interval from default, got %v", cfg.Network.RetryInterval)
+	}
+}
+
+// TestServerConfigFileAndEnvCombination tests realistic scenarios with partial server config coverage.
+func TestServerConfigFileAndEnvCombination(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "partial-server-config.yaml")
+
+	// Config file only specifies mining parameters
+	configContent := `
+mining:
+  difficulty: 7
+  block_reward: 75
+
+logging:
+  update_interval: "40s"
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	// Environment specifies TLS settings
+	os.Setenv("RTC_SERVER_TLS_ENABLED", "false")
+	os.Setenv("RTC_SERVER_NETWORK_HTTP_PORT", "9999")
+	defer func() {
+		os.Unsetenv("RTC_SERVER_TLS_ENABLED")
+		os.Unsetenv("RTC_SERVER_NETWORK_HTTP_PORT")
+	}()
+
+	cfg, err := LoadServerConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadServerConfig failed: %v", err)
+	}
+
+	// From file
+	if cfg.Mining.Difficulty != 7 {
+		t.Errorf("Expected difficulty 7 from file, got %d", cfg.Mining.Difficulty)
+	}
+	if cfg.Mining.BlockReward != 75 {
+		t.Errorf("Expected block reward 75 from file, got %d", cfg.Mining.BlockReward)
+	}
+	if cfg.Logging.UpdateInterval != 40*time.Second {
+		t.Errorf("Expected update interval 40s from file, got %v", cfg.Logging.UpdateInterval)
+	}
+
+	// From environment
+	if cfg.TLS.Enabled {
+		t.Error("Expected TLS disabled from env")
+	}
+	if cfg.Network.HTTPPort != 9999 {
+		t.Errorf("Expected HTTP port 9999 from env, got %d", cfg.Network.HTTPPort)
+	}
+
+	// From defaults
+	if cfg.Network.GRPCPort != 50051 {
+		t.Errorf("Expected GRPC port from default, got %d", cfg.Network.GRPCPort)
+	}
+	if cfg.API.ReadTimeout != 15*time.Second {
+		t.Errorf("Expected read timeout from default, got %v", cfg.API.ReadTimeout)
+	}
+}

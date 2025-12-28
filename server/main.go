@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -20,19 +21,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"redteamcoin/config"
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
-const (
-	grpcPort        = 50051              // Default port for gRPC mining protocol
-	apiPort         = 8443               // HTTPS port for web dashboard and REST API
-	httpPort        = 8080               // HTTP port for redirects when TLS enabled
-	difficulty      = 6                  // Mining difficulty (leading zeros required)
-	defaultCertFile = "certs/server.crt" // Default TLS certificate file path
-	defaultKeyFile  = "certs/server.key" // Default TLS private key file path
+var (
+	configPath string
 )
 
 // generateAuthToken generates a cryptographically secure random 32-byte
@@ -58,26 +55,6 @@ func getAuthToken() string {
 
 	// Generate a new token
 	return generateAuthToken()
-}
-
-// getTLSConfig returns TLS configuration from environment variables.
-// It reads RTC_USE_TLS, RTC_CERT_FILE, and RTC_KEY_FILE, returning
-// whether TLS is enabled and the certificate/key file paths.
-// Default paths are used if environment variables are not set.
-func getTLSConfig() (bool, string, string) {
-	useTLS := os.Getenv("RTC_USE_TLS") == "true"
-	certFile := os.Getenv("RTC_CERT_FILE")
-	keyFile := os.Getenv("RTC_KEY_FILE")
-
-	// Use defaults if not specified
-	if certFile == "" {
-		certFile = defaultCertFile
-	}
-	if keyFile == "" {
-		keyFile = defaultKeyFile
-	}
-
-	return useTLS, certFile, keyFile
 }
 
 // fileExists reports whether the file at the given path exists and is
@@ -136,81 +113,75 @@ func getNetworkIPs() []string {
 }
 
 func main() {
+	flag.StringVar(&configPath, "config", "", "Path to config file")
+	flag.Parse()
+
 	fmt.Println("=== RedTeamCoin Mining Pool Server ===")
 	fmt.Println()
 
-	// Get or generate authentication token
+	cfg, err := config.LoadServerConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	authToken := getAuthToken()
 
-	// Get TLS configuration
-	useTLS, certFile, keyFile := getTLSConfig()
-
-	// Validate TLS certificates if TLS is enabled
-	if useTLS {
-		if !fileExists(certFile) || !fileExists(keyFile) {
+	if cfg.TLS.Enabled {
+		if !fileExists(cfg.TLS.CertFile) || !fileExists(cfg.TLS.KeyFile) {
 			fmt.Printf("ERROR: TLS is enabled but certificates not found!\n")
-			fmt.Printf("  Certificate: %s (exists: %v)\n", certFile, fileExists(certFile))
-			fmt.Printf("  Private Key: %s (exists: %v)\n", keyFile, fileExists(keyFile))
+			fmt.Printf("  Certificate: %s (exists: %v)\n", cfg.TLS.CertFile, fileExists(cfg.TLS.CertFile))
+			fmt.Printf("  Private Key: %s (exists: %v)\n", cfg.TLS.KeyFile, fileExists(cfg.TLS.KeyFile))
 			fmt.Printf("\nGenerate certificates by running:\n")
 			fmt.Printf("  ./generate_certs.sh\n")
-			fmt.Printf("\nOr disable TLS by unsetting RTC_USE_TLS\n")
+			fmt.Printf("\nOr disable TLS in server-config.yaml\n")
 			os.Exit(1)
 		}
 	}
 
-	// Initialize blockchain
-	fmt.Printf("Initializing blockchain with difficulty: %d\n", difficulty)
-	blockchain := NewBlockchain(difficulty)
+	fmt.Printf("Initializing blockchain with difficulty: %d\n", cfg.Mining.Difficulty)
+	blockchain := NewBlockchain(int32(cfg.Mining.Difficulty))
 
 	// Initialize mining pool
 	fmt.Println("Initializing mining pool...")
 	pool := NewMiningPool(blockchain)
 
-	// Initialize and start logger
-	// Get executable path and create log file in the same directory
 	exePath, err := os.Executable()
 	if err != nil {
 		log.Fatalf("Failed to get executable path: %v", err)
 	}
 	exeDir := filepath.Dir(exePath)
-	logFile := filepath.Join(exeDir, "pool_log.json")
-	updateInterval := 30 * time.Second // Update log every 30 seconds
-	logger := NewPoolLogger(pool, blockchain, logFile, updateInterval)
+	logFile := filepath.Join(exeDir, cfg.Logging.FilePath)
+	logger := NewPoolLogger(pool, blockchain, logFile, cfg.Logging.UpdateInterval)
 	pool.SetLogger(logger)
 	logger.Start()
 
-	// Start gRPC server with TLS configuration
-	go startGRPCServer(pool, useTLS, certFile, keyFile)
+	go startGRPCServer(pool, cfg.Network.GRPCPort, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
 
-	// Start API server
-	api := NewAPIServer(context.Background(), pool, blockchain, authToken, useTLS, certFile, keyFile)
+	api := NewAPIServer(context.Background(), pool, blockchain, authToken, cfg.TLS.Enabled, cfg.TLS.CertFile, cfg.TLS.KeyFile)
 
-	// Determine protocol and port
 	protocol := "http"
-	port := apiPort
+	port := cfg.Network.APIPort
 	redirectPort := 0
 
-	if useTLS {
+	if cfg.TLS.Enabled {
 		protocol = "https"
-		redirectPort = httpPort
+		redirectPort = cfg.Network.HTTPPort
 	} else {
-		// When not using TLS, use port 8080
-		port = httpPort
+		port = cfg.Network.HTTPPort
 	}
 
-	// Get network interface IPs
 	networkIPs := getNetworkIPs()
 
 	fmt.Printf("\nServer started successfully!\n")
-	fmt.Printf("- gRPC Server: Port %d (all network interfaces)\n", grpcPort)
-	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", grpcPort, grpcPort)
+	fmt.Printf("- gRPC Server: Port %d (all network interfaces)\n", cfg.Network.GRPCPort)
+	fmt.Printf("  Local access: localhost:%d or 127.0.0.1:%d\n", cfg.Network.GRPCPort, cfg.Network.GRPCPort)
 	if len(networkIPs) > 0 {
 		fmt.Printf("  Network access from: ")
 		for i, ip := range networkIPs {
 			if i > 0 {
 				fmt.Printf(", ")
 			}
-			fmt.Printf("%s:%d", ip, grpcPort)
+			fmt.Printf("%s:%d", ip, cfg.Network.GRPCPort)
 		}
 		fmt.Printf("\n")
 	}
@@ -220,8 +191,8 @@ func main() {
 			fmt.Printf("                 %s://%s:%d?token=%s\n", protocol, ip, port, authToken)
 		}
 	}
-	if useTLS {
-		fmt.Printf("- HTTP Redirect: http://localhost:%d (redirects to HTTPS)\n", httpPort)
+	if cfg.TLS.Enabled {
+		fmt.Printf("- HTTP Redirect: http://localhost:%d (redirects to HTTPS)\n", cfg.Network.HTTPPort)
 	}
 
 	fmt.Printf("\n=== API Authentication Token ===\n")
@@ -254,7 +225,7 @@ func main() {
 // with IPv4 only. This function blocks until the server stops or encounters
 // a fatal error. If TLS is enabled, the server will use the provided
 // certificate and key files for secure communication.
-func startGRPCServer(pool *MiningPool, useTLS bool, certFile, keyFile string) {
+func startGRPCServer(pool *MiningPool, grpcPort int, useTLS bool, certFile, keyFile string) {
 	var grpcServer *grpc.Server
 	if useTLS {
 		creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)

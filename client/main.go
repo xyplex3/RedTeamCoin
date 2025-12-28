@@ -49,25 +49,16 @@ import (
 	"syscall"
 	"time"
 
+	"redteamcoin/config"
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	// defaultServerAddress is the mining pool server address used when no
-	// address is specified via command-line flags or environment variables.
-	defaultServerAddress = "localhost:50051"
-
-	// heartbeatInterval defines how frequently the client sends status
-	// updates to the pool server including hash rate, blocks mined, and
-	// GPU statistics.
-	heartbeatInterval = 30 * time.Second
-)
-
 var (
 	serverAddress string
+	configPath    string
 )
 
 // clampToInt32 converts an int to int32, clamping overflow values to prevent
@@ -105,6 +96,7 @@ type Miner struct {
 	conn          *grpc.ClientConn
 	ctx           context.Context
 	cancel        context.CancelFunc
+	config        *config.ClientConfig
 
 	blocksMined        int64
 	hashRate           int64
@@ -127,32 +119,22 @@ type Miner struct {
 }
 
 // NewMiner creates a new mining client configured to connect to the specified
-// server address. It automatically detects available GPU hardware and
-// configures mining mode based on environment variables GPU_MINING and
-// HYBRID_MINING.
-func NewMiner(serverAddr string) (*Miner, error) {
-	// Get hostname
+// server address and configuration. It automatically detects available GPU
+// hardware and configures mining mode based on the provided config.
+func NewMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
 	}
 
-	// Get IP address
 	ipAddress := getOutboundIP()
-
-	// Generate miner ID
 	minerID := fmt.Sprintf("miner-%s-%d", hostname, time.Now().Unix())
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Initialize GPU miner
 	gpuMiner := NewGPUMiner()
 
-	// Check for hybrid mode environment variable
-	hybridMode := os.Getenv("HYBRID_MINING") == "true"
-	gpuEnabled := os.Getenv("GPU_MINING") != "false" // Enabled by default if GPUs found
+	hybridMode := cfg.Mining.HybridMode
+	gpuEnabled := cfg.Mining.GPUEnabled
 
-	// GPU can only be enabled if GPUs are actually detected
 	hasGPU := gpuMiner.HasGPUs()
 	if !hasGPU {
 		gpuEnabled = false
@@ -166,9 +148,10 @@ func NewMiner(serverAddr string) (*Miner, error) {
 		serverAddress:      serverAddr,
 		ctx:                ctx,
 		cancel:             cancel,
+		config:             cfg,
 		running:            false,
-		shouldMine:         true, // Start with mining enabled by default
-		cpuThrottlePercent: 0,    // No throttling by default
+		shouldMine:         true,
+		cpuThrottlePercent: 0,
 		deletedByServer:    false,
 		gpuMiner:           gpuMiner,
 		hasGPU:             hasGPU,
@@ -660,7 +643,7 @@ func (m *Miner) monitorCPU() {
 // throttling adjustments, and deletion requests. Automatically handles miner
 // termination when deleted by the server.
 func (m *Miner) sendHeartbeat() {
-	ticker := time.NewTicker(heartbeatInterval)
+	ticker := time.NewTicker(m.config.Network.HeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -750,7 +733,7 @@ func (m *Miner) sendHeartbeat() {
 // a valid solution is found or mining is stopped. Updates the display with current
 // progress and hash rate. Returns the found nonce, hash, and total hashes computed.
 func (m *Miner) mineBlockGPU(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
-	const nonceRange = 50000000
+	nonceRange := m.config.GPU.NonceRange
 
 	startNonce := int64(0)
 	totalHashes := int64(0)
@@ -803,7 +786,7 @@ type miningResult struct {
 // is found or the done channel signals termination. Sends results back via
 // resultChan for coordination with CPU workers.
 func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
-	const gpuNonceRange = 50000000
+	gpuNonceRange := m.config.GPU.NonceRange
 	gpuStartNonce := int64(0)
 	gpuHashes := int64(0)
 
@@ -833,7 +816,7 @@ func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, d
 // overlap), applies throttling if configured, and reports progress. Stops
 // when done or cpuDone signals are received.
 func (m *Miner) runCPUWorker(index, timestamp int64, data, previousHash, prefix string, difficulty, workerID, numWorkers int, done, cpuDone <-chan struct{}, resultChan chan<- miningResult) {
-	localNonce := int64(5000000000 + workerID)
+	localNonce := m.config.GPU.CPUStartNonce + int64(workerID)
 	localHashes := int64(0)
 	hashCounter := int64(0)
 
@@ -994,8 +977,14 @@ func main() {
 	var autoDelete bool
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
+	flag.StringVar(&configPath, "config", "", "Path to config file")
 	flag.BoolVar(&autoDelete, "auto-delete", true, "Delete executable on shutdown (default: true)")
 	flag.Parse()
+
+	cfg, err := config.LoadClientConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	selfDeleteOnExit.Store(autoDelete)
 
@@ -1003,22 +992,17 @@ func main() {
 		if envServer := os.Getenv("POOL_SERVER"); envServer != "" {
 			serverAddress = envServer
 		} else {
-			serverAddress = defaultServerAddress
+			serverAddress = cfg.Server.Address
 		}
 	}
 
 	fmt.Println("=== RedTeamCoin Miner ===")
 	fmt.Println()
 
-	miner, err := NewMiner(serverAddress)
+	miner, err := NewMiner(serverAddress, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create miner: %v", err)
 	}
-
-	const (
-		retryInterval = 10 * time.Second
-		maxRetryTime  = 5 * time.Minute
-	)
 
 	startTime := time.Now()
 	connected := false
@@ -1031,15 +1015,15 @@ func main() {
 		}
 
 		elapsed := time.Since(startTime)
-		if elapsed >= maxRetryTime {
-			log.Fatalf("Failed to connect to pool after %v: %v", maxRetryTime, err)
+		if elapsed >= cfg.Network.MaxRetryTime {
+			log.Fatalf("Failed to connect to pool after %v: %v", cfg.Network.MaxRetryTime, err)
 		}
 
-		remaining := maxRetryTime - elapsed
+		remaining := cfg.Network.MaxRetryTime - elapsed
 		fmt.Printf("Failed to connect: %v\n", err)
 		fmt.Printf("Retrying in %v... (%.0f seconds remaining before timeout)\n",
-			retryInterval, remaining.Seconds())
-		time.Sleep(retryInterval)
+			cfg.Network.RetryInterval, remaining.Seconds())
+		time.Sleep(cfg.Network.RetryInterval)
 	}
 
 	exePath, err := os.Executable()

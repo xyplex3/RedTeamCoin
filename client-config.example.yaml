@@ -1,0 +1,28 @@
+---
+# RedTeamCoin Client Configuration Example
+# Copy this to 'client-config.yaml' and customize as needed.
+# Priority: Command-line flags > Environment variables > Config file > Defaults
+
+server:
+  address: "localhost:50051"
+
+mining:
+  gpu_enabled: true
+  hybrid_mode: false
+  auto_delete: true
+
+gpu:
+  # Nonce range per GPU batch - tune for your GPU tier:
+  # High-end (RTX 4090): 1000000000
+  # Mid-range (RTX 3060): 500000000 (default)
+  # Low-end (GTX 1650): 50000000
+  nonce_range: 500000000
+  cpu_start_nonce: 5000000000
+
+network:
+  heartbeat_interval: "30s"
+  retry_interval: "10s"
+  max_retry_time: "5m"
+
+behavior:
+  worker_update_interval: 100000

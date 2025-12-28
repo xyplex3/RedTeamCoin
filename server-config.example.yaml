@@ -1,0 +1,27 @@
+---
+# RedTeamCoin Server Configuration Example
+# Copy this to 'server-config.yaml' and customize as needed.
+# Priority: Environment variables > Config file > Defaults
+
+network:
+  grpc_port: 50051
+  api_port: 8443
+  http_port: 8080
+
+mining:
+  difficulty: 6
+  block_reward: 50
+
+tls:
+  enabled: false
+  cert_file: "certs/server.crt"
+  key_file: "certs/server.key"
+
+api:
+  read_timeout: "15s"
+  write_timeout: "15s"
+  idle_timeout: "60s"
+
+logging:
+  update_interval: "30s"
+  file_path: "pool_log.json"

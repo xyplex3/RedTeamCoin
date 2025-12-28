@@ -7,13 +7,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"redteamcoin/config"
 )
 
 // TestHybridMiningUsesAllCores verifies that hybrid mining spawns workers
 // for all CPU cores and that they're actually performing work.
 func TestHybridMiningUsesAllCores(t *testing.T) {
-	// Skip if no GPU available (will fallback to CPU-only)
-	miner, err := NewMiner("localhost:50051")
+	cfg, _ := config.LoadClientConfig("")
+	miner, err := NewMiner("localhost:50051", cfg)
 	if err != nil {
 		t.Fatalf("Failed to create miner: %v", err)
 	}

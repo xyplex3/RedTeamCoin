@@ -178,15 +178,9 @@ func (cm *CUDAMiner) MineBlock(blockIndex, timestamp int64, data, previousHash s
 	blockData := fmt.Sprintf("%d%d%s%s", blockIndex, timestamp, data, previousHash)
 	blockBytes := []byte(blockData)
 
-	// Try GPU mining first
+	// Try GPU mining
 	gpuNonce, gpuHash, found := cm.tryGPUMining(blockBytes, difficulty, startNonce, nonceRange)
-	if found {
-		return gpuNonce, gpuHash, nonceRange, true
-	}
-
-	// Fallback to CPU mining if GPU not available or kernel compilation failed
-	n, h, hc := cm.mineCPU(blockIndex, timestamp, data, previousHash, difficulty, startNonce, nonceRange)
-	return n, h, hc, h != ""
+	return gpuNonce, gpuHash, nonceRange, found
 }
 
 // tryGPUMining attempts to mine using the CUDA kernel by calling the

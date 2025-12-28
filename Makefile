@@ -42,11 +42,11 @@ build-cuda: proto
 	@echo "Building with CUDA support..."
 	@command -v nvcc >/dev/null 2>&1 || (echo "Error: CUDA compiler (nvcc) not found. Install NVIDIA CUDA Toolkit." && exit 1)
 	@echo "Compiling CUDA kernel..."
-	nvcc -c -m64 -O3 client/mine.cu -o client/mine.o
+	nvcc -c -m64 -O3 client/mine.cu -o client/mine_cuda.o
 	@echo "✓ CUDA kernel compiled"
 	@echo "Building client with CUDA support..."
 	CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/local/cuda/lib64 -lcuda -lcudart -Lbin" go build -tags cuda -o bin/client-cuda ./client
-	@echo "✓ Client built with CUDA support: bin/client"
+	@echo "✓ Client built with CUDA support: bin/client-cuda"
 
 # Build with OpenCL support
 build-opencl: proto

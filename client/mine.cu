@@ -188,16 +188,38 @@ __global__ void sha256_mine_kernel(
 
     uint64_t nonce = start_nonce + idx;
 
-    // Prepare message: block_data + nonce (8 bytes)
+    // Prepare message: block_data + nonce (as decimal string, like Go does)
     uint8_t message[256];
     memcpy(message, block_data, data_len);
-    for (int i = 0; i < 8; i++) {
-        message[data_len + i] = (nonce >> (56 - i * 8)) & 0xff;
+    
+    // Convert nonce to decimal string
+    char nonce_str[32];
+    int nonce_len = 0;
+    uint64_t temp = nonce;
+    if (temp == 0) {
+        nonce_str[nonce_len++] = '0';
+    } else {
+        char digits[32];
+        int digit_count = 0;
+        while (temp > 0) {
+            digits[digit_count++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        // Reverse digits
+        for (int i = digit_count - 1; i >= 0; i--) {
+            nonce_str[nonce_len++] = digits[i];
+        }
     }
+    
+    // Append nonce string to message
+    for (int i = 0; i < nonce_len; i++) {
+        message[data_len + i] = nonce_str[i];
+    }
+    int message_len = data_len + nonce_len;
 
     // Compute hash
     uint8_t hash[32];
-    sha256_compute(message, data_len + 8, hash);
+    sha256_compute(message, message_len, hash);
 
     // Check difficulty
     if (check_difficulty(hash, difficulty)) {
@@ -224,10 +246,6 @@ extern "C" {
         uint8_t* result_hash,
         bool* found
     ) {
-        fprintf(stderr, "DEBUG: cuda_mine called - start_nonce=%llu, nonce_range=%llu, difficulty=%d\n", 
-                (unsigned long long)start_nonce, (unsigned long long)nonce_range, difficulty);
-        fflush(stderr);
-        
         cudaError_t err;
         
         // Allocate device memory
@@ -370,9 +388,6 @@ extern "C" {
             cudaFree(d_found);
             return;
         }
-
-        fprintf(stderr, "DEBUG: cuda_mine completed successfully - found=%d\n", *found ? 1 : 0);
-        fflush(stderr);
 
         // Free device memory
         cudaFree(d_block_data);

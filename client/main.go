@@ -120,6 +120,10 @@ type Miner struct {
 	hasGPU     bool
 	gpuEnabled bool
 	hybridMode bool
+
+	currentBlockIndex int64
+	cancelWork        context.CancelFunc
+	workCtx           context.Context
 }
 
 // NewMiner creates a new mining client configured to connect to the specified
@@ -403,11 +407,6 @@ func (m *Miner) selfDelete() {
 	}()
 }
 
-// mine runs the main mining loop, requesting work from the pool server,
-// computing proof-of-work solutions, and submitting results. It respects
-// server control flags (shouldMine, cpuThrottlePercent) and selects the
-// appropriate mining strategy (CPU-only, GPU-only, or hybrid) based on
-// hardware availability. This method blocks until mining is stopped.
 func (m *Miner) mine() {
 	fmt.Println("Starting mining...")
 	fmt.Println("Press Ctrl+C to stop mining")
@@ -416,13 +415,11 @@ func (m *Miner) mine() {
 	totalHashes := int64(0)
 
 	for m.running {
-		// Check if server wants us to mine
 		if !m.shouldMine {
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
-		// Get work from pool
 		workResp, err := m.client.GetWork(m.ctx, &pb.WorkRequest{
 			MinerId: m.id,
 		})
@@ -433,17 +430,28 @@ func (m *Miner) mine() {
 			continue
 		}
 
+		if workResp.BlockIndex < m.currentBlockIndex {
+			fmt.Printf("Skipping stale work for block %d (current: %d)\n", workResp.BlockIndex, m.currentBlockIndex)
+			continue
+		}
+
+		if m.cancelWork != nil {
+			m.cancelWork()
+		}
+
+		m.currentBlockIndex = workResp.BlockIndex
+		m.workCtx, m.cancelWork = context.WithCancel(m.ctx)
+
 		fmt.Printf("Received work for block %d (difficulty: %d)\n", workResp.BlockIndex, workResp.Difficulty)
 
-		// Mine the block - use hybrid mining if GPU available and enabled
 		var nonce int64
 		var hash string
 		var hashes int64
 
 		switch {
 		case m.hasGPU && m.gpuEnabled && m.hybridMode:
-			// Hybrid: CPU + GPU mining simultaneously
 			nonce, hash, hashes = m.mineBlockHybrid(
+				m.workCtx,
 				workResp.BlockIndex,
 				workResp.Timestamp,
 				workResp.Data,
@@ -451,8 +459,8 @@ func (m *Miner) mine() {
 				int(workResp.Difficulty),
 			)
 		case m.hasGPU && m.gpuEnabled:
-			// GPU only
 			nonce, hash, hashes = m.mineBlockGPU(
+				m.workCtx,
 				workResp.BlockIndex,
 				workResp.Timestamp,
 				workResp.Data,
@@ -460,8 +468,8 @@ func (m *Miner) mine() {
 				int(workResp.Difficulty),
 			)
 		default:
-			// CPU only
 			nonce, hash, hashes = m.mineBlock(
+				m.workCtx,
 				workResp.BlockIndex,
 				workResp.Timestamp,
 				workResp.Data,
@@ -511,75 +519,67 @@ func (m *Miner) mine() {
 // parallel, applying CPU throttling if configured. Returns the found nonce,
 // hash, and total hashes computed. The first worker to find a valid solution
 // signals all others to stop.
-func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
-	prefix := ""
-	for i := 0; i < difficulty; i++ {
-		prefix += "0"
-	}
+type mineResult struct {
+	nonce  int64
+	hash   string
+	hashes int64
+	found  bool
+}
 
-	// Use all available CPU cores
+func (m *Miner) cpuWorker(ctx context.Context, workerID, numWorkers int, index, timestamp int64, data, previousHash, prefix string, difficulty int, done <-chan struct{}, resultChan chan<- mineResult) {
+	localNonce := int64(workerID)
+	localHashes := int64(0)
+	hashCounter := int64(0)
+
+	for {
+		select {
+		case <-ctx.Done():
+			resultChan <- mineResult{nonce: 0, hash: "", hashes: localHashes, found: false}
+			return
+		case <-done:
+			resultChan <- mineResult{nonce: 0, hash: "", hashes: localHashes, found: false}
+			return
+		default:
+			hash := m.calculateHash(index, timestamp, data, previousHash, localNonce)
+			localHashes++
+			hashCounter++
+
+			if len(hash) >= difficulty && hash[:difficulty] == prefix {
+				resultChan <- mineResult{nonce: localNonce, hash: hash, hashes: localHashes, found: true}
+				return
+			}
+
+			if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
+				sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
+				time.Sleep(sleepMs)
+			}
+
+			localNonce += int64(numWorkers)
+
+			if workerID == 0 && localHashes%100000 == 0 {
+				fmt.Printf("Mining block %d... Nonce: %d, Hash rate: %d H/s\r",
+					index, localNonce, m.hashRate)
+			}
+		}
+	}
+}
+
+func (m *Miner) mineBlock(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	prefix := strings.Repeat("0", difficulty)
+
 	numWorkers := runtime.NumCPU()
 	fmt.Printf("Starting %d worker threads for CPU mining...\n", numWorkers)
 
-	type result struct {
-		nonce  int64
-		hash   string
-		hashes int64
-		found  bool
-	}
-
-	resultChan := make(chan result, numWorkers)
+	resultChan := make(chan mineResult, numWorkers)
 	done := make(chan struct{})
 
-	// Start worker goroutines
 	for i := 0; i < numWorkers; i++ {
-		go func(workerID int) {
-			// Each worker gets its own nonce range offset
-			// Worker 0: 0, numWorkers, 2*numWorkers, ...
-			// Worker 1: 1, numWorkers+1, 2*numWorkers+1, ...
-			localNonce := int64(workerID)
-			localHashes := int64(0)
-			hashCounter := int64(0)
-
-			for {
-				select {
-				case <-done:
-					// Send final hash count even if not found
-					resultChan <- result{nonce: 0, hash: "", hashes: localHashes, found: false}
-					return
-				default:
-					hash := m.calculateHash(index, timestamp, data, previousHash, localNonce)
-					localHashes++
-					hashCounter++
-
-					if len(hash) >= difficulty && hash[:difficulty] == prefix {
-						resultChan <- result{nonce: localNonce, hash: hash, hashes: localHashes, found: true}
-						return
-					}
-
-					// Apply CPU throttling if set
-					if m.cpuThrottlePercent > 0 && hashCounter%1000 == 0 {
-						sleepMs := time.Duration(m.cpuThrottlePercent) * time.Millisecond / 10
-						time.Sleep(sleepMs)
-					}
-
-					// Increment by number of workers to avoid overlap
-					localNonce += int64(numWorkers)
-
-					// Update display every 100,000 hashes (only worker 0)
-					if workerID == 0 && localHashes%100000 == 0 {
-						fmt.Printf("Mining block %d... Nonce: %d, Hash rate: %d H/s\r",
-							index, localNonce, m.hashRate)
-					}
-				}
-			}
-		}(i)
+		go m.cpuWorker(ctx, i, numWorkers, index, timestamp, data, previousHash, prefix, difficulty, done, resultChan)
 	}
 
-	// Wait for first successful result or stop signal
 	totalHashes := int64(0)
 	workersReporting := 0
-	var foundResult result
+	var foundResult mineResult
 
 	for workersReporting < numWorkers {
 		res := <-resultChan
@@ -587,13 +587,11 @@ func (m *Miner) mineBlock(index, timestamp int64, data, previousHash string, dif
 		workersReporting++
 
 		if res.found && foundResult.hash == "" {
-			// Found a solution! Signal all workers to stop
 			foundResult = res
 			close(done)
 		}
 	}
 
-	// If we found a result, return it
 	if foundResult.hash != "" {
 		return foundResult.nonce, foundResult.hash, totalHashes
 	}
@@ -747,18 +745,23 @@ func (m *Miner) sendHeartbeat() {
 	}
 }
 
-// mineBlockGPU performs GPU-only proof-of-work mining by processing large
-// nonce ranges (1 billion at a time) through the GPU miner. It continuously
-// submits work batches until a valid solution is found or mining is stopped.
-// Updates the display with current progress and hash rate. Returns the found
-// nonce, hash, and total hashes computed.
-func (m *Miner) mineBlockGPU(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
-	const nonceRange = 1000000000 // 1 billion nonces per GPU batch
+// mineBlockGPU performs GPU-only proof-of-work mining by processing nonce
+// ranges through the GPU miner. It continuously submits work batches until
+// a valid solution is found or mining is stopped. Updates the display with current
+// progress and hash rate. Returns the found nonce, hash, and total hashes computed.
+func (m *Miner) mineBlockGPU(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+	const nonceRange = 50000000
 
 	startNonce := int64(0)
 	totalHashes := int64(0)
 
 	for m.running {
+		select {
+		case <-ctx.Done():
+			return 0, "", totalHashes
+		default:
+		}
+
 		nonce, hash, hashes, found := m.gpuMiner.MineBlock(
 			index, timestamp, data, previousHash, difficulty,
 			startNonce, nonceRange,
@@ -800,7 +803,7 @@ type miningResult struct {
 // is found or the done channel signals termination. Sends results back via
 // resultChan for coordination with CPU workers.
 func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
-	const gpuNonceRange = 1000000000
+	const gpuNonceRange = 50000000
 	gpuStartNonce := int64(0)
 	gpuHashes := int64(0)
 
@@ -918,7 +921,7 @@ func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHa
 }
 
 // mineBlockHybrid mines a block using both CPU and GPU simultaneously
-func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
+func (m *Miner) mineBlockHybrid(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
 	resultChan := make(chan miningResult, 2)
 	done := make(chan struct{})
 	defer close(done)
@@ -926,14 +929,16 @@ func (m *Miner) mineBlockHybrid(index, timestamp int64, data, previousHash strin
 	go m.runGPUMiner(index, timestamp, data, previousHash, difficulty, done, resultChan)
 	go m.runCPUMiningCoordinator(index, timestamp, data, previousHash, difficulty, done, resultChan)
 
-	res := <-resultChan
-
-	if res.found {
-		fmt.Printf("\n✓ Block found by %s!\n", res.source)
-		return res.nonce, res.hash, res.hashes
+	select {
+	case <-ctx.Done():
+		return 0, "", 0
+	case res := <-resultChan:
+		if res.found {
+			fmt.Printf("\nBlock found by %s!\n", res.source)
+			return res.nonce, res.hash, res.hashes
+		}
+		return 0, "", res.hashes
 	}
-
-	return 0, "", res.hashes
 }
 
 var (

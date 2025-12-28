@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -70,12 +71,14 @@ func TestHybridMiningUsesAllCores(t *testing.T) {
 
 	// Start mining (this will block until done channel closes)
 	go func() {
+		ctx := context.Background()
 		nonce, hash, hashes := miner.mineBlockHybrid(
-			1,                  // index
-			time.Now().Unix(),  // timestamp
-			"test block",       // data
-			"0000000000000000", // previousHash
-			difficulty,         // difficulty
+			ctx,
+			1,
+			time.Now().Unix(),
+			"test block",
+			"0000000000000000",
+			difficulty,
 		)
 
 		atomic.AddInt32(&workerCount, 1)
@@ -145,7 +148,9 @@ func TestGPUResponsivenessToEarlyCPUWin(t *testing.T) {
 	difficulty := 1
 
 	start := time.Now()
+	ctx := context.Background()
 	nonce, hash, hashes := miner.mineBlockHybrid(
+		ctx,
 		1,
 		time.Now().Unix(),
 		"test",

@@ -20,13 +20,13 @@ func TestClientConfigDefaults(t *testing.T) {
 	}
 
 	// Mining defaults
-	if cfg.Mining.GPUEnabled != true {
+	if !cfg.Mining.GPUEnabled {
 		t.Error("Expected GPU enabled by default")
 	}
-	if cfg.Mining.HybridMode != false {
+	if cfg.Mining.HybridMode {
 		t.Error("Expected hybrid mode disabled by default")
 	}
-	if cfg.Mining.AutoDelete != true {
+	if !cfg.Mining.AutoDelete {
 		t.Error("Expected auto delete enabled by default")
 	}
 
@@ -82,7 +82,7 @@ func TestServerConfigDefaults(t *testing.T) {
 	}
 
 	// TLS defaults
-	if cfg.TLS.Enabled != false {
+	if cfg.TLS.Enabled {
 		t.Error("Expected TLS disabled by default")
 	}
 	if cfg.TLS.CertFile != "certs/server.crt" {
@@ -153,10 +153,10 @@ behavior:
 	if cfg.Server.Address != "test.example.com:9999" {
 		t.Errorf("Expected address 'test.example.com:9999', got '%s'", cfg.Server.Address)
 	}
-	if cfg.Mining.GPUEnabled != false {
+	if cfg.Mining.GPUEnabled {
 		t.Error("Expected GPU disabled")
 	}
-	if cfg.Mining.HybridMode != true {
+	if !cfg.Mining.HybridMode {
 		t.Error("Expected hybrid mode enabled")
 	}
 	if cfg.GPU.NonceRange != 1000000000 {
@@ -237,7 +237,7 @@ func TestClientConfigEnvironmentOverride(t *testing.T) {
 	if cfg.Server.Address != "env.example.com:7777" {
 		t.Errorf("Expected address from env 'env.example.com:7777', got '%s'", cfg.Server.Address)
 	}
-	if cfg.Mining.GPUEnabled != false {
+	if cfg.Mining.GPUEnabled {
 		t.Error("Expected GPU disabled from env")
 	}
 	if cfg.GPU.NonceRange != 999999999 {

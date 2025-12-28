@@ -247,7 +247,7 @@ func displayTLSInfo(cfg *config.ServerConfig) {
 		fmt.Printf("\n=== TLS/HTTPS Configuration ===\n")
 		fmt.Printf("TLS Enabled: Yes\n")
 		fmt.Printf("Note: Using self-signed certificate. Browsers will show a warning.\n")
-		fmt.Printf("To accept: Click 'Advanced' -> 'Proceed to localhost or the server IP address. '\n")
+		fmt.Printf("To accept: Click 'Advanced' -> 'Proceed to localhost or the server IP address'.\n")
 	} else {
 		fmt.Printf("\nWARNING: TLS is disabled. Enable with: export RTC_SERVER_TLS_ENABLED=true\n")
 	}
@@ -318,11 +318,20 @@ func checkMiningChanges(cfg, newCfg *config.ServerConfig) bool {
 }
 
 func checkTLSChanges(cfg, newCfg *config.ServerConfig) bool {
+	changed := false
 	if newCfg.TLS.Enabled != cfg.TLS.Enabled {
 		fmt.Printf("TLS enabled changed: %v -> %v (requires restart)\n", cfg.TLS.Enabled, newCfg.TLS.Enabled)
-		return true
+		changed = true
 	}
-	return false
+	if newCfg.TLS.CertFile != cfg.TLS.CertFile {
+		fmt.Printf("TLS certificate file path changed: %s -> %s (requires restart)\n", cfg.TLS.CertFile, newCfg.TLS.CertFile)
+		changed = true
+	}
+	if newCfg.TLS.KeyFile != cfg.TLS.KeyFile {
+		fmt.Printf("TLS key file path changed: %s -> %s (requires restart)\n", cfg.TLS.KeyFile, newCfg.TLS.KeyFile)
+		changed = true
+	}
+	return changed
 }
 
 func checkLoggingChanges(cfg, newCfg *config.ServerConfig) bool {

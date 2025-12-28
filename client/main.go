@@ -973,19 +973,63 @@ func startShutdownMonitor(ctx context.Context, exePath string) (chan os.Signal, 
 	return sigChan, shutdownChan, shutdownFile
 }
 
-func main() {
+// parseFlags parses command-line flags and returns the auto-delete setting
+func parseFlags() bool {
 	var autoDelete bool
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
 	flag.StringVar(&serverAddress, "s", "", "Mining pool server address (host:port) (shorthand)")
 	flag.StringVar(&configPath, "config", "", "Path to config file")
 	flag.BoolVar(&autoDelete, "auto-delete", true, "Delete executable on shutdown (default: true)")
 	flag.Parse()
+	return autoDelete
+}
+
+// resolveAutoDeleteSetting determines the final auto-delete setting based on flags and config
+func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
+	// If the auto-delete flag was not provided, fall back to the config value
+	autoDeleteFlagSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "auto-delete" {
+			autoDeleteFlagSet = true
+		}
+	})
+	if !autoDeleteFlagSet {
+		return cfg.Mining.AutoDelete
+	}
+	return autoDelete
+}
+
+// connectWithRetry attempts to connect to the pool with retries
+func connectWithRetry(miner *Miner, cfg *config.ClientConfig) error {
+	startTime := time.Now()
+	for {
+		err := miner.Connect()
+		if err == nil {
+			return nil
+		}
+
+		elapsed := time.Since(startTime)
+		if elapsed >= cfg.Network.MaxRetryTime {
+			return fmt.Errorf("failed to connect to pool after %v: %w", cfg.Network.MaxRetryTime, err)
+		}
+
+		remaining := cfg.Network.MaxRetryTime - elapsed
+		fmt.Printf("Failed to connect: %v\n", err)
+		fmt.Printf("Retrying in %v... (%.0f seconds remaining before timeout)\n",
+			cfg.Network.RetryInterval, remaining.Seconds())
+		time.Sleep(cfg.Network.RetryInterval)
+	}
+}
+
+func main() {
+	autoDelete := parseFlags()
 
 	cfg, err := config.LoadClientConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	autoDelete = resolveAutoDeleteSetting(autoDelete, cfg)
 	selfDeleteOnExit.Store(autoDelete)
 
 	// Use config value if no command-line flag provided
@@ -1002,26 +1046,8 @@ func main() {
 		log.Fatalf("Failed to create miner: %v", err)
 	}
 
-	startTime := time.Now()
-	connected := false
-
-	for !connected {
-		err = miner.Connect()
-		if err == nil {
-			connected = true
-			break
-		}
-
-		elapsed := time.Since(startTime)
-		if elapsed >= cfg.Network.MaxRetryTime {
-			log.Fatalf("Failed to connect to pool after %v: %v", cfg.Network.MaxRetryTime, err)
-		}
-
-		remaining := cfg.Network.MaxRetryTime - elapsed
-		fmt.Printf("Failed to connect: %v\n", err)
-		fmt.Printf("Retrying in %v... (%.0f seconds remaining before timeout)\n",
-			cfg.Network.RetryInterval, remaining.Seconds())
-		time.Sleep(cfg.Network.RetryInterval)
+	if err := connectWithRetry(miner, cfg); err != nil {
+		log.Fatal(err)
 	}
 
 	exePath, err := os.Executable()

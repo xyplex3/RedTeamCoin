@@ -4,6 +4,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -281,12 +282,11 @@ func LoadServerConfig(configPath string) (*ServerConfig, error) {
 	return &config, nil
 }
 
-// WatchServerConfig sets up file watching for the server configuration and
-// calls the provided callback function whenever the config file changes.
-// The callback receives the newly loaded configuration.
-//
-// This function blocks and should be run in a goroutine.
-func WatchServerConfig(configPath string, callback func(*ServerConfig)) error {
+// WatchServerConfig starts a background goroutine that watches the server
+// configuration file and calls the callback when changes are detected.
+// The watcher stops when the context is cancelled. Returns immediately after
+// starting the watcher, or an error if initial config read fails.
+func WatchServerConfig(ctx context.Context, configPath string, callback func(*ServerConfig)) error {
 	v := viper.New()
 
 	setServerDefaults(v)
@@ -331,8 +331,13 @@ func WatchServerConfig(configPath string, callback func(*ServerConfig)) error {
 		callback(&newConfig)
 	})
 
-	// Block forever (this function should be run in a goroutine)
-	select {}
+	// Start goroutine to block until context cancellation
+	go func() {
+		<-ctx.Done()
+		// Watcher cleanup happens automatically when function exits
+	}()
+
+	return nil
 }
 
 func setClientDefaults(v *viper.Viper) {

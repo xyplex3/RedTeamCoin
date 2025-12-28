@@ -263,9 +263,11 @@ func setupConfigWatcher(cfg *config.ServerConfig) {
 	//   - Logging configuration (update_interval, file_path)
 	//
 	// Future enhancement: Add runtime update support for non-critical settings.
-	go config.WatchServerConfig(configPath, func(newCfg *config.ServerConfig) {
+	if err := config.WatchServerConfig(context.Background(), configPath, func(newCfg *config.ServerConfig) {
 		handleConfigChange(cfg, newCfg)
-	})
+	}); err != nil {
+		fmt.Printf("Warning: Failed to start config watcher: %v\n", err)
+	}
 }
 
 func handleConfigChange(cfg, newCfg *config.ServerConfig) {

@@ -17,6 +17,7 @@ scenarios on corporate systems, generate comprehensive impact reports, and valid
 security controls—all within a controlled environment using an isolated, non-public blockchain.
 
 **Created by:**
+
 - Peter Greko (Xyplex2), Luciano Krigun, and Jayson Grace (@l50).
 
 ## Table of Contents

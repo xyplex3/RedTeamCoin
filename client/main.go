@@ -747,13 +747,12 @@ func (m *Miner) sendHeartbeat() {
 	}
 }
 
-// mineBlockGPU performs GPU-only proof-of-work mining by processing large
-// nonce ranges (1 billion at a time) through the GPU miner. It continuously
-// submits work batches until a valid solution is found or mining is stopped.
-// Updates the display with current progress and hash rate. Returns the found
-// nonce, hash, and total hashes computed.
+// mineBlockGPU performs GPU-only proof-of-work mining by processing nonce
+// ranges through the GPU miner. It continuously submits work batches until
+// a valid solution is found or mining is stopped. Updates the display with current
+// progress and hash rate. Returns the found nonce, hash, and total hashes computed.
 func (m *Miner) mineBlockGPU(index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
-	const nonceRange = 1000000000 // 1 billion nonces per GPU batch
+	const nonceRange = 50000000
 
 	startNonce := int64(0)
 	totalHashes := int64(0)
@@ -800,7 +799,7 @@ type miningResult struct {
 // is found or the done channel signals termination. Sends results back via
 // resultChan for coordination with CPU workers.
 func (m *Miner) runGPUMiner(index, timestamp int64, data, previousHash string, difficulty int, done <-chan struct{}, resultChan chan<- miningResult) {
-	const gpuNonceRange = 1000000000
+	const gpuNonceRange = 50000000
 	gpuStartNonce := int64(0)
 	gpuHashes := int64(0)
 

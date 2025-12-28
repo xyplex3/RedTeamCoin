@@ -924,17 +924,31 @@ func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHa
 func (m *Miner) mineBlockHybrid(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
 	resultChan := make(chan miningResult, 2)
 	done := make(chan struct{})
-	defer close(done)
 
 	go m.runGPUMiner(index, timestamp, data, previousHash, difficulty, done, resultChan)
 	go m.runCPUMiningCoordinator(index, timestamp, data, previousHash, difficulty, done, resultChan)
 
+	// Race mode: first to find wins
 	select {
 	case <-ctx.Done():
+		close(done)
 		return 0, "", 0
 	case res := <-resultChan:
+		close(done) // Signal other worker to stop
+
 		if res.found {
-			fmt.Printf("\nBlock found by %s!\n", res.source)
+			fmt.Printf("\n✓ Block found by %s!\n", res.source)
+
+			// Drain any buffered result from the other worker to prevent stale submissions
+			go func() {
+				select {
+				case <-resultChan:
+					// Discard result from slower worker
+				case <-time.After(100 * time.Millisecond):
+					// Timeout if other worker already stopped
+				}
+			}()
+
 			return res.nonce, res.hash, res.hashes
 		}
 		return 0, "", res.hashes

@@ -193,10 +193,13 @@ func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 
 	// Check if miner already has pending work
 	if work, hasPending := mp.pendingWork[minerID]; hasPending {
-		// If work is less than 5 minutes old, return it
-		if time.Since(work.AssignedAt) < 5*time.Minute {
+		latest := mp.blockchain.GetLatestBlock()
+		// Only return if work is fresh AND not stale (block index must be ahead of blockchain)
+		if time.Since(work.AssignedAt) < 5*time.Minute && work.Block.Index > latest.Index {
 			return work.Block, nil
 		}
+		// Work is either old or stale, delete it
+		delete(mp.pendingWork, minerID)
 	}
 
 	// Get new work from queue

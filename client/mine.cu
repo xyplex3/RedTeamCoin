@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 // SHA256 constants
 __constant__ uint32_t k_sha256[64] = {
@@ -144,13 +145,27 @@ __device__ void sha256_compute(const uint8_t* data, int data_len, uint8_t hash[3
     }
 }
 
-// Check if hash meets difficulty (leading zeros)
+// Check if hash meets difficulty (leading zero hex digits)
 __device__ bool check_difficulty(const uint8_t* hash, int difficulty) {
-    for (int i = 0; i < difficulty && i < 32; i++) {
+    // difficulty is number of leading zero hex digits
+    // Each byte has 2 hex digits
+    int full_bytes = difficulty / 2;  // Full bytes that must be 0
+    int extra_nibble = difficulty % 2; // 1 if we need to check high nibble of next byte
+    
+    // Check full zero bytes
+    for (int i = 0; i < full_bytes && i < 32; i++) {
         if (hash[i] != 0) {
             return false;
         }
     }
+    
+    // Check high nibble of next byte if needed
+    if (extra_nibble && full_bytes < 32) {
+        if ((hash[full_bytes] & 0xF0) != 0) {
+            return false;
+        }
+    }
+    
     return true;
 }
 
@@ -209,21 +224,85 @@ extern "C" {
         uint8_t* result_hash,
         bool* found
     ) {
+        fprintf(stderr, "DEBUG: cuda_mine called - start_nonce=%llu, nonce_range=%llu, difficulty=%d\n", 
+                (unsigned long long)start_nonce, (unsigned long long)nonce_range, difficulty);
+        fflush(stderr);
+        
+        cudaError_t err;
+        
         // Allocate device memory
         uint8_t* d_block_data;
         uint64_t* d_result_nonce;
         uint8_t* d_result_hash;
         bool* d_found;
 
-        cudaMalloc(&d_block_data, data_len);
-        cudaMalloc(&d_result_nonce, sizeof(uint64_t));
-        cudaMalloc(&d_result_hash, 32);
-        cudaMalloc(&d_found, sizeof(bool));
+        err = cudaMalloc(&d_block_data, data_len);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMalloc d_block_data failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            return;
+        }
+        
+        err = cudaMalloc(&d_result_nonce, sizeof(uint64_t));
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMalloc d_result_nonce failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            return;
+        }
+        
+        err = cudaMalloc(&d_result_hash, 32);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMalloc d_result_hash failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            return;
+        }
+        
+        err = cudaMalloc(&d_found, sizeof(bool));
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMalloc d_found failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            return;
+        }
 
         // Copy data to device
-        cudaMemcpy(d_block_data, block_data, data_len, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_result_nonce, result_nonce, sizeof(uint64_t), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_found, found, sizeof(bool), cudaMemcpyHostToDevice);
+        err = cudaMemcpy(d_block_data, block_data, data_len, cudaMemcpyHostToDevice);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy d_block_data failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+        
+        err = cudaMemcpy(d_result_nonce, result_nonce, sizeof(uint64_t), cudaMemcpyHostToDevice);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy d_result_nonce failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+        
+        err = cudaMemcpy(d_found, found, sizeof(bool), cudaMemcpyHostToDevice);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy d_found failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
 
         // Launch kernel
         int threads_per_block = 256;
@@ -234,10 +313,66 @@ extern "C" {
             d_result_nonce, d_result_hash, d_found
         );
 
+        // Check for kernel launch errors
+        err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: kernel launch failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+
+        // Wait for kernel and check for errors
+        err = cudaDeviceSynchronize();
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaDeviceSynchronize failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+
         // Copy results back
-        cudaMemcpy(result_nonce, d_result_nonce, sizeof(uint64_t), cudaMemcpyDeviceToHost);
-        cudaMemcpy(result_hash, d_result_hash, 32, cudaMemcpyDeviceToHost);
-        cudaMemcpy(found, d_found, sizeof(bool), cudaMemcpyDeviceToHost);
+        err = cudaMemcpy(result_nonce, d_result_nonce, sizeof(uint64_t), cudaMemcpyDeviceToHost);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy result_nonce failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+        
+        err = cudaMemcpy(result_hash, d_result_hash, 32, cudaMemcpyDeviceToHost);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy result_hash failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+        
+        err = cudaMemcpy(found, d_found, sizeof(bool), cudaMemcpyDeviceToHost);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "CUDA ERROR: cudaMemcpy found failed: %s\n", cudaGetErrorString(err));
+            fflush(stderr);
+            cudaFree(d_block_data);
+            cudaFree(d_result_nonce);
+            cudaFree(d_result_hash);
+            cudaFree(d_found);
+            return;
+        }
+
+        fprintf(stderr, "DEBUG: cuda_mine completed successfully - found=%d\n", *found ? 1 : 0);
+        fflush(stderr);
 
         // Free device memory
         cudaFree(d_block_data);

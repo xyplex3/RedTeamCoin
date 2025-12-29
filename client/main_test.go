@@ -682,3 +682,75 @@ func TestClampToInt32WithGPUDevice(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateClientTLSConfig tests the createClientTLSConfig function.
+func TestCreateClientTLSConfig(t *testing.T) {
+	tests := []struct {
+		name                     string
+		tlsConfig                config.ClientTLSConfig
+		expectNil                bool
+		expectInsecureSkipVerify bool
+	}{
+		{
+			name: "TLS disabled returns nil",
+			tlsConfig: config.ClientTLSConfig{
+				Enabled:            false,
+				InsecureSkipVerify: true,
+			},
+			expectNil: true,
+		},
+		{
+			name: "TLS enabled with InsecureSkipVerify",
+			tlsConfig: config.ClientTLSConfig{
+				Enabled:            true,
+				InsecureSkipVerify: true,
+			},
+			expectNil:                false,
+			expectInsecureSkipVerify: true,
+		},
+		{
+			name: "TLS enabled without InsecureSkipVerify",
+			tlsConfig: config.ClientTLSConfig{
+				Enabled:            true,
+				InsecureSkipVerify: false,
+			},
+			expectNil:                false,
+			expectInsecureSkipVerify: false,
+		},
+		{
+			name: "TLS enabled with CA cert file (not implemented)",
+			tlsConfig: config.ClientTLSConfig{
+				Enabled:            true,
+				InsecureSkipVerify: false,
+				CACertFile:         "/path/to/ca.crt",
+			},
+			expectNil:                false,
+			expectInsecureSkipVerify: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tlsConfig, err := createClientTLSConfig(&tt.tlsConfig)
+			if err != nil {
+				t.Fatalf("createClientTLSConfig returned error: %v", err)
+			}
+
+			if tt.expectNil {
+				if tlsConfig != nil {
+					t.Error("Expected nil TLS config when TLS disabled")
+				}
+				return
+			}
+
+			if tlsConfig == nil {
+				t.Fatal("Expected non-nil TLS config when TLS enabled")
+			}
+
+			if tlsConfig.InsecureSkipVerify != tt.expectInsecureSkipVerify {
+				t.Errorf("Expected InsecureSkipVerify=%v, got %v",
+					tt.expectInsecureSkipVerify, tlsConfig.InsecureSkipVerify)
+			}
+		})
+	}
+}

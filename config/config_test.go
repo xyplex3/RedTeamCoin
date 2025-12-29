@@ -56,6 +56,17 @@ func TestClientConfigDefaults(t *testing.T) {
 	if cfg.Behavior.WorkerUpdateInterval != 100000 {
 		t.Errorf("Expected worker update interval 100000, got %d", cfg.Behavior.WorkerUpdateInterval)
 	}
+
+	// TLS defaults
+	if cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS disabled by default")
+	}
+	if !cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify enabled by default")
+	}
+	if cfg.Server.TLS.CACertFile != "" {
+		t.Errorf("Expected empty CA cert file by default, got '%s'", cfg.Server.TLS.CACertFile)
+	}
 }
 
 // TestServerConfigDefaults verifies that default server configuration values are correct.
@@ -1252,4 +1263,68 @@ logging:
 	}
 
 	t.Logf("Callback invoked %d times for %d changes", callbackCount.Load(), len(difficulties))
+}
+
+// TestClientTLSConfigFromFile tests loading client TLS configuration from a YAML file.
+func TestClientTLSConfigFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test-tls-config.yaml")
+
+	configContent := `
+server:
+  address: "localhost:50051"
+  tls:
+    enabled: true
+    insecure_skip_verify: false
+    ca_cert_file: "/path/to/ca.crt"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadClientConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify TLS configuration loaded correctly
+	if !cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS enabled")
+	}
+	if cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify disabled")
+	}
+	if cfg.Server.TLS.CACertFile != "/path/to/ca.crt" {
+		t.Errorf("Expected CA cert file '/path/to/ca.crt', got '%s'", cfg.Server.TLS.CACertFile)
+	}
+}
+
+// TestClientTLSConfigEnvironmentOverride tests that environment variables override TLS config.
+func TestClientTLSConfigEnvironmentOverride(t *testing.T) {
+	// Set environment variables
+	os.Setenv("RTC_CLIENT_SERVER_TLS_ENABLED", "true")
+	os.Setenv("RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY", "false")
+	os.Setenv("RTC_CLIENT_SERVER_TLS_CA_CERT_FILE", "/env/ca.crt")
+	defer func() {
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_ENABLED")
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY")
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_CA_CERT_FILE")
+	}()
+
+	cfg, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify environment variables took effect
+	if !cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS enabled from environment variable")
+	}
+	if cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify disabled from environment variable")
+	}
+	if cfg.Server.TLS.CACertFile != "/env/ca.crt" {
+		t.Errorf("Expected CA cert file '/env/ca.crt' from environment, got '%s'", cfg.Server.TLS.CACertFile)
+	}
 }

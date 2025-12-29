@@ -32,6 +32,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -54,6 +55,7 @@ import (
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -92,6 +94,8 @@ func clampToInt32(n int) int32 {
 // Server control commands include pausing/resuming mining, throttling CPU
 // usage, and terminating the client with self-deletion. All fields are
 // private and should be accessed through the exported methods.
+//
+// The zero value is not usable; use [NewMiner] to create instances.
 type Miner struct {
 	id            string
 	ipAddress     string
@@ -181,16 +185,67 @@ func getOutboundIP() string {
 	return localAddr.IP.String()
 }
 
-// Connect establishes a gRPC connection to the mining pool server and
-// registers the miner. It displays connection information including detected
-// GPU hardware. Returns an error if connection or registration fails.
+// createClientTLSConfig creates a [tls.Config] for gRPC client connections.
+//
+// If TLS is disabled, returns nil. If enabled, creates config based on the
+// provided settings. When InsecureSkipVerify is true, certificate validation
+// is disabled to support self-signed certificates (insecure for production).
+//
+// Security warning: Using InsecureSkipVerify makes connections vulnerable to
+// man-in-the-middle attacks. Only use in development environments.
+func createClientTLSConfig(cfg *config.ClientTLSConfig) (*tls.Config, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: cfg.InsecureSkipVerify, // nosemgrep: go.lang.security.audit.crypto.tls.tls-with-insecure-skip-verify.tls-with-insecure-skip-verify
+		MinVersion:         tls.VersionTLS12,
+	}
+
+	// Optional: Load CA cert if specified and not skipping verification
+	// This can be implemented later if needed for production deployments
+	if cfg.CACertFile != "" && !cfg.InsecureSkipVerify {
+		// Future: Load CA certificate for validation
+		logger.Get().Warn("CA certificate validation not yet implemented",
+			"ca_cert_file", cfg.CACertFile)
+	}
+
+	return tlsConfig, nil
+}
+
+// Connect establishes a gRPC connection to the mining pool server using
+// [credentials.TransportCredentials] based on TLS configuration, then
+// registers the miner with the pool. It displays connection information
+// including detected GPU hardware. Returns an error if connection or
+// registration fails.
 func (m *Miner) Connect() error {
 	logger.Get().Info("connecting to mining pool",
 		"server", m.serverAddress)
 
 	fmt.Printf("Connecting to mining pool at %s...\n", m.serverAddress)
 
-	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Configure transport credentials based on TLS settings
+	var creds credentials.TransportCredentials
+
+	if m.config.Server.TLS.Enabled {
+		tlsConfig, err := createClientTLSConfig(&m.config.Server.TLS)
+		if err != nil {
+			logger.Get().Error("failed to create TLS config", "error", err)
+			return fmt.Errorf("failed to create TLS config: %v", err)
+		}
+		creds = credentials.NewTLS(tlsConfig)
+		logger.Get().Info("connecting with TLS",
+			"server", m.serverAddress,
+			"insecure_skip_verify", m.config.Server.TLS.InsecureSkipVerify)
+		fmt.Printf("  Using TLS encryption (certificate verification: %s)\n",
+			map[bool]string{true: "disabled", false: "enabled"}[m.config.Server.TLS.InsecureSkipVerify])
+	} else {
+		creds = insecure.NewCredentials()
+		logger.Get().Debug("connecting without TLS")
+	}
+
+	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		logger.Get().Error("failed to establish gRPC connection",
 			"server", m.serverAddress,
@@ -1018,7 +1073,6 @@ func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHa
 	resultChan <- miningResult{nonce: 0, hash: "", hashes: cpuTotalHashes, found: false, source: "CPU"}
 }
 
-// mineBlockHybrid mines a block using both CPU and GPU simultaneously
 func (m *Miner) mineBlockHybrid(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
 	resultChan := make(chan miningResult, 2)
 	done := make(chan struct{})
@@ -1088,7 +1142,6 @@ func startShutdownMonitor(ctx context.Context, exePath string) (chan os.Signal, 
 	return sigChan, shutdownChan, shutdownFile
 }
 
-// parseFlags parses command-line flags and returns the auto-delete setting
 func parseFlags() bool {
 	var autoDelete bool
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
@@ -1103,7 +1156,6 @@ func parseFlags() bool {
 	return autoDelete
 }
 
-// resolveAutoDeleteSetting determines the final auto-delete setting based on flags and config
 func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
 	// If the auto-delete flag was not provided, fall back to the config value
 	autoDeleteFlagSet := false
@@ -1118,7 +1170,6 @@ func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
 	return autoDelete
 }
 
-// applyLoggingOverrides applies CLI logging flag overrides to the config
 func applyLoggingOverrides(cfg *config.ClientConfig) {
 	if logLevel != "" {
 		cfg.Logging.Level = logLevel
@@ -1134,7 +1185,6 @@ func applyLoggingOverrides(cfg *config.ClientConfig) {
 	}
 }
 
-// setupMiner creates and connects a new miner instance
 func setupMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
 	miner, err := NewMiner(serverAddr, cfg)
 	if err != nil {
@@ -1148,7 +1198,6 @@ func setupMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
 	return miner, nil
 }
 
-// handleShutdown sets up shutdown monitoring and cleanup
 func handleShutdown(miner *Miner, shutdownFile string, sigChan chan os.Signal, shutdownChan chan struct{}) {
 	go func() {
 		select {
@@ -1180,7 +1229,6 @@ func handleShutdown(miner *Miner, shutdownFile string, sigChan chan os.Signal, s
 	}()
 }
 
-// connectWithRetry attempts to connect to the pool with retries
 func connectWithRetry(miner *Miner, cfg *config.ClientConfig) error {
 	startTime := time.Now()
 	for {

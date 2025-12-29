@@ -96,7 +96,100 @@ export RTC_SERVER_TLS_KEY_FILE="certs/server.key"
 
 - REST API: `https://localhost:8443`
 - HTTP Redirect: `http://localhost:8080` → redirects to HTTPS
-- gRPC: `localhost:50051`
+- gRPC: `localhost:50051` (unencrypted by default, see Client TLS Configuration below)
+
+## Client TLS Configuration
+
+This section covers TLS encryption for **client-to-server gRPC connections** (port 50051). This is separate from
+the server's HTTPS configuration for the REST API.
+
+### When to Use Client TLS
+
+Enable client TLS when your gRPC server (port 50051) is behind a TLS-terminating reverse proxy or requires encrypted
+connections. Most local deployments use unencrypted gRPC since the REST API already provides HTTPS (port 8443).
+
+### Client TLS Quick Start
+
+**1. Create or edit client configuration file:**
+
+```bash
+# Copy example configuration
+cp client-config.example.yaml client-config.yaml
+```
+
+**2. Enable TLS in configuration:**
+
+```yaml
+server:
+  address: "mining-pool.example.com:50051"
+  tls:
+    enabled: true                    # Enable TLS for gRPC
+    insecure_skip_verify: true       # Accept self-signed certificates
+    ca_cert_file: ""                 # Optional: Path to CA cert
+```
+
+**3. Run client with TLS:**
+
+```bash
+./bin/client
+```
+
+You should see output indicating TLS is enabled:
+
+```text
+Connecting to mining pool at mining-pool.example.com:50051...
+  Using TLS encryption (certificate verification: disabled)
+Connected to mining pool!
+```
+
+### Configuration Options
+
+Client TLS settings can be configured via YAML file or environment variables.
+
+**Configuration File** (`client-config.yaml`):
+
+```yaml
+server:
+  address: "server:50051"
+  tls:
+    enabled: false                   # Enable/disable TLS
+    insecure_skip_verify: true       # Skip certificate verification
+    ca_cert_file: ""                 # Path to CA certificate
+```
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RTC_CLIENT_SERVER_TLS_ENABLED` | Enable TLS for gRPC connection | `false` |
+| `RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY` | Skip certificate verification | `true` |
+| `RTC_CLIENT_SERVER_TLS_CA_CERT_FILE` | Path to CA certificate file | `""` |
+
+**Priority**: Command-line flags > Environment variables > Config file > Defaults
+
+### Usage Example
+
+Using environment variables:
+
+```bash
+export RTC_CLIENT_SERVER_TLS_ENABLED=true
+export RTC_CLIENT_SERVER_ADDRESS=mining-pool.example.com:50051
+./bin/client
+```
+
+Using configuration file:
+
+```yaml
+server:
+  address: "mining-pool.example.com:50051"
+  tls:
+    enabled: true
+    insecure_skip_verify: true
+```
+
+**Note**: Certificate verification (`insecure_skip_verify: false`) and custom CA certificates (`ca_cert_file`) are not
+yet fully implemented. Currently, TLS uses `insecure_skip_verify: true` by default, which accepts any certificate
+(including self-signed)
 
 ## API Access with HTTPS
 

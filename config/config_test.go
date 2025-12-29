@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// TestClientConfigDefaults verifies that default client configuration values are correct.
 func TestClientConfigDefaults(t *testing.T) {
 	cfg, err := LoadClientConfig("")
 	if err != nil {
@@ -56,9 +55,19 @@ func TestClientConfigDefaults(t *testing.T) {
 	if cfg.Behavior.WorkerUpdateInterval != 100000 {
 		t.Errorf("Expected worker update interval 100000, got %d", cfg.Behavior.WorkerUpdateInterval)
 	}
+
+	// TLS defaults
+	if cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS disabled by default")
+	}
+	if !cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify enabled by default")
+	}
+	if cfg.Server.TLS.CACertFile != "" {
+		t.Errorf("Expected empty CA cert file by default, got '%s'", cfg.Server.TLS.CACertFile)
+	}
 }
 
-// TestServerConfigDefaults verifies that default server configuration values are correct.
 func TestServerConfigDefaults(t *testing.T) {
 	cfg, err := LoadServerConfig("")
 	if err != nil {
@@ -115,7 +124,6 @@ func TestServerConfigDefaults(t *testing.T) {
 	}
 }
 
-// TestClientConfigFromFile tests loading client configuration from a YAML file.
 func TestClientConfigFromFile(t *testing.T) {
 	// Create temporary config file
 	tmpDir := t.TempDir()
@@ -170,7 +178,6 @@ behavior:
 	}
 }
 
-// TestServerConfigFromFile tests loading server configuration from a YAML file.
 func TestServerConfigFromFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "test-server-config.yaml")
@@ -220,7 +227,6 @@ logging:
 	}
 }
 
-// TestClientConfigEnvironmentOverride tests that environment variables override config file values.
 func TestClientConfigEnvironmentOverride(t *testing.T) {
 	// Set environment variables
 	os.Setenv("RTC_CLIENT_SERVER_ADDRESS", "env.example.com:7777")
@@ -248,7 +254,6 @@ func TestClientConfigEnvironmentOverride(t *testing.T) {
 	}
 }
 
-// TestServerConfigEnvironmentOverride tests that environment variables override config file values.
 func TestServerConfigEnvironmentOverride(t *testing.T) {
 	os.Setenv("RTC_SERVER_NETWORK_GRPC_PORT", "55555")
 	os.Setenv("RTC_SERVER_MINING_DIFFICULTY", "10")
@@ -270,7 +275,6 @@ func TestServerConfigEnvironmentOverride(t *testing.T) {
 	}
 }
 
-// TestClientConfigValidation tests validation logic for client configuration.
 func TestClientConfigValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -373,7 +377,6 @@ func TestClientConfigValidation(t *testing.T) {
 	}
 }
 
-// TestServerConfigValidation tests validation logic for server configuration.
 func TestServerConfigValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -512,7 +515,6 @@ func TestServerConfigValidation(t *testing.T) {
 	}
 }
 
-// TestInvalidYAML tests handling of malformed YAML configuration.
 func TestInvalidYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "invalid.yaml")
@@ -556,7 +558,6 @@ func TestConfigFileNotFoundInSearchPaths(t *testing.T) {
 	}
 }
 
-// TestInvalidConfigValues tests that invalid values in config file trigger validation errors.
 func TestInvalidConfigValues(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "invalid-values.yaml")
@@ -581,7 +582,6 @@ network:
 	}
 }
 
-// contains is a helper function to check if a string contains a substring.
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && (s[0:len(substr)] == substr || contains(s[1:], substr))))
@@ -665,7 +665,6 @@ behavior:
 	}
 }
 
-// TestServerConfigPrecedenceIntegration tests the complete precedence hierarchy for server config.
 func TestServerConfigPrecedenceIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "server-precedence-test.yaml")
@@ -809,7 +808,6 @@ gpu:
 	}
 }
 
-// TestServerConfigFileAndEnvCombination tests realistic scenarios with partial server config coverage.
 func TestServerConfigFileAndEnvCombination(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "partial-server-config.yaml")
@@ -868,7 +866,6 @@ logging:
 	}
 }
 
-// TestWatchServerConfigHotReload tests that config file changes trigger callbacks.
 func TestWatchServerConfigHotReload(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "watch-test.yaml")
@@ -980,7 +977,6 @@ logging:
 	}
 }
 
-// TestWatchServerConfigInvalidChange tests that invalid config changes don't trigger callbacks.
 func TestWatchServerConfigInvalidChange(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "watch-invalid-test.yaml")
@@ -1067,7 +1063,6 @@ logging:
 	}
 }
 
-// TestWatchServerConfigContextCancellation tests that watcher stops when context is cancelled.
 func TestWatchServerConfigContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "watch-cancel-test.yaml")
@@ -1158,7 +1153,6 @@ logging:
 	t.Logf("Callback was invoked %d times (expected 0-1, before cancellation)", callbackCount.Load())
 }
 
-// TestWatchServerConfigMultipleChanges tests rapid successive config changes.
 func TestWatchServerConfigMultipleChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "watch-multiple-test.yaml")
@@ -1252,4 +1246,66 @@ logging:
 	}
 
 	t.Logf("Callback invoked %d times for %d changes", callbackCount.Load(), len(difficulties))
+}
+
+func TestClientTLSConfigFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "test-tls-config.yaml")
+
+	configContent := `
+server:
+  address: "localhost:50051"
+  tls:
+    enabled: true
+    insecure_skip_verify: false
+    ca_cert_file: "/path/to/ca.crt"
+`
+
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadClientConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify TLS configuration loaded correctly
+	if !cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS enabled")
+	}
+	if cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify disabled")
+	}
+	if cfg.Server.TLS.CACertFile != "/path/to/ca.crt" {
+		t.Errorf("Expected CA cert file '/path/to/ca.crt', got '%s'", cfg.Server.TLS.CACertFile)
+	}
+}
+
+func TestClientTLSConfigEnvironmentOverride(t *testing.T) {
+	// Set environment variables
+	os.Setenv("RTC_CLIENT_SERVER_TLS_ENABLED", "true")
+	os.Setenv("RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY", "false")
+	os.Setenv("RTC_CLIENT_SERVER_TLS_CA_CERT_FILE", "/env/ca.crt")
+	defer func() {
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_ENABLED")
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY")
+		os.Unsetenv("RTC_CLIENT_SERVER_TLS_CA_CERT_FILE")
+	}()
+
+	cfg, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("LoadClientConfig failed: %v", err)
+	}
+
+	// Verify environment variables took effect
+	if !cfg.Server.TLS.Enabled {
+		t.Error("Expected TLS enabled from environment variable")
+	}
+	if cfg.Server.TLS.InsecureSkipVerify {
+		t.Error("Expected InsecureSkipVerify disabled from environment variable")
+	}
+	if cfg.Server.TLS.CACertFile != "/env/ca.crt" {
+		t.Errorf("Expected CA cert file '/env/ca.crt' from environment, got '%s'", cfg.Server.TLS.CACertFile)
+	}
 }

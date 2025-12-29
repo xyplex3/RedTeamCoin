@@ -200,6 +200,7 @@ func createClientTLSConfig(cfg *config.ClientTLSConfig) (*tls.Config, error) {
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: cfg.InsecureSkipVerify, // nosemgrep: go.lang.security.audit.crypto.tls.tls-with-insecure-skip-verify.tls-with-insecure-skip-verify
+		MinVersion:         tls.VersionTLS12,
 	}
 
 	// Optional: Load CA cert if specified and not skipping verification

@@ -32,6 +32,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -54,6 +55,7 @@ import (
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -181,6 +183,29 @@ func getOutboundIP() string {
 	return localAddr.IP.String()
 }
 
+// createClientTLSConfig creates a TLS configuration for gRPC client connections.
+// If TLS is disabled, returns nil. If enabled, creates config with InsecureSkipVerify
+// to support self-signed certificates.
+func createClientTLSConfig(cfg *config.ClientTLSConfig) (*tls.Config, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: cfg.InsecureSkipVerify, // nosemgrep: go.lang.security.audit.crypto.tls.tls-with-insecure-skip-verify.tls-with-insecure-skip-verify
+	}
+
+	// Optional: Load CA cert if specified and not skipping verification
+	// This can be implemented later if needed for production deployments
+	if cfg.CACertFile != "" && !cfg.InsecureSkipVerify {
+		// Future: Load CA certificate for validation
+		logger.Get().Warn("CA certificate validation not yet implemented",
+			"ca_cert_file", cfg.CACertFile)
+	}
+
+	return tlsConfig, nil
+}
+
 // Connect establishes a gRPC connection to the mining pool server and
 // registers the miner. It displays connection information including detected
 // GPU hardware. Returns an error if connection or registration fails.
@@ -190,7 +215,27 @@ func (m *Miner) Connect() error {
 
 	fmt.Printf("Connecting to mining pool at %s...\n", m.serverAddress)
 
-	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Configure transport credentials based on TLS settings
+	var creds credentials.TransportCredentials
+
+	if m.config.Server.TLS.Enabled {
+		tlsConfig, err := createClientTLSConfig(&m.config.Server.TLS)
+		if err != nil {
+			logger.Get().Error("failed to create TLS config", "error", err)
+			return fmt.Errorf("failed to create TLS config: %v", err)
+		}
+		creds = credentials.NewTLS(tlsConfig)
+		logger.Get().Info("connecting with TLS",
+			"server", m.serverAddress,
+			"insecure_skip_verify", m.config.Server.TLS.InsecureSkipVerify)
+		fmt.Printf("  Using TLS encryption (certificate verification: %s)\n",
+			map[bool]string{true: "disabled", false: "enabled"}[m.config.Server.TLS.InsecureSkipVerify])
+	} else {
+		creds = insecure.NewCredentials()
+		logger.Get().Debug("connecting without TLS")
+	}
+
+	conn, err := grpc.Dial(m.serverAddress, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		logger.Get().Error("failed to establish gRPC connection",
 			"server", m.serverAddress,

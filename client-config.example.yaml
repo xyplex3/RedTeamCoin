@@ -2,9 +2,27 @@
 # RedTeamCoin Client Configuration Example
 # Copy this to 'client-config.yaml' and customize as needed.
 # Priority: Command-line flags > Environment variables > Config file > Defaults
+#
+# TLS Environment Variables:
+#   RTC_CLIENT_SERVER_TLS_ENABLED - Enable/disable TLS (true/false)
+#   RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY - Skip cert verification (true/false)
+#   RTC_CLIENT_SERVER_TLS_CA_CERT_FILE - Path to CA certificate file
 
 server:
   address: "localhost:50051"
+
+  # TLS Configuration for secure gRPC connection to server
+  tls:
+    # Enable TLS encryption (must match server's TLS configuration)
+    enabled: false
+
+    # Skip certificate verification (required for self-signed certificates)
+    # Set to false only if using properly signed certificates from a trusted CA
+    insecure_skip_verify: true
+
+    # Optional: CA certificate for server validation
+    # Only used when insecure_skip_verify is false
+    ca_cert_file: ""
 
 mining:
   gpu_enabled: true

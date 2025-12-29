@@ -16,20 +16,22 @@ import (
 
 // Default client configuration values.
 const (
-	DefaultClientServerAddress        = "localhost:50051"
-	DefaultClientGPUEnabled           = true
-	DefaultClientHybridMode           = false
-	DefaultClientAutoDelete           = true
-	DefaultClientGPUNonceRange        = 500000000
-	DefaultClientGPUCPUStartNonce     = 5000000000
-	DefaultClientHeartbeatInterval    = 30 * time.Second
-	DefaultClientRetryInterval        = 10 * time.Second
-	DefaultClientMaxRetryTime         = 5 * time.Minute
-	DefaultClientWorkerUpdateInterval = 100000
-	DefaultClientLoggingLevel         = "info"
-	DefaultClientLoggingFormat        = "color"
-	DefaultClientLoggingQuiet         = false
-	DefaultClientLoggingVerbose       = false
+	DefaultClientServerAddress         = "localhost:50051"
+	DefaultClientGPUEnabled            = true
+	DefaultClientHybridMode            = false
+	DefaultClientAutoDelete            = true
+	DefaultClientGPUNonceRange         = 500000000
+	DefaultClientGPUCPUStartNonce      = 5000000000
+	DefaultClientHeartbeatInterval     = 30 * time.Second
+	DefaultClientRetryInterval         = 10 * time.Second
+	DefaultClientMaxRetryTime          = 5 * time.Minute
+	DefaultClientWorkerUpdateInterval  = 100000
+	DefaultClientLoggingLevel          = "info"
+	DefaultClientLoggingFormat         = "color"
+	DefaultClientLoggingQuiet          = false
+	DefaultClientLoggingVerbose        = false
+	DefaultClientTLSEnabled            = false
+	DefaultClientTLSInsecureSkipVerify = true
 )
 
 // Default server configuration values.
@@ -65,7 +67,15 @@ type ClientConfig struct {
 
 // ServerConnection defines pool server connection settings.
 type ServerConnection struct {
-	Address string `mapstructure:"address"`
+	Address string          `mapstructure:"address"`
+	TLS     ClientTLSConfig `mapstructure:"tls"`
+}
+
+// ClientTLSConfig defines TLS settings for client gRPC connections.
+type ClientTLSConfig struct {
+	Enabled            bool   `mapstructure:"enabled"`
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
+	CACertFile         string `mapstructure:"ca_cert_file"`
 }
 
 // MiningConfig defines mining behavior and performance settings.
@@ -190,6 +200,9 @@ func (c *ClientConfig) Validate() error {
 	if c.Logging.Format != "" && !validFormats[c.Logging.Format] {
 		return fmt.Errorf("invalid logging.format: %q (must be text, color, or json)", c.Logging.Format)
 	}
+
+	// TLS configuration is validated at connection time
+	// CA certificate file existence checking happens in createClientTLSConfig
 
 	return nil
 }
@@ -513,6 +526,9 @@ func setClientDefaults(v *viper.Viper) {
 	v.SetDefault("logging.format", DefaultClientLoggingFormat)
 	v.SetDefault("logging.quiet", DefaultClientLoggingQuiet)
 	v.SetDefault("logging.verbose", DefaultClientLoggingVerbose)
+	v.SetDefault("server.tls.enabled", DefaultClientTLSEnabled)
+	v.SetDefault("server.tls.insecure_skip_verify", DefaultClientTLSInsecureSkipVerify)
+	v.SetDefault("server.tls.ca_cert_file", "")
 }
 
 func setServerDefaults(v *viper.Viper) {

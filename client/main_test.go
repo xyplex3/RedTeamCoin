@@ -683,7 +683,6 @@ func TestClampToInt32WithGPUDevice(t *testing.T) {
 	}
 }
 
-// TestCreateClientTLSConfig tests the createClientTLSConfig function.
 func TestCreateClientTLSConfig(t *testing.T) {
 	tests := []struct {
 		name                     string

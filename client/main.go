@@ -94,6 +94,8 @@ func clampToInt32(n int) int32 {
 // Server control commands include pausing/resuming mining, throttling CPU
 // usage, and terminating the client with self-deletion. All fields are
 // private and should be accessed through the exported methods.
+//
+// The zero value is not usable; use [NewMiner] to create instances.
 type Miner struct {
 	id            string
 	ipAddress     string
@@ -183,9 +185,14 @@ func getOutboundIP() string {
 	return localAddr.IP.String()
 }
 
-// createClientTLSConfig creates a TLS configuration for gRPC client connections.
-// If TLS is disabled, returns nil. If enabled, creates config with InsecureSkipVerify
-// to support self-signed certificates.
+// createClientTLSConfig creates a [tls.Config] for gRPC client connections.
+//
+// If TLS is disabled, returns nil. If enabled, creates config based on the
+// provided settings. When InsecureSkipVerify is true, certificate validation
+// is disabled to support self-signed certificates (insecure for production).
+//
+// Security warning: Using InsecureSkipVerify makes connections vulnerable to
+// man-in-the-middle attacks. Only use in development environments.
 func createClientTLSConfig(cfg *config.ClientTLSConfig) (*tls.Config, error) {
 	if !cfg.Enabled {
 		return nil, nil
@@ -206,9 +213,11 @@ func createClientTLSConfig(cfg *config.ClientTLSConfig) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-// Connect establishes a gRPC connection to the mining pool server and
-// registers the miner. It displays connection information including detected
-// GPU hardware. Returns an error if connection or registration fails.
+// Connect establishes a gRPC connection to the mining pool server using
+// [credentials.TransportCredentials] based on TLS configuration, then
+// registers the miner with the pool. It displays connection information
+// including detected GPU hardware. Returns an error if connection or
+// registration fails.
 func (m *Miner) Connect() error {
 	logger.Get().Info("connecting to mining pool",
 		"server", m.serverAddress)
@@ -1063,7 +1072,6 @@ func (m *Miner) runCPUMiningCoordinator(index, timestamp int64, data, previousHa
 	resultChan <- miningResult{nonce: 0, hash: "", hashes: cpuTotalHashes, found: false, source: "CPU"}
 }
 
-// mineBlockHybrid mines a block using both CPU and GPU simultaneously
 func (m *Miner) mineBlockHybrid(ctx context.Context, index, timestamp int64, data, previousHash string, difficulty int) (int64, string, int64) {
 	resultChan := make(chan miningResult, 2)
 	done := make(chan struct{})
@@ -1133,7 +1141,6 @@ func startShutdownMonitor(ctx context.Context, exePath string) (chan os.Signal, 
 	return sigChan, shutdownChan, shutdownFile
 }
 
-// parseFlags parses command-line flags and returns the auto-delete setting
 func parseFlags() bool {
 	var autoDelete bool
 	flag.StringVar(&serverAddress, "server", "", "Mining pool server address (host:port)")
@@ -1148,7 +1155,6 @@ func parseFlags() bool {
 	return autoDelete
 }
 
-// resolveAutoDeleteSetting determines the final auto-delete setting based on flags and config
 func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
 	// If the auto-delete flag was not provided, fall back to the config value
 	autoDeleteFlagSet := false
@@ -1163,7 +1169,6 @@ func resolveAutoDeleteSetting(autoDelete bool, cfg *config.ClientConfig) bool {
 	return autoDelete
 }
 
-// applyLoggingOverrides applies CLI logging flag overrides to the config
 func applyLoggingOverrides(cfg *config.ClientConfig) {
 	if logLevel != "" {
 		cfg.Logging.Level = logLevel
@@ -1179,7 +1184,6 @@ func applyLoggingOverrides(cfg *config.ClientConfig) {
 	}
 }
 
-// setupMiner creates and connects a new miner instance
 func setupMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
 	miner, err := NewMiner(serverAddr, cfg)
 	if err != nil {
@@ -1193,7 +1197,6 @@ func setupMiner(serverAddr string, cfg *config.ClientConfig) (*Miner, error) {
 	return miner, nil
 }
 
-// handleShutdown sets up shutdown monitoring and cleanup
 func handleShutdown(miner *Miner, shutdownFile string, sigChan chan os.Signal, shutdownChan chan struct{}) {
 	go func() {
 		select {
@@ -1225,7 +1228,6 @@ func handleShutdown(miner *Miner, shutdownFile string, sigChan chan os.Signal, s
 	}()
 }
 
-// connectWithRetry attempts to connect to the pool with retries
 func connectWithRetry(miner *Miner, cfg *config.ClientConfig) error {
 	startTime := time.Now()
 	for {

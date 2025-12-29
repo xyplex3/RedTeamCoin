@@ -55,7 +55,6 @@ const (
 	DefaultServerLoggingVerbose        = false
 )
 
-// ClientConfig contains all configuration options for the mining client.
 type ClientConfig struct {
 	Server   ServerConnection    `mapstructure:"server"`
 	Mining   MiningConfig        `mapstructure:"mining"`
@@ -65,27 +64,32 @@ type ClientConfig struct {
 	Logging  ClientLoggingConfig `mapstructure:"logging"`
 }
 
-// ServerConnection defines pool server connection settings.
 type ServerConnection struct {
 	Address string          `mapstructure:"address"`
 	TLS     ClientTLSConfig `mapstructure:"tls"`
 }
 
 // ClientTLSConfig defines TLS settings for client gRPC connections.
+//
+// When Enabled is true, the client uses TLS to connect to the server.
+// InsecureSkipVerify disables certificate validation (insecure for production).
+// CACertFile specifies a custom CA certificate for server validation.
+//
+// Security note: Setting InsecureSkipVerify to true disables certificate
+// validation and makes connections vulnerable to man-in-the-middle attacks.
+// Only use in development or with additional security controls.
 type ClientTLSConfig struct {
 	Enabled            bool   `mapstructure:"enabled"`
 	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
 	CACertFile         string `mapstructure:"ca_cert_file"`
 }
 
-// MiningConfig defines mining behavior and performance settings.
 type MiningConfig struct {
 	GPUEnabled bool `mapstructure:"gpu_enabled"`
 	HybridMode bool `mapstructure:"hybrid_mode"`
 	AutoDelete bool `mapstructure:"auto_delete"`
 }
 
-// GPUConfig defines GPU-specific mining parameters.
 type GPUConfig struct {
 	NonceRange    int64 `mapstructure:"nonce_range"`
 	CPUStartNonce int64 `mapstructure:"cpu_start_nonce"`
@@ -98,12 +102,10 @@ type NetworkConfig struct {
 	MaxRetryTime      time.Duration `mapstructure:"max_retry_time"`
 }
 
-// BehaviorConfig defines client operational behavior.
 type BehaviorConfig struct {
 	WorkerUpdateInterval int64 `mapstructure:"worker_update_interval"`
 }
 
-// ClientLoggingConfig defines logging behavior for the mining client.
 type ClientLoggingConfig struct {
 	Level   string `mapstructure:"level"`   // debug, info, warn, error
 	Format  string `mapstructure:"format"`  // text, color, json
@@ -111,7 +113,6 @@ type ClientLoggingConfig struct {
 	Verbose bool   `mapstructure:"verbose"` // enable debug logs
 }
 
-// ServerConfig contains all configuration options for the pool server.
 type ServerConfig struct {
 	Network ServerNetwork `mapstructure:"network"`
 	Mining  ServerMining  `mapstructure:"mining"`
@@ -127,27 +128,23 @@ type ServerNetwork struct {
 	HTTPPort int `mapstructure:"http_port"`
 }
 
-// ServerMining defines pool mining parameters.
 type ServerMining struct {
 	Difficulty  int32 `mapstructure:"difficulty"`
 	BlockReward int   `mapstructure:"block_reward"`
 }
 
-// TLSConfig defines TLS/HTTPS settings.
 type TLSConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
 }
 
-// APIConfig defines API server behavior.
 type APIConfig struct {
 	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout time.Duration `mapstructure:"write_timeout"`
 	IdleTimeout  time.Duration `mapstructure:"idle_timeout"`
 }
 
-// LoggingConfig defines logging behavior for the pool server.
 type LoggingConfig struct {
 	// PoolLogger fields (existing - for JSON event analytics)
 	UpdateInterval time.Duration `mapstructure:"update_interval"`
@@ -160,7 +157,6 @@ type LoggingConfig struct {
 	Verbose bool   `mapstructure:"verbose"` // enable debug logs
 }
 
-// Validate checks if the client configuration is valid and returns an error if not.
 func (c *ClientConfig) Validate() error {
 	if c.Server.Address == "" {
 		return fmt.Errorf("server address cannot be empty")
@@ -207,7 +203,6 @@ func (c *ClientConfig) Validate() error {
 	return nil
 }
 
-// Validate checks if the server configuration is valid and returns an error if not.
 func (c *ServerConfig) Validate() error {
 	if err := c.validatePorts(); err != nil {
 		return err

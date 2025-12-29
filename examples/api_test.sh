@@ -8,7 +8,7 @@ TOKEN="${RTC_AUTH_TOKEN:-your-token-here}"
 
 # API URL - change to https://localhost:8443 if using TLS
 # Use -k flag with curl to accept self-signed certificates
-USE_TLS="${RTC_USE_TLS:-false}"
+USE_TLS="${RTC_SERVER_TLS_ENABLED:-false}"
 
 if [ "$USE_TLS" = "true" ]; then
 	API_URL="https://localhost:8443"

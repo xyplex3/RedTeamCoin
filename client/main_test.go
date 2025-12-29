@@ -6,12 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"redteamcoin/config"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+func getTestConfig() *config.ClientConfig {
+	cfg, _ := config.LoadClientConfig("")
+	return cfg
+}
+
 func TestNewMiner(t *testing.T) {
-	miner, err := NewMiner("localhost:50051")
+	miner, err := NewMiner("localhost:50051", getTestConfig())
 	if err != nil {
 		t.Fatalf("NewMiner failed: %v", err)
 	}
@@ -66,7 +73,7 @@ func TestGetOutboundIP(t *testing.T) {
 }
 
 func TestCalculateHash(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	hash1 := miner.calculateHash(1, 1234567890, "test data", "previoushash", 0)
 	hash2 := miner.calculateHash(1, 1234567890, "test data", "previoushash", 0)
@@ -94,7 +101,7 @@ func TestCalculateHash(t *testing.T) {
 }
 
 func TestMinerStopBeforeStart(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Stopping a miner that hasn't started should not panic
 	miner.Stop()
@@ -105,7 +112,7 @@ func TestMinerStopBeforeStart(t *testing.T) {
 }
 
 func TestMinerContextCancellation(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.ctx == nil {
 		t.Fatal("Miner context should not be nil")
@@ -129,7 +136,7 @@ func TestMinerContextCancellation(t *testing.T) {
 func TestMineBlockBasic(t *testing.T) {
 	// Skip actual mining test as it can be slow
 	// Instead test that the hash calculation works correctly
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Find a hash that starts with "0" manually
 	var foundNonce int64
@@ -168,7 +175,7 @@ func TestMineBlockBasic(t *testing.T) {
 }
 
 func TestMineBlockWithThrottling(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 	miner.cpuThrottlePercent = 50
 
 	// Just verify throttle is set
@@ -182,7 +189,7 @@ func TestMineBlockWithThrottling(t *testing.T) {
 }
 
 func TestMineBlockStopped(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Test that miner respects running flag
 	if miner.running {
@@ -200,7 +207,7 @@ func TestMineBlockStopped(t *testing.T) {
 }
 
 func TestMinerGPUInitialization(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.gpuMiner == nil {
 		t.Error("GPU miner should be initialized")
@@ -219,7 +226,7 @@ func TestMinerGPUInitialization(t *testing.T) {
 }
 
 func TestMinerBlocksMined(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.blocksMined != 0 {
 		t.Error("New miner should have 0 blocks mined")
@@ -234,7 +241,7 @@ func TestMinerBlocksMined(t *testing.T) {
 }
 
 func TestMinerHashRate(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.hashRate != 0 {
 		t.Error("New miner should have 0 hash rate")
@@ -248,7 +255,7 @@ func TestMinerHashRate(t *testing.T) {
 }
 
 func TestMinerTotalHashes(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.totalHashes != 0 {
 		t.Error("New miner should have 0 total hashes")
@@ -262,7 +269,7 @@ func TestMinerTotalHashes(t *testing.T) {
 }
 
 func TestMinerShouldMineToggle(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if !miner.shouldMine {
 		t.Error("New miner should have mining enabled")
@@ -282,7 +289,7 @@ func TestMinerShouldMineToggle(t *testing.T) {
 }
 
 func TestMinerCPUThrottle(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.cpuThrottlePercent != 0 {
 		t.Error("New miner should have no throttling")
@@ -302,7 +309,7 @@ func TestMinerCPUThrottle(t *testing.T) {
 }
 
 func TestMinerDeletedByServerFlag(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.deletedByServer {
 		t.Error("New miner should not be marked as deleted")
@@ -316,7 +323,7 @@ func TestMinerDeletedByServerFlag(t *testing.T) {
 }
 
 func TestCalculateHashDifferentInputs(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	tests := []struct {
 		name         string
@@ -359,7 +366,7 @@ func TestCalculateHashDifferentInputs(t *testing.T) {
 }
 
 func TestMinerCPUUsageEstimation(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Initially should be 0
 	if miner.cpuUsagePercent != 0 {
@@ -395,7 +402,7 @@ func TestMinerCPUUsageEstimation(t *testing.T) {
 }
 
 func TestMinerStartTime(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Start time should be zero initially
 	if !miner.startTime.IsZero() {
@@ -420,7 +427,7 @@ func TestMinerStartTime(t *testing.T) {
 
 // Mock gRPC test - requires a test server
 func TestMinerIDFormat(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Miner ID should follow format: miner-<hostname>-<timestamp>
 	if len(miner.id) < 10 {
@@ -433,7 +440,7 @@ func TestMinerIDFormat(t *testing.T) {
 }
 
 func TestHashDifficultyValidation(t *testing.T) {
-	_, _ = NewMiner("localhost:50051")
+	_, _ = NewMiner("localhost:50051", getTestConfig())
 
 	tests := []struct {
 		hash       string
@@ -477,7 +484,7 @@ func TestMinerConnectIntegration(t *testing.T) {
 }
 
 func TestConcurrentHashCalculation(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Test concurrent hash calculations (should be safe)
 	done := make(chan bool)
@@ -505,7 +512,7 @@ func TestConcurrentHashCalculation(t *testing.T) {
 }
 
 func TestMinerRunningState(t *testing.T) {
-	miner, _ := NewMiner("localhost:50051")
+	miner, _ := NewMiner("localhost:50051", getTestConfig())
 
 	if miner.running {
 		t.Error("New miner should not be running")
@@ -526,7 +533,7 @@ func TestMinerRunningState(t *testing.T) {
 
 // Test connection setup without actual server
 func TestMinerConnectionSetup(t *testing.T) {
-	m, _ := NewMiner("localhost:50051")
+	m, _ := NewMiner("localhost:50051", getTestConfig())
 
 	// Test that connection can be set up (will fail without server, but shouldn't panic)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

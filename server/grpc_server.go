@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"redteamcoin/logger"
 	pb "redteamcoin/proto"
 
 	"google.golang.org/grpc/peer"
@@ -60,14 +61,26 @@ func (s *MiningPoolServer) RegisterMiner(ctx context.Context, req *pb.MinerInfo)
 	// Get actual IP from gRPC connection
 	actualIP := getClientIP(ctx)
 
+	logger.InfoContext(ctx, "grpc: register miner request",
+		"miner_id", req.MinerId,
+		"reported_ip", req.IpAddress,
+		"actual_ip", actualIP,
+		"hostname", req.Hostname)
+
 	err := s.pool.RegisterMiner(req.MinerId, req.IpAddress, req.Hostname, actualIP)
 	if err != nil {
+		logger.WarnContext(ctx, "grpc: miner registration failed",
+			"miner_id", req.MinerId,
+			"error", err.Error())
 		return &pb.RegistrationResponse{
 			Success: false,
 			Message: err.Error(),
 			MinerId: "",
 		}, err
 	}
+
+	logger.InfoContext(ctx, "grpc: miner registered successfully",
+		"miner_id", req.MinerId)
 
 	return &pb.RegistrationResponse{
 		Success: true,
@@ -82,10 +95,20 @@ func (s *MiningPoolServer) RegisterMiner(ctx context.Context, req *pb.MinerInfo)
 // data, difficulty, and timestamp. Returns an error if the miner is not
 // registered with the pool.
 func (s *MiningPoolServer) GetWork(ctx context.Context, req *pb.WorkRequest) (*pb.WorkResponse, error) {
+	logger.DebugContext(ctx, "grpc: get work request",
+		"miner_id", req.MinerId)
+
 	block, err := s.pool.GetWork(req.MinerId)
 	if err != nil {
+		logger.WarnContext(ctx, "grpc: get work failed",
+			"miner_id", req.MinerId,
+			"error", err.Error())
 		return nil, err
 	}
+
+	logger.DebugContext(ctx, "grpc: work assigned",
+		"miner_id", req.MinerId,
+		"block_index", block.Index)
 
 	return &pb.WorkResponse{
 		BlockIndex:   block.Index,
@@ -102,9 +125,23 @@ func (s *MiningPoolServer) GetWork(ctx context.Context, req *pb.WorkRequest) (*p
 // an error message explaining the rejection reason. Returns nil error on
 // successful processing regardless of block acceptance.
 func (s *MiningPoolServer) SubmitWork(ctx context.Context, req *pb.WorkSubmission) (*pb.SubmissionResponse, error) {
+	hashPreview := req.Hash
+	if len(hashPreview) > 16 {
+		hashPreview = hashPreview[:16] + "..."
+	}
+	logger.InfoContext(ctx, "grpc: work submission",
+		"miner_id", req.MinerId,
+		"block_index", req.BlockIndex,
+		"nonce", req.Nonce,
+		"hash", hashPreview)
+
 	accepted, reward, err := s.pool.SubmitWork(req.MinerId, req.BlockIndex, req.Nonce, req.Hash)
 
 	if err != nil {
+		logger.WarnContext(ctx, "grpc: work submission rejected",
+			"miner_id", req.MinerId,
+			"block_index", req.BlockIndex,
+			"error", err.Error())
 		return &pb.SubmissionResponse{
 			Accepted: false,
 			Message:  err.Error(),
@@ -113,12 +150,21 @@ func (s *MiningPoolServer) SubmitWork(ctx context.Context, req *pb.WorkSubmissio
 	}
 
 	if !accepted {
+		logger.WarnContext(ctx, "grpc: work submission rejected",
+			"miner_id", req.MinerId,
+			"block_index", req.BlockIndex,
+			"reason", "validation failed")
 		return &pb.SubmissionResponse{
 			Accepted: false,
 			Message:  "Block rejected",
 			Reward:   0,
 		}, nil
 	}
+
+	logger.InfoContext(ctx, "grpc: work submission accepted",
+		"miner_id", req.MinerId,
+		"block_index", req.BlockIndex,
+		"reward", reward)
 
 	return &pb.SubmissionResponse{
 		Accepted: true,
@@ -134,6 +180,11 @@ func (s *MiningPoolServer) SubmitWork(ctx context.Context, req *pb.WorkSubmissio
 // has been deleted from the pool, returns Active=false to trigger client
 // shutdown and self-deletion.
 func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (*pb.HeartbeatResponse, error) {
+	logger.DebugContext(ctx, "grpc: heartbeat received",
+		"miner_id", req.MinerId,
+		"hash_rate", req.HashRate,
+		"gpu_enabled", req.GpuEnabled)
+
 	miningTime := time.Duration(req.MiningTimeSeconds) * time.Second
 
 	// Convert GPU devices from protobuf to server type
@@ -163,12 +214,18 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 	if err != nil {
 		// Check if miner was deleted (not found)
 		if err.Error() == "miner not registered" {
+			logger.WarnContext(ctx, "grpc: heartbeat from unregistered miner",
+				"miner_id", req.MinerId,
+				"reason", "miner deleted from pool")
 			return &pb.HeartbeatResponse{
 				Active:     false,
 				Message:    "Miner has been deleted from the pool",
 				ShouldMine: false,
 			}, nil
 		}
+		logger.WarnContext(ctx, "grpc: heartbeat update failed",
+			"miner_id", req.MinerId,
+			"error", err.Error())
 		return &pb.HeartbeatResponse{
 			Active:     false,
 			Message:    err.Error(),
@@ -188,6 +245,11 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 		cpuThrottle = 0 // Default to no throttling if check fails
 	}
 
+	logger.DebugContext(ctx, "grpc: heartbeat response",
+		"miner_id", req.MinerId,
+		"should_mine", shouldMine,
+		"cpu_throttle", cpuThrottle)
+
 	return &pb.HeartbeatResponse{
 		Active:             true,
 		Message:            "Heartbeat received",
@@ -201,14 +263,24 @@ func (s *MiningPoolServer) Heartbeat(ctx context.Context, req *pb.MinerStatus) (
 // the miner successfully mined during its session. This is called when
 // miners shut down normally (not when deleted by the server).
 func (s *MiningPoolServer) StopMining(ctx context.Context, req *pb.MinerInfo) (*pb.StopResponse, error) {
+	logger.InfoContext(ctx, "grpc: stop mining request",
+		"miner_id", req.MinerId)
+
 	blocksMined, err := s.pool.StopMiner(req.MinerId)
 	if err != nil {
+		logger.WarnContext(ctx, "grpc: stop mining failed",
+			"miner_id", req.MinerId,
+			"error", err.Error())
 		return &pb.StopResponse{
 			Success:          false,
 			Message:          err.Error(),
 			TotalBlocksMined: 0,
 		}, nil
 	}
+
+	logger.InfoContext(ctx, "grpc: miner stopped successfully",
+		"miner_id", req.MinerId,
+		"blocks_mined", blocksMined)
 
 	return &pb.StopResponse{
 		Success:          true,

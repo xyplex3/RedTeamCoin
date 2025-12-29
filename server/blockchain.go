@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 	"time"
+
+	"redteamcoin/logger"
 )
 
 // Block represents a single block in the blockchain containing transaction
@@ -55,9 +56,15 @@ func NewBlockchain(difficulty int32) *Blockchain {
 	}
 
 	if difficulty != originalDifficulty {
-		log.Printf("Difficulty clamped from %d to %d (valid range: 1-10)",
-			originalDifficulty, difficulty)
+		logger.Get().Warn("difficulty clamped to valid range",
+			"original", originalDifficulty,
+			"clamped", difficulty,
+			"valid_range", "1-10")
 	}
+
+	logger.Get().Info("blockchain initialized",
+		"difficulty", difficulty,
+		"genesis_block", "created")
 
 	bc := &Blockchain{
 		Blocks:     make([]*Block, 0),
@@ -113,12 +120,34 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 
+	hashPreview := block.Hash
+	if len(hashPreview) > 16 {
+		hashPreview = hashPreview[:16] + "..."
+	}
+	logger.Get().Debug("validating block for addition",
+		"block_index", block.Index,
+		"hash", hashPreview,
+		"nonce", block.Nonce,
+		"mined_by", block.MinedBy)
+
 	// Verify block
 	if !bc.isValidNewBlock(block, bc.Blocks[len(bc.Blocks)-1]) {
+		logger.Get().Error("block validation failed",
+			"block_index", block.Index,
+			"hash", block.Hash,
+			"nonce", block.Nonce,
+			"mined_by", block.MinedBy)
 		return fmt.Errorf("invalid block")
 	}
 
 	bc.Blocks = append(bc.Blocks, block)
+
+	logger.Get().Info("block added to blockchain",
+		"block_index", block.Index,
+		"blockchain_height", len(bc.Blocks),
+		"mined_by", block.MinedBy,
+		"hash", hashPreview)
+
 	return nil
 }
 
@@ -127,14 +156,40 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 // and difficulty requirements.
 func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 	if previousBlock.Index+1 != newBlock.Index {
+		logger.Get().Debug("block validation failed: index mismatch",
+			"expected_index", previousBlock.Index+1,
+			"actual_index", newBlock.Index)
 		return false
 	}
 
 	if previousBlock.Hash != newBlock.PreviousHash {
+		prevHashPreview := previousBlock.Hash
+		if len(prevHashPreview) > 16 {
+			prevHashPreview = prevHashPreview[:16] + "..."
+		}
+		actualHashPreview := newBlock.PreviousHash
+		if len(actualHashPreview) > 16 {
+			actualHashPreview = actualHashPreview[:16] + "..."
+		}
+		logger.Get().Debug("block validation failed: previous hash mismatch",
+			"expected_prev_hash", prevHashPreview,
+			"actual_prev_hash", actualHashPreview)
 		return false
 	}
 
-	if calculateHash(newBlock) != newBlock.Hash {
+	calculatedHash := calculateHash(newBlock)
+	if calculatedHash != newBlock.Hash {
+		calcHashPreview := calculatedHash
+		if len(calcHashPreview) > 16 {
+			calcHashPreview = calcHashPreview[:16] + "..."
+		}
+		claimedHashPreview := newBlock.Hash
+		if len(claimedHashPreview) > 16 {
+			claimedHashPreview = claimedHashPreview[:16] + "..."
+		}
+		logger.Get().Debug("block validation failed: hash mismatch",
+			"calculated_hash", calcHashPreview,
+			"claimed_hash", claimedHashPreview)
 		return false
 	}
 
@@ -146,8 +201,17 @@ func (bc *Blockchain) isValidNewBlock(newBlock, previousBlock *Block) bool {
 	}
 
 	if len(newBlock.Hash) < difficulty || newBlock.Hash[:difficulty] != prefix {
+		logger.Get().Debug("block validation failed: insufficient difficulty",
+			"required_prefix", prefix,
+			"hash_prefix", newBlock.Hash[:difficulty],
+			"difficulty", difficulty)
 		return false
 	}
+
+	logger.Get().Debug("block validation passed",
+		"block_index", newBlock.Index,
+		"difficulty", difficulty,
+		"leading_zeros", difficulty)
 
 	return true
 }

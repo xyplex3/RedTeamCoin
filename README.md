@@ -234,7 +234,7 @@ Client Miner                    Server
 ./generate_certs.sh
 
 # Start with TLS
-RTC_USE_TLS=true ./bin/server
+RTC_SERVER_TLS_ENABLED=true ./bin/server
 ```
 
 - gRPC server: port **50051**
@@ -373,7 +373,7 @@ By default, clients connect to `localhost:50051`. To connect to a remote server:
 **Using environment variable:**
 
 ```bash
-export POOL_SERVER=192.168.1.100:50051
+export RTC_CLIENT_SERVER_ADDRESS=192.168.1.100:50051
 ./bin/client
 ```
 
@@ -414,10 +414,10 @@ make build-gpu  # Automatically detects and builds for available GPU
 ./bin/client
 
 # Force CPU only
-GPU_MINING=false ./bin/client
+RTC_CLIENT_MINING_GPU_ENABLED=false ./bin/client
 
 # Hybrid mode (CPU + GPU)
-HYBRID_MINING=true ./bin/client
+RTC_CLIENT_MINING_HYBRID_MODE=true ./bin/client
 
 # GPU with remote server
 ./bin/client -server mining-pool.example.com:50051
@@ -443,37 +443,128 @@ HYBRID_MINING=true ./bin/client
 ./bin/client 2>&1 | grep -i "gpu\|cuda\|opencl"
 
 # Force CPU mining (verify fallback works)
-GPU_MINING=false ./bin/client
+RTC_CLIENT_MINING_GPU_ENABLED=false ./bin/client
 
 # Force GPU mining (if available)
-GPU_MINING=true ./bin/client
+RTC_CLIENT_MINING_GPU_ENABLED=true ./bin/client
 
 # Test hybrid CPU+GPU mode
-HYBRID_MINING=true ./bin/client
+RTC_CLIENT_MINING_HYBRID_MODE=true ./bin/client
 ```
 
 See [docs/GPU_MINING.md](docs/GPU_MINING.md) for complete GPU mining guide.
 
 ## Configuration
 
+RedTeamCoin uses [Viper](https://github.com/spf13/viper) for flexible configuration
+management. Settings can be specified via environment variables, YAML config files, or
+command-line flags with the following precedence:
+
+**Command-line flags** > **Environment variables** > **Config files** > **Defaults**
+
+### Setup
+
+**Initialize configuration files:**
+
+```bash
+# Initialize both server and client configs
+make init-config
+
+# Or initialize individually
+make init-server-config  # Creates server-config.yaml
+make init-client-config  # Creates client-config.yaml
+```
+
+This copies example YAML files to your working directory for editing. You can also place config files in `~/.rtc/` or `/etc/rtc/`.
+
+**Override with environment variables:**
+
+```bash
+# Environment variables take precedence over config files
+export RTC_SERVER_MINING_DIFFICULTY=8
+export RTC_CLIENT_SERVER_ADDRESS=pool.example.com:50051
+./bin/server
+```
+
 ### Environment Variables
+
+All environment variables use prefixes: `RTC_SERVER_` for server, `RTC_CLIENT_` for client.
 
 **Server Configuration:**
 
-| Variable         | Description                 | Required | Default            |
-| ---------------- | --------------------------- | -------- | ------------------ |
-| `RTC_USE_TLS`    | Enable HTTPS/TLS            | No       | `false`            |
-| `RTC_CERT_FILE`  | TLS certificate path        | No       | `certs/server.crt` |
-| `RTC_KEY_FILE`   | TLS private key path        | No       | `certs/server.key` |
-| `RTC_AUTH_TOKEN` | Custom authentication token | No       | Auto-generated     |
+| Variable                                | Description                   | Default            |
+| --------------------------------------- | ----------------------------- | ------------------ |
+| `RTC_SERVER_NETWORK_GRPC_PORT`          | gRPC server port              | `50051`            |
+| `RTC_SERVER_NETWORK_API_PORT`           | HTTPS API port                | `8443`             |
+| `RTC_SERVER_NETWORK_HTTP_PORT`          | HTTP web interface port       | `8080`             |
+| `RTC_SERVER_MINING_DIFFICULTY`          | Mining difficulty (1-64)      | `6`                |
+| `RTC_SERVER_MINING_BLOCK_REWARD`        | Block reward in coins         | `50`               |
+| `RTC_SERVER_TLS_ENABLED`                | Enable HTTPS/TLS              | `false`            |
+| `RTC_SERVER_TLS_CERT_FILE`              | TLS certificate path          | `certs/server.crt` |
+| `RTC_SERVER_TLS_KEY_FILE`               | TLS private key path          | `certs/server.key` |
+| `RTC_SERVER_API_READ_TIMEOUT`           | API read timeout              | `15s`              |
+| `RTC_SERVER_API_WRITE_TIMEOUT`          | API write timeout             | `15s`              |
+| `RTC_SERVER_API_IDLE_TIMEOUT`           | API idle timeout              | `60s`              |
+| `RTC_SERVER_LOGGING_UPDATE_INTERVAL`    | Stats update interval         | `30s`              |
+| `RTC_SERVER_LOGGING_FILE_PATH`          | Log file path                 | `pool_log.json`    |
+| `RTC_AUTH_TOKEN` *(legacy)*             | Custom authentication token   | Auto-generated     |
 
 **Client Configuration:**
 
-| Variable        | Description                        | Required | Default           |
-| --------------- | ---------------------------------- | -------- | ----------------- |
-| `POOL_SERVER`   | Remote server address              | No       | `localhost:50051` |
-| `GPU_MINING`    | Enable/disable GPU mining          | No       | Auto-detect       |
-| `HYBRID_MINING` | Enable CPU+GPU simultaneous mining | No       | `false`           |
+| Variable                                     | Description                         | Default           |
+| -------------------------------------------- | ----------------------------------- | ----------------- |
+| `RTC_CLIENT_SERVER_ADDRESS`                  | Pool server address (host:port)     | `localhost:50051` |
+| `RTC_CLIENT_MINING_GPU_ENABLED`              | Enable GPU mining                   | `true`            |
+| `RTC_CLIENT_MINING_HYBRID_MODE`              | Enable CPU+GPU simultaneous mining  | `false`           |
+| `RTC_CLIENT_MINING_AUTO_DELETE`              | Auto-delete on shutdown             | `true`            |
+| `RTC_CLIENT_GPU_NONCE_RANGE`                 | Nonce range per GPU batch           | `500000000`       |
+| `RTC_CLIENT_GPU_CPU_START_NONCE`             | CPU start nonce (avoid GPU overlap) | `5000000000`      |
+| `RTC_CLIENT_NETWORK_HEARTBEAT_INTERVAL`      | Status update interval              | `30s`             |
+| `RTC_CLIENT_NETWORK_RETRY_INTERVAL`          | Connection retry delay              | `10s`             |
+| `RTC_CLIENT_NETWORK_MAX_RETRY_TIME`          | Max retry duration                  | `5m`              |
+| `RTC_CLIENT_BEHAVIOR_WORKER_UPDATE_INTERVAL` | Worker progress report interval     | `100000`          |
+| `POOL_SERVER` *(legacy)*                     | Remote server address               | `localhost:50051` |
+| `GPU_MINING` *(legacy)*                      | Enable/disable GPU mining           | Auto-detect       |
+| `HYBRID_MINING` *(legacy)*                   | Enable CPU+GPU mining               | `false`           |
+
+### Config File Examples
+
+**Server config** (`server-config.yaml`):
+
+```yaml
+network:
+  grpc_port: 50051
+  api_port: 8443
+  http_port: 8080
+mining:
+  difficulty: 8
+  block_reward: 100
+tls:
+  enabled: true
+  cert_file: /etc/rtc/certs/server.crt
+  key_file: /etc/rtc/certs/server.key
+logging:
+  update_interval: 30s
+  file_path: /var/log/rtc/pool.json
+```
+
+**Client config** (`client-config.yaml`):
+
+```yaml
+server:
+  address: pool.example.com:50051
+mining:
+  gpu_enabled: true
+  hybrid_mode: false
+  auto_delete: true
+gpu:
+  nonce_range: 1000000000
+  cpu_start_nonce: 5000000000
+network:
+  heartbeat_interval: 30s
+  retry_interval: 10s
+  max_retry_time: 5m
+```
 
 ### Authentication
 
@@ -487,34 +578,6 @@ The server generates a secure token on startup and displays it in the console.
 ```bash
 export RTC_AUTH_TOKEN="your-secret-token"
 ./bin/server
-```
-
-### Code Configuration
-
-**Server (`server/main.go`):**
-
-```go
-const (
-    grpcPort      = 50051
-    apiPort       = 8443   // HTTPS (8080 for HTTP)
-    httpPort      = 8080
-    difficulty    = 6      // Mining difficulty
-)
-```
-
-**Client (`client/main.go`):**
-
-```go
-const (
-    serverAddress = "localhost:50051"
-    heartbeatInterval = 30 * time.Second
-)
-```
-
-**Pool (`server/pool.go`):**
-
-```go
-blockReward = 50  // RTC reward per block
 ```
 
 ### Performance
@@ -531,14 +594,14 @@ Expected mining times vary by CPU performance and luck:
 # Generate certificates
 ./generate_certs.sh
 
-# Start with HTTPS
-export RTC_USE_TLS=true
+# Start with HTTPS using new config system
+export RTC_SERVER_TLS_ENABLED=true
 export RTC_AUTH_TOKEN="my-secure-token"
 ./bin/server
 
 # Custom certificates
-export RTC_CERT_FILE="/path/to/cert.pem"
-export RTC_KEY_FILE="/path/to/key.pem"
+export RTC_SERVER_TLS_CERT_FILE="/path/to/cert.pem"
+export RTC_SERVER_TLS_KEY_FILE="/path/to/key.pem"
 ./bin/server
 ```
 
@@ -843,7 +906,7 @@ ss -an | grep 50051
 | "cannot find -lcuda" | `export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH` |
 | "nvcc not found"     | `sudo apt install cuda-toolkit`                                 |
 | "No OpenCL device"   | `sudo apt install ocl-icd-opencl-dev`                           |
-| GPU slow             | `export GPU_MINING=true`                                        |
+| GPU slow             | `export RTC_CLIENT_MINING_GPU_ENABLED=true`                     |
 | CGo build error      | `sudo apt install build-essential`                              |
 
 ### General Issues

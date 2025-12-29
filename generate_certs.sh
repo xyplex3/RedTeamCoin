@@ -37,7 +37,7 @@ if openssl req -x509 -newkey rsa:4096 -nodes \
 	echo "Browsers will show a security warning - this is expected."
 	echo
 	echo "To use HTTPS, start the server with:"
-	echo "  export RTC_USE_TLS=true"
+	echo "  export RTC_SERVER_TLS_ENABLED=true"
 	echo "  make run-server"
 	echo
 else

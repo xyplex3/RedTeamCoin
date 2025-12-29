@@ -61,18 +61,25 @@ java -jar target/redteamcoin-miner.jar -server 192.168.1.100:50051
 java -jar target/redteamcoin-miner.jar -s mining-pool.example.com:50051
 ```
 
-### Using Environment Variable
+### Using Environment Variables
 
 ```bash
+# Preferred: Use new Viper-compatible variable name
+export RTC_CLIENT_SERVER_ADDRESS=192.168.1.100:50051
+java -jar target/redteamcoin-miner.jar
+
+# Legacy: Still supported for backward compatibility
 export POOL_SERVER=192.168.1.100:50051
 java -jar target/redteamcoin-miner.jar
 ```
+
+**Note:** `RTC_CLIENT_SERVER_ADDRESS` takes precedence over `POOL_SERVER` if both are set.
 
 ### Command-Line Options
 
 - `-server <address>` or `-s <address>` - Server address (host:port)
 
-**Priority:** Command-line flag > Environment variable > Default (localhost:50051)
+**Priority:** Command-line flag > `RTC_CLIENT_SERVER_ADDRESS` > `POOL_SERVER` *(legacy)* > Default (localhost:50051)
 
 ## Deployment
 

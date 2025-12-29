@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"redteamcoin/logger"
 )
 
 // GPUDeviceInfo contains hardware information about a GPU device available
@@ -142,6 +144,13 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 		mp.miners[id].Active = true
 		mp.miners[id].LastHeartbeat = time.Now()
 		mp.miners[id].IPAddressActual = actualIP // Update actual IP in case it changed
+
+		logger.Get().Info("miner re-registered (updating existing)",
+			"miner_id", id,
+			"ip_address", ipAddress,
+			"ip_actual", actualIP,
+			"hostname", hostname)
+
 		return nil
 	}
 
@@ -162,9 +171,15 @@ func (mp *MiningPool) RegisterMiner(id, ipAddress, hostname, actualIP string) er
 		TotalHashes:        0,
 	}
 
+	logger.Get().Info("miner registered successfully",
+		"miner_id", id,
+		"ip_address", ipAddress,
+		"ip_actual", actualIP,
+		"hostname", hostname)
+
 	fmt.Printf("Miner registered: %s (Reported IP: %s, Actual IP: %s, Hostname: %s)\n", id, ipAddress, actualIP, hostname)
 
-	// Log the event
+	// Keep existing PoolLogger event logging (for JSON analytics)
 	if mp.logger != nil {
 		mp.logger.LogEvent("miner_registered", "New miner registered", id, map[string]interface{}{
 			"ip_address":        ipAddress,
@@ -196,9 +211,17 @@ func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 		latest := mp.blockchain.GetLatestBlock()
 		// Only return if work is fresh AND not stale (block index must be ahead of blockchain)
 		if time.Since(work.AssignedAt) < 5*time.Minute && work.Block.Index > latest.Index {
+			logger.Get().Debug("returning existing pending work",
+				"miner_id", minerID,
+				"block_index", work.Block.Index,
+				"age_seconds", int(time.Since(work.AssignedAt).Seconds()))
 			return work.Block, nil
 		}
 		// Work is either old or stale, delete it
+		logger.Get().Debug("discarding stale pending work",
+			"miner_id", minerID,
+			"block_index", work.Block.Index,
+			"age_seconds", int(time.Since(work.AssignedAt).Seconds()))
 		delete(mp.pendingWork, minerID)
 	}
 
@@ -210,6 +233,9 @@ func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 			Block:      block,
 			AssignedAt: time.Now(),
 		}
+		logger.Get().Debug("assigned work from queue",
+			"miner_id", minerID,
+			"block_index", block.Index)
 		return block, nil
 	default:
 		// No work available, create new work
@@ -227,6 +253,9 @@ func (mp *MiningPool) GetWork(minerID string) (*Block, error) {
 			Block:      newBlock,
 			AssignedAt: time.Now(),
 		}
+		logger.Get().Debug("generated new work for miner",
+			"miner_id", minerID,
+			"block_index", newBlock.Index)
 		return newBlock, nil
 	}
 }
@@ -241,18 +270,38 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
 
+	hashPreview := hash
+	if len(hashPreview) > 16 {
+		hashPreview = hashPreview[:16] + "..."
+	}
+	logger.Get().Debug("work submission received",
+		"miner_id", minerID,
+		"block_index", blockIndex,
+		"nonce", nonce,
+		"hash", hashPreview)
+
 	miner, exists := mp.miners[minerID]
 	if !exists {
+		logger.Get().Warn("work submission from unregistered miner",
+			"miner_id", minerID,
+			"block_index", blockIndex)
 		return false, 0, fmt.Errorf("miner not registered")
 	}
 
 	// Get pending work
 	work, hasPending := mp.pendingWork[minerID]
 	if !hasPending {
+		logger.Get().Warn("work submission without pending work",
+			"miner_id", minerID,
+			"block_index", blockIndex)
 		return false, 0, fmt.Errorf("no pending work for miner")
 	}
 
 	if work.Block.Index != blockIndex {
+		logger.Get().Warn("block index mismatch in submission",
+			"miner_id", minerID,
+			"expected_index", work.Block.Index,
+			"submitted_index", blockIndex)
 		return false, 0, fmt.Errorf("block index mismatch")
 	}
 
@@ -266,6 +315,10 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 	if blockIndex != latest.Index+1 {
 		// Block is stale, another miner was faster
 		delete(mp.pendingWork, minerID)
+		logger.Get().Warn("block submission is stale",
+			"miner_id", minerID,
+			"block_index", blockIndex,
+			"blockchain_height", latest.Index)
 		return false, 0, fmt.Errorf("block is stale")
 	}
 
@@ -273,6 +326,10 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 	err := mp.blockchain.AddBlock(work.Block)
 	if err != nil {
 		delete(mp.pendingWork, minerID)
+		logger.Get().Warn("block rejected by blockchain",
+			"miner_id", minerID,
+			"block_index", blockIndex,
+			"reason", err.Error())
 		return false, 0, err
 	}
 
@@ -290,9 +347,16 @@ func (mp *MiningPool) SubmitWork(minerID string, blockIndex int64, nonce int64, 
 		}
 	}
 
+	logger.Get().Info("block accepted and added to blockchain",
+		"miner_id", minerID,
+		"block_index", blockIndex,
+		"nonce", nonce,
+		"reward", mp.blockReward,
+		"total_blocks_mined", miner.BlocksMined)
+
 	fmt.Printf("Block %d mined by %s (Hash: %s)\n", blockIndex, minerID, hash)
 
-	// Log the event
+	// Keep existing PoolLogger event logging (for JSON analytics)
 	if mp.logger != nil {
 		mp.logger.LogEvent("block_mined", "Block successfully mined", minerID, map[string]interface{}{
 			"block_index": blockIndex,
@@ -546,13 +610,20 @@ func (mp *MiningPool) PauseMiner(minerID string) error {
 
 	miner, exists := mp.miners[minerID]
 	if !exists {
+		logger.Get().Warn("pause miner failed: miner not found",
+			"miner_id", minerID)
 		return fmt.Errorf("miner not found")
 	}
 
 	miner.ShouldMine = false
+
+	logger.Get().Info("miner paused",
+		"miner_id", minerID,
+		"blocks_mined", miner.BlocksMined)
+
 	fmt.Printf("Miner paused: %s\n", minerID)
 
-	// Log the event
+	// Keep existing PoolLogger event logging (for JSON analytics)
 	if mp.logger != nil {
 		mp.logger.LogEvent("miner_paused", "Miner mining paused by server", minerID, nil)
 	}
@@ -570,13 +641,20 @@ func (mp *MiningPool) ResumeMiner(minerID string) error {
 
 	miner, exists := mp.miners[minerID]
 	if !exists {
+		logger.Get().Warn("resume miner failed: miner not found",
+			"miner_id", minerID)
 		return fmt.Errorf("miner not found")
 	}
 
 	miner.ShouldMine = true
+
+	logger.Get().Info("miner resumed",
+		"miner_id", minerID,
+		"blocks_mined", miner.BlocksMined)
+
 	fmt.Printf("Miner resumed: %s\n", minerID)
 
-	// Log the event
+	// Keep existing PoolLogger event logging (for JSON analytics)
 	if mp.logger != nil {
 		mp.logger.LogEvent("miner_resumed", "Miner mining resumed by server", minerID, nil)
 	}
@@ -594,13 +672,25 @@ func (mp *MiningPool) DeleteMiner(minerID string) error {
 
 	miner, exists := mp.miners[minerID]
 	if !exists {
+		logger.Get().Warn("delete miner failed: miner not found",
+			"miner_id", minerID)
 		return fmt.Errorf("miner not found")
 	}
+
+	// Log final stats before deletion (use warn level for destructive operation)
+	logger.Get().Warn("miner deleted from pool",
+		"miner_id", minerID,
+		"blocks_mined", miner.BlocksMined,
+		"total_hashes", miner.TotalHashes,
+		"hash_rate", miner.HashRate,
+		"mining_time_hours", miner.TotalMiningTime.Hours(),
+		"ip_address", miner.IPAddress,
+		"hostname", miner.Hostname)
 
 	// Remove pending work
 	delete(mp.pendingWork, minerID)
 
-	// Log the event before deletion
+	// Keep existing PoolLogger event logging (for JSON analytics)
 	if mp.logger != nil {
 		mp.logger.LogEvent("miner_deleted", "Miner deleted from pool", minerID, map[string]interface{}{
 			"total_blocks_mined": miner.BlocksMined,

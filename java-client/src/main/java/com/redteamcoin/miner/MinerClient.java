@@ -465,8 +465,12 @@ public class MinerClient {
             }
         }
 
-        // Check environment variable as fallback
-        String envServer = System.getenv("POOL_SERVER");
+        // Check environment variables as fallback (new variable takes precedence)
+        String envServer = System.getenv("RTC_CLIENT_SERVER_ADDRESS");
+        if (envServer == null || envServer.isEmpty()) {
+            // Fall back to legacy variable name for backward compatibility
+            envServer = System.getenv("POOL_SERVER");
+        }
         if (envServer != null && !envServer.isEmpty() && serverAddress.equals(DEFAULT_SERVER)) {
             serverAddress = envServer;
         }

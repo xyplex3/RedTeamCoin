@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Get token from environment or use placeholder
 TOKEN = os.getenv('RTC_AUTH_TOKEN', 'your-token-here')
-USE_TLS = os.getenv('RTC_USE_TLS', 'false').lower() == 'true'
+USE_TLS = os.getenv('RTC_SERVER_TLS_ENABLED', 'false').lower() == 'true'
 
 # Set API URL based on TLS setting
 if USE_TLS:

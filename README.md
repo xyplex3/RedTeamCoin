@@ -20,7 +20,7 @@ isolated, non-public blockchain.
 
 **Created by:**
 
-- Peter Greko (Xyplex2), Luciano Krigun, and Jayson Grace (@l50).
+- Peter Greko (Xyplex2), Luciano Krigun (klucho), and Jayson Grace (@l50).
 
 ## Table of Contents
 

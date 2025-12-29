@@ -76,6 +76,8 @@ isolated, non-public blockchain.
 - **Web Dashboard**: Real-time monitoring of miners, statistics, and blockchain
   with control buttons
 - **REST API Authentication**: Secure token-based authentication for API endpoints
+- **Client gRPC TLS Encryption**: Optional TLS encryption for secure client-server
+  gRPC connections
 - **Dual IP Tracking**: Records both client-reported and server-detected IP addresses
 - **CPU & GPU Statistics**: Comprehensive resource usage tracking and reporting
 - **Protocol Buffers**: Efficient client-server communication using protobuf/gRPC
@@ -511,21 +513,24 @@ All environment variables use prefixes: `RTC_SERVER_` for server, `RTC_CLIENT_` 
 
 **Client Configuration:**
 
-| Variable                                     | Description                         | Default           |
-| -------------------------------------------- | ----------------------------------- | ----------------- |
-| `RTC_CLIENT_SERVER_ADDRESS`                  | Pool server address (host:port)     | `localhost:50051` |
-| `RTC_CLIENT_MINING_GPU_ENABLED`              | Enable GPU mining                   | `true`            |
-| `RTC_CLIENT_MINING_HYBRID_MODE`              | Enable CPU+GPU simultaneous mining  | `false`           |
-| `RTC_CLIENT_MINING_AUTO_DELETE`              | Auto-delete on shutdown             | `true`            |
-| `RTC_CLIENT_GPU_NONCE_RANGE`                 | Nonce range per GPU batch           | `500000000`       |
-| `RTC_CLIENT_GPU_CPU_START_NONCE`             | CPU start nonce (avoid GPU overlap) | `5000000000`      |
-| `RTC_CLIENT_NETWORK_HEARTBEAT_INTERVAL`      | Status update interval              | `30s`             |
-| `RTC_CLIENT_NETWORK_RETRY_INTERVAL`          | Connection retry delay              | `10s`             |
-| `RTC_CLIENT_NETWORK_MAX_RETRY_TIME`          | Max retry duration                  | `5m`              |
-| `RTC_CLIENT_BEHAVIOR_WORKER_UPDATE_INTERVAL` | Worker progress report interval     | `100000`          |
-| `POOL_SERVER` *(legacy)*                     | Remote server address               | `localhost:50051` |
-| `GPU_MINING` *(legacy)*                      | Enable/disable GPU mining           | Auto-detect       |
-| `HYBRID_MINING` *(legacy)*                   | Enable CPU+GPU mining               | `false`           |
+| Variable                                          | Description                         | Default           |
+| ------------------------------------------------- | ----------------------------------- | ----------------- |
+| `RTC_CLIENT_SERVER_ADDRESS`                       | Pool server address (host:port)     | `localhost:50051` |
+| `RTC_CLIENT_SERVER_TLS_ENABLED`                   | Enable TLS for gRPC connection      | `false`           |
+| `RTC_CLIENT_SERVER_TLS_INSECURE_SKIP_VERIFY`      | Skip certificate verification       | `true`            |
+| `RTC_CLIENT_SERVER_TLS_CA_CERT_FILE`              | Path to CA certificate file         | `""`              |
+| `RTC_CLIENT_MINING_GPU_ENABLED`                   | Enable GPU mining                   | `true`            |
+| `RTC_CLIENT_MINING_HYBRID_MODE`                   | Enable CPU+GPU simultaneous mining  | `false`           |
+| `RTC_CLIENT_MINING_AUTO_DELETE`                   | Auto-delete on shutdown             | `true`            |
+| `RTC_CLIENT_GPU_NONCE_RANGE`                      | Nonce range per GPU batch           | `500000000`       |
+| `RTC_CLIENT_GPU_CPU_START_NONCE`                  | CPU start nonce (avoid GPU overlap) | `5000000000`      |
+| `RTC_CLIENT_NETWORK_HEARTBEAT_INTERVAL`           | Status update interval              | `30s`             |
+| `RTC_CLIENT_NETWORK_RETRY_INTERVAL`               | Connection retry delay              | `10s`             |
+| `RTC_CLIENT_NETWORK_MAX_RETRY_TIME`               | Max retry duration                  | `5m`              |
+| `RTC_CLIENT_BEHAVIOR_WORKER_UPDATE_INTERVAL`      | Worker progress report interval     | `100000`          |
+| `POOL_SERVER` *(legacy)*                          | Remote server address               | `localhost:50051` |
+| `GPU_MINING` *(legacy)*                           | Enable/disable GPU mining           | Auto-detect       |
+| `HYBRID_MINING` *(legacy)*                        | Enable CPU+GPU mining               | `false`           |
 
 ### Config File Examples
 
@@ -553,6 +558,10 @@ logging:
 ```yaml
 server:
   address: pool.example.com:50051
+  tls:
+    enabled: false
+    insecure_skip_verify: true
+    ca_cert_file: ""
 mining:
   gpu_enabled: true
   hybrid_mode: false

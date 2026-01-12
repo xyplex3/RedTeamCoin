@@ -1,5 +1,7 @@
 # RedTeamCoin
 
+<img src="docs/rtc.png" alt="RedTeamCoin Logo" width="50%">
+
 [![License](https://img.shields.io/github/license/xyplex3/RedTeamCoin?label=License&style=flat&color=blue&logo=github)](https://github.com/xyplex3/RedTeamCoin/blob/main/LICENSE)
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
 [![Security Scanning](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/security.yaml)

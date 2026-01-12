@@ -1,6 +1,8 @@
 # RedTeamCoin
 
-<img src="docs/rtc.png" alt="RedTeamCoin Logo" width="50%">
+<p align="center">
+  <img src="docs/rtc.png" alt="RedTeamCoin Logo" width="400">
+</p>
 
 [![License](https://img.shields.io/github/license/xyplex3/RedTeamCoin?label=License&style=flat&color=blue&logo=github)](https://github.com/xyplex3/RedTeamCoin/blob/main/LICENSE)
 [![Pre-Commit](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/pre-commit.yaml)
@@ -8,6 +10,8 @@
 [![Release](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/goreleaser.yaml)
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
 [![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
+
+---
 
 RedTeamCoin is a blockchain-based cryptocurrency mining pool implementation
 designed for authorized security testing and red team operations. Built in Go
@@ -19,10 +23,6 @@ This tool enables security teams to safely and legally demonstrate cryptomining
 attack scenarios on corporate systems, generate comprehensive impact reports,
 and validate security controls—all within a controlled environment using an
 isolated, non-public blockchain.
-
-**Created by:**
-
-- Peter Greko (Xyplex2), Luciano Krigun (klucho), and Jayson Grace (@l50).
 
 ## Table of Contents
 
@@ -1024,6 +1024,6 @@ This project is licensed under the GNU General Public License v3.0 - see the
 
 **Created by:**
 
-- Peter Greko
-- Luciano Krigun
+- Peter Greko ([@Xyplex02](https://github.com/Xyplex02))
+- Luciano Krigun ([@klucho](https://github.com/klucho))
 - Jayson Grace ([@l50](https://github.com/l50))

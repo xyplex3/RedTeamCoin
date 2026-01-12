@@ -19,9 +19,26 @@ fi
 
 # Run govulncheck vulnerability scan
 echo "Running govulncheck vulnerability scan..."
-if ! output=$(govulncheck ./... 2>&1); then
+if ! output=$(govulncheck -scan=package ./client ./server ./tools ./config ./logger ./proto 2>&1); then
 	echo ""
 	echo "❌ govulncheck found vulnerabilities in dependencies!"
+	echo "$output"
+	echo ""
+	echo "Please fix the vulnerabilities before committing."
+	echo ""
+	echo "To update vulnerable dependencies, run:"
+	echo "  go get -u <package>@<fixed-version>"
+	echo "  go mod tidy"
+	echo ""
+	echo "For more information, visit: https://go.dev/security/vuln"
+	exit 1
+fi
+
+# Run govulncheck on web-wasm with WebAssembly build constraints
+echo "Running govulncheck on web-wasm (WebAssembly)..."
+if ! output=$(GOOS=js GOARCH=wasm govulncheck -scan=package ./web-wasm 2>&1); then
+	echo ""
+	echo "❌ govulncheck found vulnerabilities in web-wasm!"
 	echo "$output"
 	echo ""
 	echo "Please fix the vulnerabilities before committing."

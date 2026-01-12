@@ -1,4 +1,6 @@
 ---
+version: "2"
+
 linters-settings:
   errcheck:
     check-blank: false
@@ -26,12 +28,10 @@ linters-settings:
 linters:
   enable:
     - govet
-    - typecheck
     - unused
   disable:
     - errcheck
     - staticcheck
-    - gosimple
     - ineffassign
 
 issues:

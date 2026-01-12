@@ -7,7 +7,7 @@
 [![Test & Build Verification](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/test-and-build.yaml)
 [![Windows Miner Test](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml/badge.svg)](https://github.com/xyplex3/RedTeamCoin/actions/workflows/windows-miner-test.yaml)
 
-<img src="docs/rtc.png" alt="RedTeamCoin Logo" width="100%">
+<img src="docs/rtc.png" alt="RedTeamCoin Logo" width="300">
 
 ---
 

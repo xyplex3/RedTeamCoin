@@ -15,7 +15,18 @@ install-tools:
 proto:
 	@echo "Generating protobuf code..."
 	@mkdir -p proto
-	protoc --go_out=. --go_opt=paths=source_relative \
+	@GOBIN=$$(go env GOPATH)/bin; \
+	if [ ! -x "$$GOBIN/protoc-gen-go" ]; then \
+		echo "Installing protoc-gen-go..."; \
+		go install google.golang.org/protobuf/cmd/protoc-gen-go@latest; \
+	fi; \
+	if [ ! -x "$$GOBIN/protoc-gen-go-grpc" ]; then \
+		echo "Installing protoc-gen-go-grpc..."; \
+		go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest; \
+	fi; \
+	protoc --plugin=protoc-gen-go="$$GOBIN/protoc-gen-go" \
+		--plugin=protoc-gen-go-grpc="$$GOBIN/protoc-gen-go-grpc" \
+		--go_out=. --go_opt=paths=source_relative \
 		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		proto/mining.proto
 	@echo "Protobuf code generated"

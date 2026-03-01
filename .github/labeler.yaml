@@ -1,0 +1,57 @@
+---
+area/go:
+  - changed-files:
+      - any-glob-to-any-file: "**/*.go"
+      - any-glob-to-any-file: "go.mod"
+      - any-glob-to-any-file: "go.sum"
+      - any-glob-to-any-file: ".goreleaser.yaml"
+      - any-glob-to-any-file: ".golangci.yml"
+
+area/proto:
+  - changed-files:
+      - any-glob-to-any-file: "proto/**/*"
+      - any-glob-to-any-file: "generate_proto.sh"
+
+area/client:
+  - changed-files:
+      - any-glob-to-any-file: "client/**/*"
+
+area/server:
+  - changed-files:
+      - any-glob-to-any-file: "server/**/*"
+
+area/java:
+  - changed-files:
+      - any-glob-to-any-file: "java-client/**/*"
+      - any-glob-to-any-file: "java-standalone/**/*"
+
+area/wasm:
+  - changed-files:
+      - any-glob-to-any-file: "web-wasm/**/*"
+
+area/docs:
+  - changed-files:
+      - any-glob-to-any-file: "docs/**/*"
+      - any-glob-to-any-file: "README.md"
+
+area/github:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**/*"
+
+area/config:
+  - changed-files:
+      - any-glob-to-any-file: "config/**/*"
+      - any-glob-to-any-file: "*.yaml"
+      - any-glob-to-any-file: "*.example.yaml"
+      - any-glob-to-any-file: ".env.*.example"
+
+area/pre-commit:
+  - changed-files:
+      - any-glob-to-any-file: .pre-commit-config.yaml
+      - any-glob-to-any-file: .hooks/**/*
+
+area/tools:
+  - changed-files:
+      - any-glob-to-any-file: "tools/**/*"
+      - any-glob-to-any-file: "Makefile"
+      - any-glob-to-any-file: "*.sh"

@@ -16,7 +16,7 @@ on:
         type: string
 
 env:
-  GO_VERSION: '1.24.11'
+  GO_VERSION: '1.25.7'
 
 jobs:
   # Build binaries on each platform

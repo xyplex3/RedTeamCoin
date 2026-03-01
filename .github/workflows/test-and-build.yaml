@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25.7'
 
 jobs:
   test-code:
@@ -52,7 +52,10 @@ jobs:
         run: go mod download
 
       - name: Generate protobuf
-        run: make proto
+        run: |
+          GOPATH_BIN="$(go env GOPATH)/bin"
+          export PATH="$PATH:$GOPATH_BIN"
+          make proto
         shell: bash
 
       - name: Build server

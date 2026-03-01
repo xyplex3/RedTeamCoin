@@ -12,13 +12,12 @@ install-tools:
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 # Generate protobuf code
-proto: install-tools
+# Note: Requires protoc-gen-go and protoc-gen-go-grpc in PATH
+# Run 'make install-tools' first, then ensure $(go env GOPATH)/bin is in PATH
+proto:
 	@echo "Generating protobuf code..."
 	@mkdir -p proto
-	@GOBIN="$$(go env GOPATH)/bin"; \
-	protoc --plugin=protoc-gen-go="$$GOBIN/protoc-gen-go" \
-		--plugin=protoc-gen-go-grpc="$$GOBIN/protoc-gen-go-grpc" \
-		--go_out=. --go_opt=paths=source_relative \
+	protoc --go_out=. --go_opt=paths=source_relative \
 		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		proto/mining.proto
 	@echo "Protobuf code generated"

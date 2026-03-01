@@ -48,7 +48,10 @@ jobs:
 
       - name: Generate protobuf
         shell: bash
-        run: make proto
+        run: |
+          GOPATH_BIN="$(go env GOPATH)/bin"
+          export PATH="$PATH:$GOPATH_BIN"
+          make proto
 
       - name: Build Windows server
         shell: bash

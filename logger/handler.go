@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 
 	"github.com/fatih/color"
@@ -40,7 +41,11 @@ func createHandler(format string, level slog.Level, output io.Writer) slog.Handl
 // isTerminal checks if the writer is a terminal
 func isTerminal(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
+		fd := f.Fd()
+		if fd > math.MaxInt {
+			return false
+		}
+		return term.IsTerminal(int(fd))
 	}
 	return false
 }
